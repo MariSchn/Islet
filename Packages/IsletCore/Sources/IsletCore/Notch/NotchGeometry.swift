@@ -5,6 +5,10 @@ public struct NotchGeometry: Sendable, Equatable {
     public static let fallbackMenuBarHeight: CGFloat = 24
     public static let expandedSize = CGSize(width: 520, height: 220)
     public static let overshootMargin: CGFloat = 60
+    public static let pillLeadingWidth: CGFloat = 36
+    public static let pillTrailingMaxWidth: CGFloat = 220
+    public static let pillTextPadding: CGFloat = 10
+    public static var pillFont: NSFont { .systemFont(ofSize: 12, weight: .medium) }
 
     public let screenFrame: CGRect
     public let notchSize: CGSize
@@ -63,6 +67,23 @@ public struct NotchGeometry: Sendable, Equatable {
             width: max(Self.expandedSize.width, notchSize.width),
             height: notchSize.height + Self.expandedSize.height
         )
+    }
+
+    public func pillTrailingWidth(for text: String) -> CGFloat {
+        let textWidth = (text as NSString).size(withAttributes: [.font: Self.pillFont]).width
+        let availableSideWidth = (panelSize.width - notchSize.width) / 2
+        return min(ceil(textWidth) + 2 * Self.pillTextPadding, Self.pillTrailingMaxWidth, availableSideWidth)
+    }
+
+    public func pillShapeSize(for pill: PillStatus) -> CGSize {
+        CGSize(
+            width: notchSize.width + Self.pillLeadingWidth + pillTrailingWidth(for: pill.text),
+            height: notchSize.height
+        )
+    }
+
+    public func pillShapeOffset(for pill: PillStatus) -> CGFloat {
+        (pillTrailingWidth(for: pill.text) - Self.pillLeadingWidth) / 2
     }
 
     public var panelSize: CGSize {

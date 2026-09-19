@@ -1,0 +1,16 @@
+// swift-tools-version: 6.0
+import PackageDescription
+
+let package = Package(
+    name: "HelloPlugin",
+    platforms: [.macOS(.v15)],
+    products: [
+        .library(name: "HelloPlugin", targets: ["HelloPlugin"])
+    ],
+    dependencies: [
+        .package(path: "../../Packages/IsletCore")
+    ],
+    targets: [
+        .target(name: "HelloPlugin", dependencies: ["IsletCore"])
+    ]
+)

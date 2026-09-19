@@ -59,8 +59,10 @@ public final class NotchController {
     }
 
     public var animation: NotchAnimation = .default
+    public var pill: PillStatus?
 
     @ObservationIgnored private var hoverTask: Task<Void, Never>?
+    @ObservationIgnored private var pillSource: PluginRegistry?
 
     public init(geometry: NotchGeometry = .placeholder) {
         self.geometry = geometry
@@ -68,6 +70,22 @@ public final class NotchController {
 
     public func update(geometry: NotchGeometry) {
         self.geometry = geometry
+    }
+
+    public func mirrorPill(from registry: PluginRegistry) {
+        pillSource = registry
+        observePill()
+    }
+
+    private func observePill() {
+        guard let registry = pillSource else { return }
+        withObservationTracking {
+            pill = registry.activePill
+        } onChange: {
+            Task { @MainActor [weak self] in
+                self?.observePill()
+            }
+        }
     }
 
     public func expand() {

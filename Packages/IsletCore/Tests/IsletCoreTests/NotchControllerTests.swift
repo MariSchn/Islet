@@ -74,4 +74,21 @@ struct NotchControllerTests {
 
         #expect(!controller.isExpanded)
     }
+
+    @Test func mirrorsRegistryPillIncludingPluginsRegisteredLater() async throws {
+        let harness = Harness()
+        let registry = harness.makeRegistry()
+        let controller = makeController()
+        controller.mirrorPill(from: registry)
+        #expect(controller.pill == nil)
+
+        let stub = try await harness.registerStub(in: registry)
+        stub.context.pillStatus = PillStatus(text: "later", priority: .urgent)
+        await Task.yield()
+        #expect(controller.pill?.text == "later")
+
+        await registry.setEnabled(false, for: "test.stub")
+        await Task.yield()
+        #expect(controller.pill == nil)
+    }
 }
