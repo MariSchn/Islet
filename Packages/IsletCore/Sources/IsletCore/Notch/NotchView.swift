@@ -95,8 +95,8 @@ private struct PillView: View {
             }
             .frame(width: NotchGeometry.pillLeadingWidth)
             Color.clear.frame(width: geometry.notchSize.width)
-            if let artwork = pill.artwork.flatMap(NSImage.init(data:)) {
-                Image(nsImage: artwork)
+            if let artwork = pill.artwork {
+                Image(decorative: artwork, scale: 1)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
                     .frame(width: artworkSide, height: artworkSide)
@@ -123,7 +123,7 @@ private struct PillView: View {
             return .orange
         }
         if let tint = pill.tint {
-            return Color(red: tint.red, green: tint.green, blue: tint.blue)
+            return Color(tint)
         }
         return .white
     }

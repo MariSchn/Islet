@@ -36,14 +36,13 @@ private struct NowPlayingView: View {
     let controller: MediaController
 
     private var tint: Color {
-        guard let tint = controller.tint else { return .white }
-        return Color(red: tint.red, green: tint.green, blue: tint.blue)
+        controller.tint.map(Color.init) ?? .white
     }
 
     var body: some View {
         GeometryReader { proxy in
             HStack(spacing: 14) {
-                ArtworkView(data: controller.artwork)
+                ArtworkView(image: controller.artwork)
                     .frame(width: proxy.size.height, height: proxy.size.height)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(nowPlaying.title)
@@ -62,7 +61,7 @@ private struct NowPlayingView: View {
                     .frame(maxWidth: .infinity)
                     Spacer(minLength: 4)
                     Timeline(nowPlaying: nowPlaying, tint: tint) { position in
-                        Task { await controller.seek(to: position) }
+                        await controller.seek(to: position)
                     }
                 }
             }
@@ -71,14 +70,14 @@ private struct NowPlayingView: View {
 }
 
 private struct ArtworkView: View {
-    let data: Data?
+    let image: CGImage?
 
     var body: some View {
         RoundedRectangle(cornerRadius: 10, style: .continuous)
             .fill(.white.opacity(0.1))
             .overlay {
-                if let image = data.flatMap(NSImage.init(data:)) {
-                    Image(nsImage: image)
+                if let image {
+                    Image(decorative: image, scale: 1)
                         .resizable()
                         .aspectRatio(contentMode: .fill)
                 } else {
@@ -94,9 +93,10 @@ private struct ArtworkView: View {
 private struct Timeline: View {
     let nowPlaying: NowPlaying
     let tint: Color
-    let onSeek: (TimeInterval) -> Void
+    let onSeek: (TimeInterval) async -> Void
     @State private var isHovering = false
     @State private var scrubFraction: Double?
+    @State private var seekTask: Task<Void, Never>?
 
     private var isActive: Bool { isHovering || scrubFraction != nil }
     private var fraction: Double { scrubFraction ?? nowPlaying.progress }
@@ -129,10 +129,16 @@ private struct Timeline: View {
                 .contentShape(Rectangle())
                 .gesture(
                     DragGesture(minimumDistance: 0)
-                        .onChanged { value in scrubFraction = clamp(value.location.x / width) }
+                        .onChanged { value in scrubFraction = fraction(at: value.location.x, in: width) }
                         .onEnded { value in
-                            onSeek(clamp(value.location.x / width) * nowPlaying.duration)
-                            scrubFraction = nil
+                            let target = fraction(at: value.location.x, in: width)
+                            scrubFraction = target
+                            seekTask?.cancel()
+                            seekTask = Task {
+                                await onSeek(target * nowPlaying.duration)
+                                guard !Task.isCancelled else { return }
+                                scrubFraction = nil
+                            }
                         }
                 )
             }
@@ -149,8 +155,9 @@ private struct Timeline: View {
         .animation(.easeOut(duration: 0.15), value: isActive)
     }
 
-    private func clamp(_ value: Double) -> Double {
-        min(max(value, 0), 1)
+    private func fraction(at x: CGFloat, in width: CGFloat) -> Double {
+        guard width > 0 else { return nowPlaying.progress }
+        return min(max(x / width, 0), 1)
     }
 
     private func timestamp(_ seconds: TimeInterval) -> String {

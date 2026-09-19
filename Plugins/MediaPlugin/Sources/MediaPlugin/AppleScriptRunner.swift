@@ -2,6 +2,7 @@ import Foundation
 
 struct AppleScriptError: LocalizedError {
     static let automationDenied = -1743
+    static let consentRequired = -1744
     static let applicationNotRunning = -600
 
     let code: Int?
@@ -12,9 +13,13 @@ struct AppleScriptError: LocalizedError {
         message = info?[NSAppleScript.errorMessage] as? String ?? "The script could not be run."
     }
 
+    var isApplicationNotRunning: Bool {
+        code == Self.applicationNotRunning
+    }
+
     var errorDescription: String? {
         switch code {
-        case Self.automationDenied:
+        case Self.automationDenied, Self.consentRequired:
             "Islet is not allowed to control this app. Allow it under System Settings › Privacy & Security › Automation."
         default:
             message
@@ -25,17 +30,19 @@ struct AppleScriptError: LocalizedError {
 actor AppleScriptRunner {
     private var compiled: [String: NSAppleScript] = [:]
 
-    func run(_ source: String) throws {
-        try run(source) { _ in }
+    func run(_ source: String, cached: Bool = true) throws {
+        try run(source, cached: cached) { _ in }
     }
 
-    func run<Value: Sendable>(_ source: String, _ transform: @Sendable (NSAppleEventDescriptor) -> Value) throws -> Value {
+    func run<Value: Sendable>(_ source: String, cached: Bool = true, _ transform: @Sendable (NSAppleEventDescriptor) -> Value) throws -> Value {
         let script: NSAppleScript
-        if let cached = compiled[source] {
-            script = cached
+        if let existing = compiled[source] {
+            script = existing
         } else {
             guard let fresh = NSAppleScript(source: source) else { throw AppleScriptError(nil) }
-            compiled[source] = fresh
+            if cached {
+                compiled[source] = fresh
+            }
             script = fresh
         }
         var error: NSDictionary?

@@ -14,6 +14,7 @@ public final class MediaPlugin: IsletPlugin {
         self.context = context
         controller = MediaController(source: SpotifySource(), showsPill: context.settings.value(forKey: Self.showsPillKey) ?? true)
         controller.onPillChange = { [context] status in context.pillStatus = status }
+        controller.onShowsPillChange = { [context] shows in context.settings.set(shows, forKey: Self.showsPillKey) }
     }
 
     public func activate() async throws {
@@ -29,20 +30,17 @@ public final class MediaPlugin: IsletPlugin {
     }
 
     public func makeSettingsView() -> AnyView? {
-        AnyView(MediaSettings(controller: controller, settings: context.settings, key: Self.showsPillKey))
+        AnyView(MediaSettings(controller: controller))
     }
 }
 
 private struct MediaSettings: View {
     @Bindable var controller: MediaController
-    let settings: PluginSettings
-    let key: String
 
     var body: some View {
         Form {
             Section {
                 Toggle("Show the current track in the collapsed notch", isOn: $controller.showsPill)
-                    .onChange(of: controller.showsPill) { settings.set(controller.showsPill, forKey: key) }
             } footer: {
                 Text("Islet needs permission to control Spotify. macOS asks for it the first time the plugin reads what's playing.")
             }

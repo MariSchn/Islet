@@ -1,33 +1,51 @@
 import Foundation
 import IsletCore
 import Observation
+import SwiftUI
+
+public typealias ArtworkLoader = @Sendable (URL) async throws -> Data
 
 @MainActor
 @Observable
 public final class MediaController {
     public let source: any MediaSource
     public private(set) var nowPlaying: NowPlaying?
-    public private(set) var artwork: Data?
-    public private(set) var tint: PillTint?
+    public private(set) var artwork: CGImage?
+    public private(set) var tint: Color.Resolved?
     public private(set) var isSourceRunning = false
     public private(set) var errorMessage: String?
     public var showsPill: Bool {
-        didSet { updatePill() }
+        didSet {
+            guard showsPill != oldValue else { return }
+            updatePill()
+            onShowsPillChange(showsPill)
+        }
     }
-    public var onPillChange: (PillStatus?) -> Void = { _ in }
+    @ObservationIgnored public var onPillChange: (PillStatus?) -> Void = { _ in }
+    @ObservationIgnored public var onShowsPillChange: (Bool) -> Void = { _ in }
 
-    private let playingInterval: Duration
-    private let pausedInterval: Duration
-    private var pollTask: Task<Void, Never>?
-    private var changeTask: Task<Void, Never>?
-    private var artworkTask: Task<Void, Never>?
-    private var artworkURL: URL?
+    @ObservationIgnored private let loadArtwork: ArtworkLoader
+    @ObservationIgnored private let playingInterval: Duration
+    @ObservationIgnored private let pausedInterval: Duration
+    @ObservationIgnored private var pollTask: Task<Void, Never>?
+    @ObservationIgnored private var changeTask: Task<Void, Never>?
+    @ObservationIgnored private var artworkTask: Task<Void, Never>?
+    @ObservationIgnored private var artworkURL: URL?
+    @ObservationIgnored private var generation = 0
+    @ObservationIgnored private var publishedPill: PillStatus?
 
-    public init(source: any MediaSource, showsPill: Bool = true, playingInterval: Duration = .seconds(1), pausedInterval: Duration = .seconds(3)) {
+    public init(
+        source: any MediaSource,
+        showsPill: Bool = true,
+        playingInterval: Duration = .seconds(1),
+        pausedInterval: Duration = .seconds(3),
+        loadArtwork: @escaping ArtworkLoader = { try await URLSession.shared.data(from: $0).0 }
+    ) {
         self.source = source
         self.showsPill = showsPill
         self.playingInterval = playingInterval
         self.pausedInterval = pausedInterval
+        self.loadArtwork = loadArtwork
     }
 
     public func start() {
@@ -41,7 +59,7 @@ public final class MediaController {
             }
         }
         changeTask = Task { [weak self, source] in
-            for await _ in source.stateChanges {
+            for await _ in source.stateChanges() {
                 guard let self else { return }
                 await refresh()
             }
@@ -49,11 +67,13 @@ public final class MediaController {
     }
 
     public func stop() {
+        generation += 1
         pollTask?.cancel()
         changeTask?.cancel()
         pollTask = nil
         changeTask = nil
         nowPlaying = nil
+        errorMessage = nil
         updateArtwork(for: nil)
         updatePill()
     }
@@ -61,21 +81,27 @@ public final class MediaController {
     public func refresh() async {
         isSourceRunning = source.isRunning
         guard isSourceRunning else {
-            nowPlaying = nil
-            errorMessage = nil
-            updateArtwork(for: nil)
-            updatePill()
+            apply(nowPlaying: nil, error: nil)
             return
         }
+        generation += 1
+        let requested = generation
+        let outcome: Result<NowPlaying?, any Error>
         do {
-            nowPlaying = try await source.nowPlaying()
-            errorMessage = nil
+            outcome = .success(try await source.nowPlaying())
         } catch {
-            nowPlaying = nil
-            errorMessage = error.localizedDescription
+            outcome = .failure(error)
         }
-        updateArtwork(for: nowPlaying?.artworkURL)
-        updatePill()
+        guard requested == generation else { return }
+        switch outcome {
+        case .success(let nowPlaying):
+            apply(nowPlaying: nowPlaying, error: nil)
+        case .failure(let error as AppleScriptError) where error.isApplicationNotRunning:
+            isSourceRunning = false
+            apply(nowPlaying: nil, error: nil)
+        case .failure(let error):
+            apply(nowPlaying: nil, error: error.localizedDescription)
+        }
     }
 
     public func playPause() async {
@@ -99,6 +125,11 @@ public final class MediaController {
     }
 
     private func perform(_ command: (any MediaSource) async throws -> Void) async {
+        guard source.isRunning else {
+            isSourceRunning = false
+            apply(nowPlaying: nil, error: nil)
+            return
+        }
         do {
             try await command(source)
         } catch {
@@ -107,28 +138,45 @@ public final class MediaController {
         await refresh()
     }
 
+    private func apply(nowPlaying: NowPlaying?, error: String?) {
+        self.nowPlaying = nowPlaying
+        errorMessage = error
+        updateArtwork(for: nowPlaying?.artworkURL)
+        updatePill()
+    }
+
     private func updateArtwork(for url: URL?) {
         guard url != artworkURL else { return }
         artworkURL = url
         artworkTask?.cancel()
-        artwork = nil
-        tint = nil
-        guard let url else { return }
-        artworkTask = Task { [weak self] in
-            guard let data = try? await URLSession.shared.data(from: url).0, !Task.isCancelled else { return }
-            let tint = await Task.detached { ArtworkPalette.tint(for: data) }.value
+        guard let url else {
+            artwork = nil
+            tint = nil
+            return
+        }
+        artworkTask = Task { [weak self, loadArtwork] in
+            let loaded = try? await loadArtwork(url)
+            let artwork = await Task.detached { loaded.flatMap(Artwork.init(data:)) }.value
             guard let self, !Task.isCancelled, artworkURL == url else { return }
-            artwork = data
-            self.tint = tint
+            guard let artwork else {
+                artworkURL = nil
+                return
+            }
+            self.artwork = artwork.image
+            tint = artwork.tint
             updatePill()
         }
     }
 
     private func updatePill() {
-        guard showsPill, let nowPlaying, nowPlaying.isPlaying else {
-            onPillChange(nil)
-            return
+        let pill: PillStatus?
+        if showsPill, let nowPlaying, nowPlaying.isPlaying {
+            pill = PillStatus(text: "\(nowPlaying.title) · \(nowPlaying.artist)", systemImage: "music.note", priority: .ambient, artwork: artwork, tint: tint)
+        } else {
+            pill = nil
         }
-        onPillChange(PillStatus(text: "\(nowPlaying.title) · \(nowPlaying.artist)", systemImage: "music.note", priority: .ambient, artwork: artwork, tint: tint))
+        guard pill != publishedPill else { return }
+        publishedPill = pill
+        onPillChange(pill)
     }
 }
