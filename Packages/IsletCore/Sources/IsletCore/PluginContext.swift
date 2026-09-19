@@ -9,7 +9,7 @@ public final class PluginContext {
     public let storageDirectory: URL
     public let settings: PluginSettings
     public var pillStatus: PillStatus?
-    public var screenSize: CGSize?
+    public var contentSize: CGSize?
 
     init(manifest: PluginManifest, storageDirectory: URL, settings: PluginSettings) {
         self.manifest = manifest

@@ -225,6 +225,22 @@ struct PluginRegistryTests {
         #expect(registry.activePill?.text == "song")
     }
 
+    @Test func selectedContentSizeFollowsSelectionAndIgnoresDisabledPlugins() async throws {
+        let registry = harness.makeRegistry()
+        #expect(registry.selectedContentSize == nil)
+        let stub = try await harness.registerStub(in: registry)
+        let second = try await harness.registerSecond(in: registry)
+        stub.context.contentSize = CGSize(width: 300, height: 100)
+        second.context.contentSize = CGSize(width: 600, height: 300)
+
+        #expect(registry.selectedContentSize == CGSize(width: 300, height: 100))
+        registry.select("test.second")
+        #expect(registry.selectedContentSize == CGSize(width: 600, height: 300))
+
+        await registry.setEnabled(false, for: "test.second")
+        #expect(registry.selectedContentSize == CGSize(width: 300, height: 100))
+    }
+
     @Test func activePillTieGoesToEarlierRegisteredPlugin() async throws {
         let registry = harness.makeRegistry()
         let stub = try await harness.registerStub(in: registry)

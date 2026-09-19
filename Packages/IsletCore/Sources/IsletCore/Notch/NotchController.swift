@@ -83,14 +83,14 @@ public final class NotchController {
 
     public let settings: AppSettings
     public var pill: PillStatus?
-    public private(set) var screenSize: CGSize?
+    public private(set) var contentSize: CGSize?
 
     public var expandedShapeSize: CGSize {
-        geometry.expandedShapeSize(for: screenSize)
+        geometry.expandedShapeSize(for: contentSize)
     }
 
     public var expandedShapeFrame: CGRect {
-        geometry.expandedShapeFrame(for: screenSize)
+        geometry.expandedShapeFrame(for: registry?.selectedContentSize ?? contentSize)
     }
 
     public var animation: NotchAnimation {
@@ -124,7 +124,7 @@ public final class NotchController {
         guard let registry else { return }
         withObservationTracking {
             pill = registry.activePill
-            screenSize = registry.selectedScreenSize
+            contentSize = registry.selectedContentSize
         } onChange: {
             Task { @MainActor [weak self] in
                 self?.observeRegistry()
