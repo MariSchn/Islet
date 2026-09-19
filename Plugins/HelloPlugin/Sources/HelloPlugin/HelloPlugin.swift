@@ -27,7 +27,7 @@ private struct HelloSettings: View {
     var body: some View {
         Form {
             TextField("Greeting", text: $greeting)
-                .onSubmit { context.settings.set(greeting, forKey: "greeting") }
+                .onChange(of: greeting) { context.settings.set(greeting, forKey: "greeting") }
         }
         .onAppear { greeting = context.settings.value(forKey: "greeting") ?? "Hello" }
     }

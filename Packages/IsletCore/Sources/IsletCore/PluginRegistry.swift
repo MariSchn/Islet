@@ -30,6 +30,7 @@ public final class PluginEntry: @MainActor Identifiable {
 
     @ObservationIgnored var pendingTransition: Task<Void, Never>?
     @ObservationIgnored private var cachedScreen: AnyView?
+    @ObservationIgnored private var cachedSettingsView: AnyView??
 
     public var id: String { manifest.id }
 
@@ -38,6 +39,13 @@ public final class PluginEntry: @MainActor Identifiable {
         let screen = plugin.makeScreen()
         cachedScreen = screen
         return screen
+    }
+
+    public var settingsView: AnyView? {
+        if let cachedSettingsView { return cachedSettingsView }
+        let view = plugin.makeSettingsView()
+        cachedSettingsView = .some(view)
+        return view
     }
 
     init(manifest: PluginManifest, context: PluginContext, plugin: any IsletPlugin) {

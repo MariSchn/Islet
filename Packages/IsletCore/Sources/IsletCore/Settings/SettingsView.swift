@@ -1,7 +1,7 @@
 import SwiftUI
 
 public struct SettingsView: View {
-    private enum Section: Hashable {
+    private enum Pane: Hashable {
         case general
         case plugins
         case plugin(String)
@@ -9,30 +9,28 @@ public struct SettingsView: View {
 
     private let settings: AppSettings
     private let registry: PluginRegistry
-    @State private var selection: Section? = .general
+    @State private var selection: Pane? = .general
 
     public init(settings: AppSettings, registry: PluginRegistry) {
         self.settings = settings
         self.registry = registry
     }
 
-    private var pluginsWithSettings: [(PluginEntry, AnyView)] {
-        registry.enabledEntries.compactMap { entry in
-            entry.plugin.makeSettingsView().map { (entry, $0) }
-        }
+    private var pluginsWithSettings: [PluginEntry] {
+        registry.enabledEntries.filter { $0.settingsView != nil }
     }
 
     public var body: some View {
         NavigationSplitView {
             List(selection: $selection) {
-                Label("General", systemImage: "gearshape").tag(Section.general)
-                Label("Plugins", systemImage: "puzzlepiece.extension").tag(Section.plugins)
+                Label("General", systemImage: "gearshape").tag(Pane.general)
+                Label("Plugins", systemImage: "puzzlepiece.extension").tag(Pane.plugins)
                 let entries = pluginsWithSettings
                 if !entries.isEmpty {
-                    SwiftUI.Section("Plugin Settings") {
-                        ForEach(entries, id: \.0.id) { entry, _ in
+                    Section("Plugin Settings") {
+                        ForEach(entries) { entry in
                             Label(entry.manifest.displayName, systemImage: entry.manifest.systemImage)
-                                .tag(Section.plugin(entry.id))
+                                .tag(Pane.plugin(entry.id))
                         }
                     }
                 }
@@ -46,8 +44,8 @@ public struct SettingsView: View {
                 case .plugins:
                     PluginsSettingsView(registry: registry)
                 case .plugin(let id):
-                    if let (_, view) = pluginsWithSettings.first(where: { $0.0.id == id }) {
-                        view
+                    if let view = pluginsWithSettings.first(where: { $0.id == id })?.settingsView {
+                        view.id(id)
                     } else {
                         Text("Plugin not available").foregroundStyle(.secondary)
                     }
@@ -55,31 +53,40 @@ public struct SettingsView: View {
             }
             .formStyle(.grouped)
         }
+        .onChange(of: registry.disabledIDs) {
+            if case .plugin(let id) = selection, !registry.isEnabled(id) {
+                selection = .plugins
+            }
+        }
         .frame(minWidth: 620, minHeight: 420)
     }
 }
 
 struct GeneralSettingsView: View {
     @Bindable var settings: AppSettings
+    @State private var lastDamping = 0.7
 
     private var isSpring: Binding<Bool> {
         Binding(
             get: { if case .spring = settings.animation.curve { true } else { false } },
-            set: { settings.animation.curve = $0 ? .spring(dampingFraction: 0.7) : .easeOut }
+            set: { settings.animation.curve = $0 ? .spring(dampingFraction: lastDamping) : .easeOut }
         )
     }
 
     private var damping: Binding<Double> {
         Binding(
-            get: { if case .spring(let d) = settings.animation.curve { d } else { 0.7 } },
-            set: { settings.animation.curve = .spring(dampingFraction: $0) }
+            get: { if case .spring(let d) = settings.animation.curve { d } else { lastDamping } },
+            set: {
+                lastDamping = $0
+                settings.animation.curve = .spring(dampingFraction: $0)
+            }
         )
     }
 
     var body: some View {
         Form {
             Section("Appearance") {
-                Toggle("Show notch outline when idle", isOn: $settings.showsIdleNotchOutline)
+                Toggle("Show notch outline when idle", isOn: $settings.drawsIdleNotchShape)
             }
             Section("Animation") {
                 Picker("Curve", selection: isSpring) {
@@ -103,7 +110,7 @@ struct GeneralSettingsView: View {
 
     private func milliseconds(_ duration: Binding<Duration>) -> Binding<Double> {
         Binding(
-            get: { Double(duration.wrappedValue.components.seconds) * 1000 + Double(duration.wrappedValue.components.attoseconds) / 1e15 },
+            get: { duration.wrappedValue.milliseconds },
             set: { duration.wrappedValue = .milliseconds($0.rounded()) }
         )
     }

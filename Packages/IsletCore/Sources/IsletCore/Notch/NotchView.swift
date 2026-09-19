@@ -3,7 +3,7 @@ import SwiftUI
 public struct NotchView<Content: View>: View {
     private let controller: NotchController
     private let content: () -> Content
-    @State private var isOutlineHidden = false
+    @State private var isShapeHidden = false
 
     public init(controller: NotchController, @ViewBuilder content: @escaping () -> Content) {
         self.controller = controller
@@ -32,16 +32,16 @@ public struct NotchView<Content: View>: View {
     }
 
     private var fillOpacity: Double {
-        isOutlineHidden ? 0.02 : 1
+        isShapeHidden ? hitTestableInvisibleOpacity : 1
     }
 
-    private func updateOutlineVisibility() async {
-        let shouldHide = isIdle && !controller.settings.showsIdleNotchOutline
+    private func updateShapeVisibility() async {
+        let shouldHide = isIdle && !controller.settings.drawsIdleNotchShape
         if shouldHide {
             try? await Task.sleep(for: .seconds(controller.animation.collapseDuration))
             guard !Task.isCancelled else { return }
         }
-        isOutlineHidden = shouldHide
+        isShapeHidden = shouldHide
     }
 
     public var body: some View {
@@ -50,8 +50,8 @@ public struct NotchView<Content: View>: View {
                 shape.fill(.black)
                     .opacity(fillOpacity)
                     .animation(nil, value: fillOpacity)
-                    .task(id: isIdle || controller.settings.showsIdleNotchOutline) {
-                        await updateOutlineVisibility()
+                    .task(id: isIdle || controller.settings.drawsIdleNotchShape) {
+                        await updateShapeVisibility()
                     }
                 if controller.isExpanded {
                     content()
@@ -77,6 +77,8 @@ public struct NotchView<Content: View>: View {
         .frame(width: controller.geometry.panelSize.width, height: controller.geometry.panelSize.height, alignment: .top)
     }
 }
+
+private let hitTestableInvisibleOpacity = 0.02
 
 private struct PillView: View {
     let pill: PillStatus

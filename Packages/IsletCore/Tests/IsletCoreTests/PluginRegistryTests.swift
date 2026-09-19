@@ -292,6 +292,28 @@ struct PluginRegistryTests {
         #expect(stub.context.pillStatus?.text == "connected")
     }
 
+    @Test func settingsViewDefaultsToNilAndIsCached() async throws {
+        let registry = harness.makeRegistry()
+        try await harness.registerStub(in: registry)
+        let entry = try #require(registry.entry(for: "test.stub"))
+
+        #expect(entry.settingsView == nil)
+    }
+
+    @Test func settingsChangesAreObservable() async throws {
+        let registry = harness.makeRegistry()
+        let stub = try await harness.registerStub(in: registry)
+        await confirmation("settings change observed") { observed in
+            withObservationTracking {
+                _ = stub.context.settings.value(forKey: "greeting") as String?
+            } onChange: {
+                observed()
+            }
+
+            stub.context.settings.set("hey", forKey: "greeting")
+        }
+    }
+
     @Test func screenIsBuiltOnceAndCached() async throws {
         let registry = harness.makeRegistry()
         let stub = try await harness.registerStub(in: registry)

@@ -7,16 +7,19 @@ public final class SettingsWindowController {
 
     public init(settings: AppSettings, registry: PluginRegistry) {
         let hosting = NSHostingController(rootView: SettingsView(settings: settings, registry: registry))
+        hosting.sizingOptions = [.minSize]
         window = NSWindow(contentViewController: hosting)
         window.title = "Islet Settings"
-        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.isReleasedWhenClosed = false
+        if !window.setFrameUsingName("IsletSettings") {
+            window.center()
+        }
         window.setFrameAutosaveName("IsletSettings")
-        window.center()
     }
 
     public func show() {
         NSApp.activate()
-        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
+        window.makeKey()
     }
 }

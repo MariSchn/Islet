@@ -28,6 +28,16 @@ public struct NotchAnimation: Sendable, Equatable, Codable {
         self.collapseDelay = collapseDelay
     }
 
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let fallback = Self.default
+        curve = (try? container.decodeIfPresent(Curve.self, forKey: .curve)) ?? fallback.curve
+        expandDuration = (try? container.decodeIfPresent(Double.self, forKey: .expandDuration)) ?? fallback.expandDuration
+        collapseDuration = (try? container.decodeIfPresent(Double.self, forKey: .collapseDuration)) ?? fallback.collapseDuration
+        expandDelay = (try? container.decodeIfPresent(Duration.self, forKey: .expandDelay)) ?? fallback.expandDelay
+        collapseDelay = (try? container.decodeIfPresent(Duration.self, forKey: .collapseDelay)) ?? fallback.collapseDelay
+    }
+
     public static let `default` = NotchAnimation(
         curve: .easeOut,
         expandDuration: 0.5,
@@ -82,7 +92,7 @@ public final class NotchController {
     @ObservationIgnored private var hoverTask: Task<Void, Never>?
     @ObservationIgnored private var registry: PluginRegistry?
 
-    public init(settings: AppSettings = AppSettings(), geometry: NotchGeometry = .placeholder) {
+    public init(settings: AppSettings, geometry: NotchGeometry = .placeholder) {
         self.settings = settings
         self.geometry = geometry
     }

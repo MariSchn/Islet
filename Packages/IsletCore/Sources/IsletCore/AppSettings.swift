@@ -10,8 +10,8 @@ public final class AppSettings {
     public var switchesToDropTargetOnDrag: Bool {
         didSet { save(switchesToDropTargetOnDrag, forKey: Keys.switchesToDropTargetOnDrag) }
     }
-    public var showsIdleNotchOutline: Bool {
-        didSet { save(showsIdleNotchOutline, forKey: Keys.showsIdleNotchOutline) }
+    public var drawsIdleNotchShape: Bool {
+        didSet { save(drawsIdleNotchShape, forKey: Keys.drawsIdleNotchShape) }
     }
 
     private let defaults: UserDefaults?
@@ -19,14 +19,14 @@ public final class AppSettings {
     private enum Keys {
         static let animation = "islet.settings.animation"
         static let switchesToDropTargetOnDrag = "islet.settings.switchesToDropTargetOnDrag"
-        static let showsIdleNotchOutline = "islet.settings.showsIdleNotchOutline"
+        static let drawsIdleNotchShape = "islet.settings.drawsIdleNotchShape"
     }
 
     public init(defaults: UserDefaults? = nil) {
         self.defaults = defaults
         animation = Self.load(NotchAnimation.self, forKey: Keys.animation, from: defaults) ?? .default
         switchesToDropTargetOnDrag = Self.load(Bool.self, forKey: Keys.switchesToDropTargetOnDrag, from: defaults) ?? true
-        showsIdleNotchOutline = Self.load(Bool.self, forKey: Keys.showsIdleNotchOutline, from: defaults) ?? false
+        drawsIdleNotchShape = Self.load(Bool.self, forKey: Keys.drawsIdleNotchShape, from: defaults) ?? false
     }
 
     public func resetAnimation() {

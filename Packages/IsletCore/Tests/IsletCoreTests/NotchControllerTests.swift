@@ -10,7 +10,7 @@ struct NotchControllerTests {
     let settle: Duration = .milliseconds(300)
 
     func makeController() -> NotchController {
-        let controller = NotchController()
+        let controller = NotchController(settings: AppSettings())
         controller.animation.expandDelay = expandDelay
         controller.animation.collapseDelay = collapseDelay
         return controller
