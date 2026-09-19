@@ -2,8 +2,8 @@ import AppKit
 import Observation
 import SwiftUI
 
-public struct NotchAnimation: Sendable, Equatable {
-    public enum Curve: Sendable, Equatable {
+public struct NotchAnimation: Sendable, Equatable, Codable {
+    public enum Curve: Sendable, Equatable, Codable {
         case easeOut
         case spring(dampingFraction: Double)
     }
@@ -26,6 +26,16 @@ public struct NotchAnimation: Sendable, Equatable {
         self.collapseDuration = collapseDuration
         self.expandDelay = expandDelay
         self.collapseDelay = collapseDelay
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let fallback = Self.default
+        curve = (try? container.decodeIfPresent(Curve.self, forKey: .curve)) ?? fallback.curve
+        expandDuration = (try? container.decodeIfPresent(Double.self, forKey: .expandDuration)) ?? fallback.expandDuration
+        collapseDuration = (try? container.decodeIfPresent(Double.self, forKey: .collapseDuration)) ?? fallback.collapseDuration
+        expandDelay = (try? container.decodeIfPresent(Duration.self, forKey: .expandDelay)) ?? fallback.expandDelay
+        collapseDelay = (try? container.decodeIfPresent(Duration.self, forKey: .collapseDelay)) ?? fallback.collapseDelay
     }
 
     public static let `default` = NotchAnimation(
@@ -65,15 +75,25 @@ public final class NotchController {
             scheduleHoverUpdate()
         }
     }
-    public var switchesToDropTargetOnDrag = true
 
-    public var animation: NotchAnimation = .default
+    public var switchesToDropTargetOnDrag: Bool {
+        get { settings.switchesToDropTargetOnDrag }
+        set { settings.switchesToDropTargetOnDrag = newValue }
+    }
+
+    public let settings: AppSettings
     public var pill: PillStatus?
+
+    public var animation: NotchAnimation {
+        get { settings.animation }
+        set { settings.animation = newValue }
+    }
 
     @ObservationIgnored private var hoverTask: Task<Void, Never>?
     @ObservationIgnored private var registry: PluginRegistry?
 
-    public init(geometry: NotchGeometry = .placeholder) {
+    public init(settings: AppSettings, geometry: NotchGeometry = .placeholder) {
+        self.settings = settings
         self.geometry = geometry
     }
 

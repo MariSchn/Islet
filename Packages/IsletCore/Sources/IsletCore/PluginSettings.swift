@@ -1,8 +1,12 @@
 import Foundation
+import Observation
 
-public struct PluginSettings {
+@MainActor
+@Observable
+public final class PluginSettings {
     private let defaults: UserDefaults
     private let prefix: String
+    private var version = 0
 
     init(pluginID: String, defaults: UserDefaults) {
         self.defaults = defaults
@@ -10,7 +14,8 @@ public struct PluginSettings {
     }
 
     public func value<T>(forKey key: String) -> T? {
-        defaults.object(forKey: prefix + key) as? T
+        _ = version
+        return defaults.object(forKey: prefix + key) as? T
     }
 
     public func set(_ value: (some Any)?, forKey key: String) {
@@ -19,5 +24,6 @@ public struct PluginSettings {
         } else {
             defaults.removeObject(forKey: prefix + key)
         }
+        version += 1
     }
 }

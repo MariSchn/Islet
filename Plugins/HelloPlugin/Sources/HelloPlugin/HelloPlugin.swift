@@ -14,6 +14,23 @@ public final class HelloPlugin: IsletPlugin {
     public func makeScreen() -> AnyView {
         AnyView(HelloScreen(context: context))
     }
+
+    public func makeSettingsView() -> AnyView? {
+        AnyView(HelloSettings(context: context))
+    }
+}
+
+private struct HelloSettings: View {
+    let context: PluginContext
+    @State private var greeting = ""
+
+    var body: some View {
+        Form {
+            TextField("Greeting", text: $greeting)
+                .onChange(of: greeting) { context.settings.set(greeting, forKey: "greeting") }
+        }
+        .onAppear { greeting = context.settings.value(forKey: "greeting") ?? "Hello" }
+    }
 }
 
 private struct HelloScreen: View {
@@ -21,7 +38,7 @@ private struct HelloScreen: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Hello from \(context.manifest.displayName)")
+            Text("\(context.settings.value(forKey: "greeting") ?? "Hello") from \(context.manifest.displayName)")
                 .font(.title3.weight(.semibold))
             Text("Pill: \(context.pillStatus?.text ?? "none")")
                 .foregroundStyle(.secondary)

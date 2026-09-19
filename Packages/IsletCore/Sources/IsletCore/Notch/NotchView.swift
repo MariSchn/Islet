@@ -3,6 +3,7 @@ import SwiftUI
 public struct NotchView<Content: View>: View {
     private let controller: NotchController
     private let content: () -> Content
+    @State private var isShapeHidden = false
 
     public init(controller: NotchController, @ViewBuilder content: @escaping () -> Content) {
         self.controller = controller
@@ -26,10 +27,32 @@ public struct NotchView<Content: View>: View {
         NotchShape(bottomRadius: controller.isExpanded ? 24 : 12)
     }
 
+    private var isIdle: Bool {
+        !controller.isExpanded && controller.pill == nil
+    }
+
+    private var fillOpacity: Double {
+        isShapeHidden ? hitTestableInvisibleOpacity : 1
+    }
+
+    private func updateShapeVisibility() async {
+        let shouldHide = isIdle && !controller.settings.drawsIdleNotchShape
+        if shouldHide {
+            try? await Task.sleep(for: .seconds(controller.animation.collapseDuration))
+            guard !Task.isCancelled else { return }
+        }
+        isShapeHidden = shouldHide
+    }
+
     public var body: some View {
         VStack(spacing: 0) {
             ZStack(alignment: .top) {
                 shape.fill(.black)
+                    .opacity(fillOpacity)
+                    .animation(nil, value: fillOpacity)
+                    .task(id: isIdle || controller.settings.drawsIdleNotchShape) {
+                        await updateShapeVisibility()
+                    }
                 if controller.isExpanded {
                     content()
                         .padding(.top, controller.geometry.notchSize.height)
@@ -54,6 +77,8 @@ public struct NotchView<Content: View>: View {
         .frame(width: controller.geometry.panelSize.width, height: controller.geometry.panelSize.height, alignment: .top)
     }
 }
+
+private let hitTestableInvisibleOpacity = 0.02
 
 private struct PillView: View {
     let pill: PillStatus
