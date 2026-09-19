@@ -84,6 +84,10 @@ public final class PluginRegistry {
             .max { $0.priority < $1.priority }
     }
 
+    public var selectedScreenSize: CGSize? {
+        selectedID.flatMap(entry(for:))?.context.screenSize
+    }
+
     public var preferredDropTarget: PluginEntry? {
         enabledEntries.first { $0.plugin.acceptsFileDrops }
     }

@@ -11,7 +11,22 @@ struct NotchGeometryTests {
         #expect(geometry.panelFrame.midX == screen.midX)
         #expect(geometry.panelFrame.maxY == screen.maxY)
         #expect(geometry.expandedShapeSize == CGSize(width: 520, height: 252))
-        #expect(geometry.panelSize == CGSize(width: 640, height: 312))
+        #expect(geometry.panelSize == CGSize(width: 1080, height: 583))
+        #expect(geometry.panelFrame.contains(geometry.expandedShapeFrame(for: geometry.largestScreenSize)))
+    }
+
+    @Test func screenSizeIsClampedBetweenMinimumAndScreenBounds() {
+        let geometry = NotchGeometry(screenFrame: screen, notchSize: CGSize(width: 196, height: 32), hasHardwareNotch: true)
+
+        #expect(geometry.screenSize(for: nil) == NotchGeometry.defaultScreenSize)
+        #expect(geometry.screenSize(for: CGSize(width: 10, height: 10)) == NotchGeometry.minScreenSize)
+        #expect(geometry.screenSize(for: CGSize(width: 5000, height: 5000)) == CGSize(width: 960, height: 491))
+        #expect(geometry.expandedShapeSize(for: CGSize(width: 400, height: 100)) == CGSize(width: 400, height: 132))
+        #expect(geometry.expandedShapeFrame(for: CGSize(width: 400, height: 100)).midX == screen.midX)
+    }
+
+    @Test func largestScreenSizeIsUnboundedWithoutScreen() {
+        #expect(NotchGeometry.placeholder.largestScreenSize == NotchGeometry.maxScreenSize)
     }
 
     @Test func pillShapeFitsTextAndKeepsNotchInPlace() {

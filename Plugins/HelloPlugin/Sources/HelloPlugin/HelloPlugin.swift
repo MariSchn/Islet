@@ -9,6 +9,7 @@ public final class HelloPlugin: IsletPlugin {
 
     public init(context: PluginContext) {
         self.context = context
+        context.screenSize = HelloScreen.compactSize
     }
 
     public func makeScreen() -> AnyView {
@@ -34,7 +35,14 @@ private struct HelloSettings: View {
 }
 
 private struct HelloScreen: View {
+    static let compactSize = CGSize(width: 400, height: 140)
+    static let largeSize = CGSize(width: 640, height: 300)
+
     let context: PluginContext
+
+    private var isLarge: Bool {
+        context.screenSize == Self.largeSize
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -48,6 +56,10 @@ private struct HelloScreen: View {
                 pillButton("Attention", priority: .attention)
                 pillButton("Urgent", priority: .urgent)
                 Button("Clear") { context.pillStatus = nil }
+            }
+            .buttonStyle(.bordered)
+            Button(isLarge ? "Shrink" : "Grow") {
+                context.screenSize = isLarge ? Self.compactSize : Self.largeSize
             }
             .buttonStyle(.bordered)
             Spacer()

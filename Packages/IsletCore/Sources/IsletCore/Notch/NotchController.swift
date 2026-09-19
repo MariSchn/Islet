@@ -83,6 +83,15 @@ public final class NotchController {
 
     public let settings: AppSettings
     public var pill: PillStatus?
+    public private(set) var screenSize: CGSize?
+
+    public var expandedShapeSize: CGSize {
+        geometry.expandedShapeSize(for: screenSize)
+    }
+
+    public var expandedShapeFrame: CGRect {
+        geometry.expandedShapeFrame(for: screenSize)
+    }
 
     public var animation: NotchAnimation {
         get { settings.animation }
@@ -103,7 +112,7 @@ public final class NotchController {
 
     public func attach(_ registry: PluginRegistry) {
         self.registry = registry
-        observePill()
+        observeRegistry()
     }
 
     private func switchToDropTargetIfWanted() {
@@ -111,13 +120,14 @@ public final class NotchController {
         registry?.select(target.id)
     }
 
-    private func observePill() {
+    private func observeRegistry() {
         guard let registry else { return }
         withObservationTracking {
             pill = registry.activePill
+            screenSize = registry.selectedScreenSize
         } onChange: {
             Task { @MainActor [weak self] in
-                self?.observePill()
+                self?.observeRegistry()
             }
         }
     }
