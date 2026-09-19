@@ -160,6 +160,26 @@ struct NotchControllerTests {
         #expect(controller.contentSize == nil)
     }
 
+    @Test func navigateOnlySwitchesPluginsWhileExpanded() async throws {
+        let harness = Harness()
+        let registry = harness.makeRegistry()
+        let controller = makeController()
+        controller.expand()
+        #expect(!controller.navigate(.forward))
+        controller.collapse()
+        controller.attach(registry)
+        try await harness.registerStub(in: registry)
+        try await harness.registerSecond(in: registry)
+
+        #expect(!controller.navigate(.forward))
+        #expect(registry.selectedID == "test.stub")
+
+        controller.expand()
+        #expect(controller.navigate(.forward))
+        #expect(registry.selectedID == "test.second")
+        #expect(!controller.navigate(.forward))
+    }
+
     @Test func dragSwitchesToFirstDropAcceptingPluginUnlessDisabled() async throws {
         let harness = Harness()
         let registry = harness.makeRegistry()

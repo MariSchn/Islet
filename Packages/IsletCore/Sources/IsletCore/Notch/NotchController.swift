@@ -83,14 +83,20 @@ public final class NotchController {
 
     public let settings: AppSettings
     public var pill: PillStatus?
-    public private(set) var contentSize: CGSize?
+    public var contentSize: CGSize? {
+        registry?.selectedContentSize
+    }
 
     public var expandedShapeSize: CGSize {
         geometry.expandedShapeSize(for: contentSize)
     }
 
     public var expandedShapeFrame: CGRect {
-        geometry.expandedShapeFrame(for: registry?.selectedContentSize ?? contentSize)
+        geometry.expandedShapeFrame(for: contentSize)
+    }
+
+    public var navigationSideWidth: CGFloat {
+        geometry.navigationSideWidth(for: contentSize)
     }
 
     public var animation: NotchAnimation {
@@ -124,12 +130,17 @@ public final class NotchController {
         guard let registry else { return }
         withObservationTracking {
             pill = registry.activePill
-            contentSize = registry.selectedContentSize
         } onChange: {
             Task { @MainActor [weak self] in
                 self?.observeRegistry()
             }
         }
+    }
+
+    @discardableResult
+    public func navigate(_ direction: NavigationDirection) -> Bool {
+        guard isExpanded else { return false }
+        return registry?.selectNeighbor(direction) ?? false
     }
 
     public func dragEnded(pointerInside: Bool) {

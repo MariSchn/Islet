@@ -15,6 +15,11 @@ public enum PluginState: Sendable {
     }
 }
 
+public enum NavigationDirection: Sendable, Equatable {
+    case forward
+    case backward
+}
+
 public enum PluginRegistryError: Error, Equatable {
     case duplicateID(String)
     case invalidID(String)
@@ -147,6 +152,16 @@ public final class PluginRegistry {
         guard id == nil || (entry(for: id!) != nil && isEnabled(id!)) else { return }
         selectedID = id
         userDefaults.set(id, forKey: selectedKey)
+    }
+
+    @discardableResult
+    public func selectNeighbor(_ direction: NavigationDirection) -> Bool {
+        let enabled = enabledEntries
+        guard let selectedID, let index = enabled.firstIndex(where: { $0.id == selectedID }) else { return false }
+        let target = direction == .forward ? index + 1 : index - 1
+        guard enabled.indices.contains(target) else { return false }
+        select(enabled[target].id)
+        return true
     }
 
     private func ensureSelection() {

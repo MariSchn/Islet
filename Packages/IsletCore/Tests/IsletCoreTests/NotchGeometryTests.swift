@@ -19,7 +19,9 @@ struct NotchGeometryTests {
         let geometry = NotchGeometry(screenFrame: screen, notchSize: CGSize(width: 196, height: 32), hasHardwareNotch: true)
 
         #expect(geometry.contentSize(for: nil) == NotchGeometry.defaultContentSize)
-        #expect(geometry.contentSize(for: CGSize(width: 10, height: 10)) == NotchGeometry.minContentSize)
+        #expect(geometry.contentSize(for: CGSize(width: 10, height: 10)) == CGSize(width: 356, height: NotchGeometry.minContentSize.height))
+        #expect(geometry.navigationSideWidth(for: CGSize(width: 10, height: 10)) == NotchGeometry.navigationSideMinWidth)
+        #expect(geometry.navigationSideWidth(for: CGSize(width: 520, height: 100)) == 162)
         #expect(geometry.contentSize(for: CGSize(width: 5000, height: 5000)) == CGSize(width: 960, height: 491))
         #expect(geometry.contentSize(for: CGSize(width: CGFloat.nan, height: 100)) == NotchGeometry.defaultContentSize)
         #expect(geometry.contentSize(for: CGSize(width: CGFloat.infinity, height: -5)) == NotchGeometry.defaultContentSize)
@@ -27,14 +29,16 @@ struct NotchGeometryTests {
         #expect(geometry.expandedShapeFrame(for: CGSize(width: 400, height: 100)).midX == screen.midX)
     }
 
-    @Test func narrowContentNeverNarrowerThanNotch() {
+    @Test func narrowContentKeepsNavigationRoomBesideWideNotch() {
         let geometry = NotchGeometry(screenFrame: screen, notchSize: CGSize(width: 800, height: 32), hasHardwareNotch: true)
-        #expect(geometry.expandedShapeSize(for: CGSize(width: 300, height: 100)).width == 800)
+        #expect(geometry.expandedShapeSize(for: CGSize(width: 300, height: 100)).width == 960)
+        #expect(geometry.navigationSideWidth(for: CGSize(width: 300, height: 100)) == NotchGeometry.navigationSideMinWidth)
     }
 
     @Test func smallScreensStillAllowMinimumContentAndShrinkThePanel() {
         let small = NotchGeometry(screenFrame: CGRect(x: 0, y: 0, width: 300, height: 200), notchSize: CGSize(width: 200, height: 24), hasHardwareNotch: false)
         #expect(small.largestContentSize == CGSize(width: NotchGeometry.minContentSize.width, height: 100))
+        #expect(small.contentSize(for: CGSize(width: 10, height: 10)).width == NotchGeometry.minContentSize.width)
 
         let laptop = NotchGeometry(screenFrame: CGRect(x: 0, y: 0, width: 1024, height: 640), notchSize: CGSize(width: 200, height: 24), hasHardwareNotch: false)
         #expect(laptop.largestContentSize == CGSize(width: 904, height: 320))
@@ -90,7 +94,7 @@ struct NotchGeometryTests {
     @Test func expandedShapeNeverNarrowerThanNotch() {
         let geometry = NotchGeometry(screenFrame: screen, notchSize: CGSize(width: 800, height: 32), hasHardwareNotch: true)
 
-        #expect(geometry.expandedShapeSize().width == 800)
+        #expect(geometry.expandedShapeSize().width >= 800 + 2 * NotchGeometry.navigationSideMinWidth)
     }
 
     @Test func secondaryScreenOffsetIsRespected() {

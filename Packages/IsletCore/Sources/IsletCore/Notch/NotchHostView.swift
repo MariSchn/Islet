@@ -1,28 +1,83 @@
 import SwiftUI
 
 public struct NotchHostView: View {
+    private let controller: NotchController
     private let registry: PluginRegistry
     private let openSettings: () -> Void
 
-    public init(registry: PluginRegistry, openSettings: @escaping () -> Void) {
+    public init(controller: NotchController, registry: PluginRegistry, openSettings: @escaping () -> Void) {
+        self.controller = controller
         self.registry = registry
         self.openSettings = openSettings
     }
 
     public var body: some View {
-        VStack(spacing: 10) {
-            NotchTabBar(registry: registry, openSettings: openSettings)
-            if let selected = registry.selectedID, let entry = registry.entry(for: selected) {
-                PluginScreen(entry: entry)
-                    .id(selected)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            } else {
+        VStack(spacing: 0) {
+            NotchNavigationBar(
+                registry: registry,
+                notchWidth: controller.geometry.notchSize.width,
+                sideWidth: controller.navigationSideWidth,
+                animation: switchAnimation,
+                openSettings: openSettings
+            )
+            .frame(height: controller.geometry.notchSize.height)
+            PluginCarousel(registry: registry, geometry: controller.geometry, animation: switchAnimation)
+        }
+        .foregroundStyle(.white)
+    }
+
+    private var switchAnimation: Animation {
+        controller.animation.animation(expanding: true)
+    }
+}
+
+private struct PluginCarousel: View {
+    let registry: PluginRegistry
+    let geometry: NotchGeometry
+    let animation: Animation
+
+    private struct Placement: Equatable {
+        let id: String
+        let size: CGSize
+        let offset: CGFloat
+    }
+
+    private var placements: [Placement] {
+        let entries = registry.enabledEntries
+        guard let selectedIndex = entries.firstIndex(where: { $0.id == registry.selectedID }) else { return [] }
+        let sizes = entries.map { geometry.contentSize(for: $0.context.contentSize) }
+        return entries.indices.map { index in
+            let span = index < selectedIndex ? sizes[index..<selectedIndex] : sizes[selectedIndex..<index]
+            let distance = span.reduce(0) { $0 + $1.width } + (sizes[index].width - sizes[selectedIndex].width) / 2
+            let offset = index < selectedIndex ? -distance : distance
+            return Placement(id: entries[index].id, size: sizes[index], offset: offset)
+        }
+    }
+
+    var body: some View {
+        let placements = placements
+        ZStack(alignment: .top) {
+            if placements.isEmpty {
                 Text("No plugins enabled")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            ForEach(placements, id: \.id) { placement in
+                if let entry = registry.entry(for: placement.id) {
+                    let isSelected = placement.id == registry.selectedID
+                    PluginScreen(entry: entry)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .padding(12)
+                        .frame(width: placement.size.width, height: placement.size.height)
+                        .opacity(isSelected ? 1 : 0)
+                        .allowsHitTesting(isSelected)
+                        .accessibilityHidden(!isSelected)
+                        .offset(x: placement.offset)
+                }
+            }
         }
-        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .animation(animation, value: placements)
     }
 }
 
@@ -43,23 +98,67 @@ private struct PluginScreen: View {
     }
 }
 
-struct NotchTabBar: View {
+private struct NotchNavigationBar: View {
     let registry: PluginRegistry
+    let notchWidth: CGFloat
+    let sideWidth: CGFloat
+    let animation: Animation
     let openSettings: () -> Void
 
     var body: some View {
-        HStack(spacing: 4) {
-            ForEach(registry.enabledEntries) { entry in
-                NotchBarButton(systemImage: entry.manifest.systemImage, isSelected: entry.id == registry.selectedID) {
+        HStack(spacing: 0) {
+            PluginTabCarousel(registry: registry, width: sideWidth, animation: animation)
+                .frame(width: sideWidth)
+            Color.clear
+                .frame(width: notchWidth)
+            HStack(spacing: 4) {
+                Spacer(minLength: 0)
+                NotchBarButton(systemImage: "gearshape", isSelected: false, action: openSettings)
+                    .help("Islet Settings")
+            }
+            .padding(.trailing, 8)
+            .frame(width: sideWidth)
+        }
+    }
+}
+
+private struct PluginTabCarousel: View {
+    let registry: PluginRegistry
+    let width: CGFloat
+    let animation: Animation
+
+    private static let step: CGFloat = 34
+    private static let buttonWidth: CGFloat = 30
+    private static let fadeWidth: CGFloat = 16
+
+    var body: some View {
+        let entries = registry.enabledEntries
+        let selectedIndex = entries.firstIndex { $0.id == registry.selectedID }
+        ZStack {
+            ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                let distance = index - (selectedIndex ?? 0)
+                let offset = CGFloat(distance) * Self.step
+                NotchBarButton(systemImage: entry.manifest.systemImage, isSelected: index == selectedIndex) {
                     registry.select(entry.id)
                 }
                 .help(entry.manifest.displayName)
+                .opacity(index == selectedIndex ? 1 : 0.45)
+                .offset(x: offset)
+                .allowsHitTesting(abs(offset) + Self.buttonWidth / 2 <= width / 2)
             }
-            Spacer(minLength: 0)
-            NotchBarButton(systemImage: "gearshape", isSelected: false, action: openSettings)
-                .help("Islet Settings")
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+        .mask(
+            HStack(spacing: 0) {
+                LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
+                    .frame(width: Self.fadeWidth)
+                Color.black
+                LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                    .frame(width: Self.fadeWidth)
+            }
+        )
+        .animation(animation, value: selectedIndex)
     }
 }
 
