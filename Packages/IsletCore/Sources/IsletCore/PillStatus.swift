@@ -1,4 +1,5 @@
-import Foundation
+import CoreGraphics
+import SwiftUI
 
 public struct PillStatus: Sendable, Equatable {
     public enum Priority: Int, Sendable, Comparable {
@@ -15,10 +16,14 @@ public struct PillStatus: Sendable, Equatable {
     public var text: String
     public var systemImage: String?
     public var priority: Priority
+    public var artwork: CGImage?
+    public var tint: Color.Resolved?
 
-    public init(text: String, systemImage: String? = nil, priority: Priority = .info) {
+    public init(text: String, systemImage: String? = nil, priority: Priority = .info, artwork: CGImage? = nil, tint: Color.Resolved? = nil) {
         self.text = text
         self.systemImage = systemImage
         self.priority = priority
+        self.artwork = artwork
+        self.tint = tint
     }
 }

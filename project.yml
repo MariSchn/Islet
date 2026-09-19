@@ -11,6 +11,8 @@ packages:
     path: Plugins/HelloPlugin
   ShelfPlugin:
     path: Plugins/ShelfPlugin
+  MediaPlugin:
+    path: Plugins/MediaPlugin
 targets:
   Islet:
     type: application
@@ -21,6 +23,7 @@ targets:
       - package: IsletCore
       - package: HelloPlugin
       - package: ShelfPlugin
+      - package: MediaPlugin
     info:
       path: App/Info.plist
       properties:
@@ -28,6 +31,7 @@ targets:
         LSUIElement: true
         LSMinimumSystemVersion: "15.0"
         NSHumanReadableCopyright: ""
+        NSAppleEventsUsageDescription: Islet controls your music player to show and control what's playing.
     settings:
       base:
         PRODUCT_NAME: Islet
@@ -48,3 +52,4 @@ schemes:
       targets:
         - package: IsletCore/IsletCoreTests
         - package: ShelfPlugin/ShelfPluginTests
+        - package: MediaPlugin/MediaPluginTests

@@ -108,4 +108,14 @@ struct NotchGeometryTests {
 
         #expect(geometry.notchSize.height == NotchGeometry.fallbackMenuBarHeight)
     }
+
+    @Test func artworkPillUsesSymmetricSlots() {
+        let geometry = NotchGeometry.placeholder
+        let artwork = CGContext(data: nil, width: 4, height: 4, bitsPerComponent: 8, bytesPerRow: 16, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!.makeImage()!
+        let pill = PillStatus(text: String(repeating: "wide ", count: 20), artwork: artwork)
+
+        #expect(geometry.pillTrailingWidth(for: pill) == NotchGeometry.pillLeadingWidth)
+        #expect(geometry.pillShapeOffset(for: pill) == 0)
+        #expect(geometry.pillShapeSize(for: pill).width == geometry.notchSize.width + 2 * NotchGeometry.pillLeadingWidth)
+    }
 }

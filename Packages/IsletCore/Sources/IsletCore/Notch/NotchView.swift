@@ -95,13 +95,36 @@ private struct PillView: View {
             }
             .frame(width: NotchGeometry.pillLeadingWidth)
             Color.clear.frame(width: geometry.notchSize.width)
-            Text(pill.text)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .padding(.horizontal, NotchGeometry.pillTextPadding)
-                .frame(width: geometry.pillTrailingWidth(for: pill.text), alignment: .leading)
+            if let artwork = pill.artwork {
+                Image(decorative: artwork, scale: 1)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: artworkSide, height: artworkSide)
+                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    .frame(width: geometry.pillTrailingWidth(for: pill))
+            } else {
+                Text(pill.text)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .padding(.horizontal, NotchGeometry.pillTextPadding)
+                    .frame(width: geometry.pillTrailingWidth(for: pill), alignment: .leading)
+            }
         }
         .font(Font(NotchGeometry.pillFont))
-        .foregroundStyle(pill.priority >= .attention ? .orange : .white)
+        .foregroundStyle(color)
+    }
+
+    private var artworkSide: CGFloat {
+        geometry.notchSize.height - 8
+    }
+
+    private var color: Color {
+        if pill.priority >= .attention {
+            return .orange
+        }
+        if let tint = pill.tint {
+            return Color(tint)
+        }
+        return .white
     }
 }
