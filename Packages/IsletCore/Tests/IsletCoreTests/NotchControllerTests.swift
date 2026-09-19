@@ -2,17 +2,17 @@ import CoreGraphics
 import Testing
 import IsletCore
 
+@Suite(.serialized)
 @MainActor
 struct NotchControllerTests {
+    let expandDelay: Duration = .milliseconds(60)
+    let collapseDelay: Duration = .milliseconds(120)
+    let settle: Duration = .milliseconds(300)
+
     func makeController() -> NotchController {
-        let geometry = NotchGeometry(
-            screenFrame: CGRect(x: 0, y: 0, width: 1512, height: 982),
-            notchSize: CGSize(width: 196, height: 32),
-            hasHardwareNotch: true
-        )
-        let controller = NotchController(geometry: geometry)
-        controller.animation.expandDelay = .milliseconds(30)
-        controller.animation.collapseDelay = .milliseconds(30)
+        let controller = NotchController()
+        controller.animation.expandDelay = expandDelay
+        controller.animation.collapseDelay = collapseDelay
         return controller
     }
 
@@ -21,12 +21,12 @@ struct NotchControllerTests {
 
         controller.isHovering = true
         #expect(!controller.isExpanded)
-        try await Task.sleep(for: .milliseconds(80))
+        try await Task.sleep(for: settle)
         #expect(controller.isExpanded)
 
         controller.isHovering = false
         #expect(controller.isExpanded)
-        try await Task.sleep(for: .milliseconds(80))
+        try await Task.sleep(for: settle)
         #expect(!controller.isExpanded)
     }
 
@@ -34,9 +34,8 @@ struct NotchControllerTests {
         let controller = makeController()
 
         controller.isHovering = true
-        try await Task.sleep(for: .milliseconds(5))
         controller.isHovering = false
-        try await Task.sleep(for: .milliseconds(80))
+        try await Task.sleep(for: settle)
 
         #expect(!controller.isExpanded)
     }
@@ -46,11 +45,24 @@ struct NotchControllerTests {
         controller.expand()
 
         controller.isHovering = false
-        try await Task.sleep(for: .milliseconds(5))
         controller.isHovering = true
-        try await Task.sleep(for: .milliseconds(80))
+        try await Task.sleep(for: settle)
 
         #expect(controller.isExpanded)
+    }
+
+    @Test func collapseWaitsLongerThanExpand() async throws {
+        let controller = makeController()
+
+        controller.isHovering = true
+        try await Task.sleep(for: expandDelay * 2)
+        #expect(controller.isExpanded)
+
+        controller.isHovering = false
+        try await Task.sleep(for: expandDelay * 2 / 3)
+        #expect(controller.isExpanded)
+        try await Task.sleep(for: settle)
+        #expect(!controller.isExpanded)
     }
 
     @Test func explicitCollapseCancelsPendingExpand() async throws {
@@ -58,7 +70,7 @@ struct NotchControllerTests {
 
         controller.isHovering = true
         controller.collapse()
-        try await Task.sleep(for: .milliseconds(80))
+        try await Task.sleep(for: settle)
 
         #expect(!controller.isExpanded)
     }

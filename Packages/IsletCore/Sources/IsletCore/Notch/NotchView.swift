@@ -1,7 +1,7 @@
 import SwiftUI
 
 public struct NotchView<Content: View>: View {
-    @Bindable private var controller: NotchController
+    private let controller: NotchController
     private let content: () -> Content
 
     public init(controller: NotchController, @ViewBuilder content: @escaping () -> Content) {
@@ -13,11 +13,14 @@ public struct NotchView<Content: View>: View {
         controller.isExpanded ? controller.geometry.expandedShapeSize : controller.geometry.notchSize
     }
 
+    private var shape: NotchShape {
+        NotchShape(bottomRadius: controller.isExpanded ? 24 : 12)
+    }
+
     public var body: some View {
         VStack(spacing: 0) {
             ZStack(alignment: .top) {
-                NotchShape(bottomRadius: controller.isExpanded ? 24 : 12)
-                    .fill(.black)
+                shape.fill(.black)
                 if controller.isExpanded {
                     content()
                         .padding(.top, controller.geometry.notchSize.height)
@@ -27,7 +30,8 @@ public struct NotchView<Content: View>: View {
                 }
             }
             .frame(width: shapeSize.width, height: shapeSize.height)
-            .contentShape(NotchShape())
+            .clipShape(shape)
+            .contentShape(shape)
             .onHover { controller.isHovering = $0 }
             .animation(controller.animation.animation(expanding: controller.isExpanded), value: controller.isExpanded)
             Spacer(minLength: 0)

@@ -62,7 +62,7 @@ public final class NotchController {
 
     @ObservationIgnored private var hoverTask: Task<Void, Never>?
 
-    public init(geometry: NotchGeometry) {
+    public init(geometry: NotchGeometry = .placeholder) {
         self.geometry = geometry
     }
 

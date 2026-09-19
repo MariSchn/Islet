@@ -4,6 +4,7 @@ import SwiftUI
 @MainActor
 public final class NotchPanel: NSPanel {
     private let controller: NotchController
+    private var pendingRelayout: Task<Void, Never>?
 
     public init<Content: View>(controller: NotchController, @ViewBuilder content: @escaping () -> Content) {
         self.controller = controller
@@ -33,10 +34,14 @@ public final class NotchPanel: NSPanel {
     }
 
     @objc private func screenParametersDidChange() {
-        relayout()
+        pendingRelayout?.cancel()
+        pendingRelayout = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(100))
+            guard !Task.isCancelled else { return }
+            self?.relayout()
+        }
     }
 
-    public override var canBecomeKey: Bool { false }
     public override var canBecomeMain: Bool { false }
 
     public func show() {

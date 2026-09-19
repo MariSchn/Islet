@@ -1,7 +1,8 @@
 import AppKit
 
 public struct NotchGeometry: Sendable, Equatable {
-    public static let fallbackNotchSize = CGSize(width: 200, height: 32)
+    public static let fallbackNotchWidth: CGFloat = 200
+    public static let fallbackMenuBarHeight: CGFloat = 24
     public static let expandedSize = CGSize(width: 520, height: 220)
     public static let overshootMargin: CGFloat = 60
 
@@ -15,19 +16,47 @@ public struct NotchGeometry: Sendable, Equatable {
         self.hasHardwareNotch = hasHardwareNotch
     }
 
-    public init(screen: NSScreen) {
-        let frame = screen.frame
-        let insetTop = screen.safeAreaInsets.top
-        if insetTop > 0, let left = screen.auxiliaryTopLeftArea, let right = screen.auxiliaryTopRightArea {
+    public init(
+        screenFrame: CGRect,
+        visibleFrame: CGRect,
+        safeAreaTop: CGFloat,
+        auxiliaryTopLeftArea: CGRect?,
+        auxiliaryTopRightArea: CGRect?
+    ) {
+        if safeAreaTop > 0, let left = auxiliaryTopLeftArea, let right = auxiliaryTopRightArea, right.minX > left.maxX {
             self.init(
-                screenFrame: frame,
-                notchSize: CGSize(width: right.minX - left.maxX, height: insetTop),
+                screenFrame: screenFrame,
+                notchSize: CGSize(width: right.minX - left.maxX, height: safeAreaTop),
                 hasHardwareNotch: true
             )
         } else {
-            self.init(screenFrame: frame, notchSize: Self.fallbackNotchSize, hasHardwareNotch: false)
+            let menuBarHeight = screenFrame.maxY - visibleFrame.maxY
+            self.init(
+                screenFrame: screenFrame,
+                notchSize: CGSize(
+                    width: Self.fallbackNotchWidth,
+                    height: menuBarHeight > 0 ? menuBarHeight : Self.fallbackMenuBarHeight
+                ),
+                hasHardwareNotch: false
+            )
         }
     }
+
+    public init(screen: NSScreen) {
+        self.init(
+            screenFrame: screen.frame,
+            visibleFrame: screen.visibleFrame,
+            safeAreaTop: screen.safeAreaInsets.top,
+            auxiliaryTopLeftArea: screen.auxiliaryTopLeftArea,
+            auxiliaryTopRightArea: screen.auxiliaryTopRightArea
+        )
+    }
+
+    public static let placeholder = NotchGeometry(
+        screenFrame: .zero,
+        notchSize: CGSize(width: fallbackNotchWidth, height: fallbackMenuBarHeight),
+        hasHardwareNotch: false
+    )
 
     public var expandedShapeSize: CGSize {
         CGSize(
