@@ -5,6 +5,8 @@ import SwiftUI
 public final class NotchPanel: NSPanel {
     private let controller: NotchController
     private var pendingRelayout: Task<Void, Never>?
+    private var swipeRecognizer = HorizontalSwipeRecognizer()
+    private var scrollMonitor: Any?
 
     public init<Content: View>(controller: NotchController, @ViewBuilder content: @escaping () -> Content) {
         self.controller = controller
@@ -35,6 +37,24 @@ public final class NotchPanel: NSPanel {
             name: NSApplication.didChangeScreenParametersNotification,
             object: nil
         )
+        scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            self?.handleScroll(event)
+            return event
+        }
+    }
+
+    private func handleScroll(_ event: NSEvent) {
+        guard event.window === self, event.momentumPhase.isEmpty else { return }
+        let phase: HorizontalSwipeRecognizer.Phase
+        switch event.phase {
+        case .began: phase = .began
+        case .changed: phase = .changed
+        case .ended, .cancelled: phase = .ended
+        default: return
+        }
+        if let direction = swipeRecognizer.handle(phase: phase, deltaX: event.scrollingDeltaX, deltaY: event.scrollingDeltaY) {
+            controller.navigate(direction)
+        }
     }
 
     @objc private func screenParametersDidChange() {

@@ -132,6 +132,12 @@ public final class NotchController {
         }
     }
 
+    @discardableResult
+    public func navigate(_ direction: NavigationDirection) -> Bool {
+        guard isExpanded else { return false }
+        return registry?.selectNeighbor(direction) ?? false
+    }
+
     public func dragEnded(pointerInside: Bool) {
         isDragTargeted = false
         isHovering = pointerInside

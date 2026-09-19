@@ -55,8 +55,6 @@ public struct NotchView<Content: View>: View {
                     }
                 if controller.isExpanded {
                     content()
-                        .padding(.top, controller.geometry.notchSize.height)
-                        .padding(12)
                         .frame(width: shapeSize.width, height: shapeSize.height, alignment: .top)
                         .transition(.opacity)
                 } else if let pill = controller.pill {

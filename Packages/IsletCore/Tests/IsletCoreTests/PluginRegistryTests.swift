@@ -225,6 +225,27 @@ struct PluginRegistryTests {
         #expect(registry.activePill?.text == "song")
     }
 
+    @Test func selectNeighborWalksEnabledPluginsAndTracksDirection() async throws {
+        let harness = Harness()
+        let registry = harness.makeRegistry()
+        try await harness.registerStub(in: registry)
+        try await harness.registerSecond(in: registry)
+        #expect(registry.selectedID == "test.stub")
+
+        #expect(!registry.selectNeighbor(.backward))
+        #expect(registry.selectedID == "test.stub")
+        #expect(registry.selectNeighbor(.forward))
+        #expect(registry.selectedID == "test.second")
+        #expect(registry.selectionDirection == .forward)
+        #expect(!registry.selectNeighbor(.forward))
+        #expect(registry.selectNeighbor(.backward))
+        #expect(registry.selectedID == "test.stub")
+        #expect(registry.selectionDirection == .backward)
+
+        await registry.setEnabled(false, for: "test.second")
+        #expect(!registry.selectNeighbor(.forward))
+    }
+
     @Test func selectedContentSizeFollowsSelectionAndIgnoresDisabledPlugins() async throws {
         let registry = harness.makeRegistry()
         #expect(registry.selectedContentSize == nil)

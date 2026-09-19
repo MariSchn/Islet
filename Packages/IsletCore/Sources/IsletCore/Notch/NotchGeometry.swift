@@ -9,6 +9,7 @@ public struct NotchGeometry: Sendable, Equatable {
     public static let maxContentHeightFraction: CGFloat = 0.5
     public static let overshootMargin: CGFloat = 60
     public static let screenEdgeMargin: CGFloat = 60
+    public static let navigationSideMinWidth: CGFloat = 80
     public static let pillLeadingWidth: CGFloat = 36
     public static let pillTrailingMaxWidth: CGFloat = 220
     public static let pillTextPadding: CGFloat = 10
@@ -74,15 +75,23 @@ public struct NotchGeometry: Sendable, Equatable {
         )
     }
 
+    public var minContentWidth: CGFloat {
+        max(Self.minContentSize.width, notchSize.width + 2 * Self.navigationSideMinWidth)
+    }
+
     public func contentSize(for requested: CGSize?) -> CGSize {
         guard let requested, requested.width.isFinite, requested.height.isFinite else {
             return contentSize(for: Self.defaultContentSize)
         }
         let largest = largestContentSize
         return CGSize(
-            width: min(max(requested.width, Self.minContentSize.width), largest.width),
+            width: min(max(requested.width, minContentWidth), largest.width),
             height: min(max(requested.height, Self.minContentSize.height), largest.height)
         )
+    }
+
+    public func navigationSideWidth(for contentSize: CGSize? = nil) -> CGFloat {
+        (expandedShapeSize(for: contentSize).width - notchSize.width) / 2
     }
 
     public func expandedShapeSize(for contentSize: CGSize? = nil) -> CGSize {
