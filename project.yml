@@ -7,6 +7,8 @@ options:
 packages:
   IsletCore:
     path: Packages/IsletCore
+  HelloPlugin:
+    path: Plugins/HelloPlugin
 targets:
   Islet:
     type: application
@@ -15,6 +17,7 @@ targets:
       - App
     dependencies:
       - package: IsletCore
+      - package: HelloPlugin
     info:
       path: App/Info.plist
       properties:

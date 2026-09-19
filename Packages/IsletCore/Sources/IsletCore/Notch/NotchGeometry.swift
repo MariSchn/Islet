@@ -5,6 +5,7 @@ public struct NotchGeometry: Sendable, Equatable {
     public static let fallbackMenuBarHeight: CGFloat = 24
     public static let expandedSize = CGSize(width: 520, height: 220)
     public static let overshootMargin: CGFloat = 60
+    public static let pillSideWidth: CGFloat = 120
 
     public let screenFrame: CGRect
     public let notchSize: CGSize
@@ -63,6 +64,10 @@ public struct NotchGeometry: Sendable, Equatable {
             width: max(Self.expandedSize.width, notchSize.width),
             height: notchSize.height + Self.expandedSize.height
         )
+    }
+
+    public var pillShapeSize: CGSize {
+        CGSize(width: notchSize.width + 2 * Self.pillSideWidth, height: notchSize.height)
     }
 
     public var panelSize: CGSize {

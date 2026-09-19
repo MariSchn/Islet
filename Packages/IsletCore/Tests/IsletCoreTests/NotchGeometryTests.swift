@@ -14,6 +14,13 @@ struct NotchGeometryTests {
         #expect(geometry.panelSize == CGSize(width: 640, height: 312))
     }
 
+    @Test func pillShapeWidensNotchOnBothSidesAtNotchHeight() {
+        let geometry = NotchGeometry(screenFrame: screen, notchSize: CGSize(width: 196, height: 32), hasHardwareNotch: true)
+
+        #expect(geometry.pillShapeSize == CGSize(width: 196 + 2 * NotchGeometry.pillSideWidth, height: 32))
+        #expect(geometry.pillShapeSize.width <= geometry.panelSize.width)
+    }
+
     @Test func expandedShapeNeverNarrowerThanNotch() {
         let geometry = NotchGeometry(screenFrame: screen, notchSize: CGSize(width: 800, height: 32), hasHardwareNotch: true)
 

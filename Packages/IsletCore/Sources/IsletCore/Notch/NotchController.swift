@@ -59,6 +59,7 @@ public final class NotchController {
     }
 
     public var animation: NotchAnimation = .default
+    public var pill: PillStatus?
 
     @ObservationIgnored private var hoverTask: Task<Void, Never>?
 
