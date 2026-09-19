@@ -132,6 +132,34 @@ struct NotchControllerTests {
         #expect(controller.pill == nil)
     }
 
+    @Test func mirrorsSelectedPluginContentSize() async throws {
+        let harness = Harness()
+        let registry = harness.makeRegistry()
+        let controller = makeController()
+        controller.attach(registry)
+        let stub = try await harness.registerStub(in: registry)
+        try await harness.registerSecond(in: registry)
+        #expect(controller.contentSize == nil)
+        #expect(controller.expandedShapeSize == controller.geometry.expandedShapeSize())
+
+        stub.context.contentSize = CGSize(width: 400, height: 100)
+        await Task.yield()
+        #expect(controller.contentSize == CGSize(width: 400, height: 100))
+        #expect(controller.expandedShapeSize.width == 400)
+
+        registry.select("test.second")
+        await Task.yield()
+        #expect(controller.contentSize == nil)
+
+        registry.select("test.stub")
+        await Task.yield()
+        #expect(controller.contentSize == CGSize(width: 400, height: 100))
+
+        await registry.setEnabled(false, for: "test.stub")
+        await Task.yield()
+        #expect(controller.contentSize == nil)
+    }
+
     @Test func dragSwitchesToFirstDropAcceptingPluginUnlessDisabled() async throws {
         let harness = Harness()
         let registry = harness.makeRegistry()

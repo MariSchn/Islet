@@ -84,6 +84,10 @@ public final class PluginRegistry {
             .max { $0.priority < $1.priority }
     }
 
+    public var selectedContentSize: CGSize? {
+        enabledEntries.first { $0.id == selectedID }?.context.contentSize
+    }
+
     public var preferredDropTarget: PluginEntry? {
         enabledEntries.first { $0.plugin.acceptsFileDrops }
     }

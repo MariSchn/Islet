@@ -3,8 +3,12 @@ import AppKit
 public struct NotchGeometry: Sendable, Equatable {
     public static let fallbackNotchWidth: CGFloat = 200
     public static let fallbackMenuBarHeight: CGFloat = 24
-    public static let expandedSize = CGSize(width: 520, height: 220)
+    public static let defaultContentSize = CGSize(width: 520, height: 220)
+    public static let minContentSize = CGSize(width: 240, height: 80)
+    public static let maxContentSize = CGSize(width: 960, height: 640)
+    public static let maxContentHeightFraction: CGFloat = 0.5
     public static let overshootMargin: CGFloat = 60
+    public static let screenEdgeMargin: CGFloat = 60
     public static let pillLeadingWidth: CGFloat = 36
     public static let pillTrailingMaxWidth: CGFloat = 220
     public static let pillTextPadding: CGFloat = 10
@@ -62,11 +66,35 @@ public struct NotchGeometry: Sendable, Equatable {
         hasHardwareNotch: false
     )
 
-    public var expandedShapeSize: CGSize {
-        CGSize(
-            width: max(Self.expandedSize.width, notchSize.width),
-            height: notchSize.height + Self.expandedSize.height
+    public var largestContentSize: CGSize {
+        guard screenFrame.width > 0 else { return Self.maxContentSize }
+        return CGSize(
+            width: max(min(Self.maxContentSize.width, screenFrame.width - 2 * Self.screenEdgeMargin), Self.minContentSize.width),
+            height: max(min(Self.maxContentSize.height, screenFrame.height * Self.maxContentHeightFraction), Self.minContentSize.height)
         )
+    }
+
+    public func contentSize(for requested: CGSize?) -> CGSize {
+        guard let requested, requested.width.isFinite, requested.height.isFinite else {
+            return contentSize(for: Self.defaultContentSize)
+        }
+        let largest = largestContentSize
+        return CGSize(
+            width: min(max(requested.width, Self.minContentSize.width), largest.width),
+            height: min(max(requested.height, Self.minContentSize.height), largest.height)
+        )
+    }
+
+    public func expandedShapeSize(for contentSize: CGSize? = nil) -> CGSize {
+        let content = self.contentSize(for: contentSize)
+        return CGSize(
+            width: max(content.width, notchSize.width),
+            height: notchSize.height + content.height
+        )
+    }
+
+    public var largestExpandedShapeSize: CGSize {
+        expandedShapeSize(for: largestContentSize)
     }
 
     public func pillTrailingWidth(for text: String) -> CGFloat {
@@ -90,19 +118,20 @@ public struct NotchGeometry: Sendable, Equatable {
         (pillTrailingWidth(for: pill) - Self.pillLeadingWidth) / 2
     }
 
-    public var expandedShapeFrame: CGRect {
-        CGRect(
-            x: screenFrame.midX - expandedShapeSize.width / 2,
-            y: screenFrame.maxY - expandedShapeSize.height,
-            width: expandedShapeSize.width,
-            height: expandedShapeSize.height
+    public func expandedShapeFrame(for contentSize: CGSize? = nil) -> CGRect {
+        let size = expandedShapeSize(for: contentSize)
+        return CGRect(
+            x: screenFrame.midX - size.width / 2,
+            y: screenFrame.maxY - size.height,
+            width: size.width,
+            height: size.height
         )
     }
 
     public var panelSize: CGSize {
         CGSize(
-            width: expandedShapeSize.width + 2 * Self.overshootMargin,
-            height: expandedShapeSize.height + Self.overshootMargin
+            width: largestExpandedShapeSize.width + 2 * Self.overshootMargin,
+            height: largestExpandedShapeSize.height + Self.overshootMargin
         )
     }
 

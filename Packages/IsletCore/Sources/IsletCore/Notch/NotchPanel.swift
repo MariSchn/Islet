@@ -100,6 +100,6 @@ private final class NotchHostingView<Content: View>: NSHostingView<Content> {
     }
 
     private var isPointerInsideExpandedShape: Bool {
-        controller.geometry.expandedShapeFrame.contains(NSEvent.mouseLocation)
+        controller.expandedShapeFrame.contains(NSEvent.mouseLocation)
     }
 }

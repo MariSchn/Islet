@@ -12,7 +12,7 @@ public struct NotchView<Content: View>: View {
 
     private var shapeSize: CGSize {
         if controller.isExpanded {
-            return controller.geometry.expandedShapeSize
+            return controller.expandedShapeSize
         }
         guard let pill = controller.pill else { return controller.geometry.notchSize }
         return controller.geometry.pillShapeSize(for: pill)
@@ -72,6 +72,7 @@ public struct NotchView<Content: View>: View {
             .onHover { controller.isHovering = $0 }
             .animation(controller.animation.animation(expanding: controller.isExpanded), value: controller.isExpanded)
             .animation(controller.animation.animation(expanding: controller.pill != nil), value: controller.pill)
+            .animation(controller.animation.animation(expanding: true), value: controller.expandedShapeSize)
             Spacer(minLength: 0)
         }
         .frame(width: controller.geometry.panelSize.width, height: controller.geometry.panelSize.height, alignment: .top)
