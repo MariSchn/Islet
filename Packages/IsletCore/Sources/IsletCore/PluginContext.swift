@@ -6,10 +6,10 @@ import Observation
 public final class PluginContext {
     public let manifest: PluginManifest
     public let storageDirectory: URL
-    public let settings: UserDefaults
+    public let settings: PluginSettings
     public var pillStatus: PillStatus?
 
-    public init(manifest: PluginManifest, storageDirectory: URL, settings: UserDefaults) {
+    init(manifest: PluginManifest, storageDirectory: URL, settings: PluginSettings) {
         self.manifest = manifest
         self.storageDirectory = storageDirectory
         self.settings = settings

@@ -11,8 +11,6 @@ struct IsletApp: App {
 
     var body: some Scene {
         MenuBarExtra("Islet", systemImage: "circle.hexagongrid") {
-            Text("\(registry.enabledEntries.count) plugins")
-            Divider()
             Button("Quit Islet") { NSApplication.shared.terminate(nil) }
                 .keyboardShortcut("q")
         }

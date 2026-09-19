@@ -1,10 +1,10 @@
 # Islet
 
-A dynamic notch for macOS, built as a plugin host. Shelf, media controls and coding-agent control ship as built-in plugins; external plugins are written in JS/TS.
+A dynamic notch for macOS, designed as a plugin host: every screen in the notch is a plugin built on the `IsletCore` plugin API.
 
 ## Development
 
-Requires Xcode 27+ and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
+Requires Xcode 16+ and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
 
 ```sh
 xcodegen generate
