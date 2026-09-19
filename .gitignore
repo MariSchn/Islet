@@ -1,0 +1,12 @@
+# XcodeGen output
+*.xcodeproj
+App/Info.plist
+
+# Xcode / SwiftPM
+.build/
+DerivedData/
+xcuserdata/
+*.xcworkspace/xcuserdata/
+.swiftpm/
+
+.DS_Store
