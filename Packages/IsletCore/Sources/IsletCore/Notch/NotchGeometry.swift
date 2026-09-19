@@ -75,15 +75,19 @@ public struct NotchGeometry: Sendable, Equatable {
         return min(ceil(textWidth) + 2 * Self.pillTextPadding, Self.pillTrailingMaxWidth, availableSideWidth)
     }
 
+    public func pillTrailingWidth(for pill: PillStatus) -> CGFloat {
+        pill.artwork == nil ? pillTrailingWidth(for: pill.text) : Self.pillLeadingWidth
+    }
+
     public func pillShapeSize(for pill: PillStatus) -> CGSize {
         CGSize(
-            width: notchSize.width + Self.pillLeadingWidth + pillTrailingWidth(for: pill.text),
+            width: notchSize.width + Self.pillLeadingWidth + pillTrailingWidth(for: pill),
             height: notchSize.height
         )
     }
 
     public func pillShapeOffset(for pill: PillStatus) -> CGFloat {
-        (pillTrailingWidth(for: pill.text) - Self.pillLeadingWidth) / 2
+        (pillTrailingWidth(for: pill) - Self.pillLeadingWidth) / 2
     }
 
     public var expandedShapeFrame: CGRect {
