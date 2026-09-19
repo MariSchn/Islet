@@ -47,6 +47,10 @@ public struct NotchView<Content: View>: View {
             .contentShape(shape)
             .offset(x: shapeOffset)
             .onHover { controller.isHovering = $0 }
+            .onDrop(of: [.item], isTargeted: Binding(
+                get: { controller.isDragTargeted },
+                set: { controller.isDragTargeted = $0 }
+            )) { _ in false }
             .animation(controller.animation.animation(expanding: controller.isExpanded), value: controller.isExpanded)
             .animation(controller.animation.animation(expanding: controller.pill != nil), value: controller.pill)
             Spacer(minLength: 0)

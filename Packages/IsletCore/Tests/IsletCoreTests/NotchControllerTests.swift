@@ -75,6 +75,29 @@ struct NotchControllerTests {
         #expect(!controller.isExpanded)
     }
 
+    @Test func dragTargetExpandsImmediatelyAndCollapsesAfterLeaving() async throws {
+        let controller = makeController()
+
+        controller.isDragTargeted = true
+        #expect(controller.isExpanded)
+
+        controller.isDragTargeted = false
+        #expect(controller.isExpanded)
+        try await Task.sleep(for: settle)
+        #expect(!controller.isExpanded)
+    }
+
+    @Test func hoverKeepsNotchOpenAfterDragLeaves() async throws {
+        let controller = makeController()
+        controller.isHovering = true
+        controller.isDragTargeted = true
+
+        controller.isDragTargeted = false
+        try await Task.sleep(for: settle)
+
+        #expect(controller.isExpanded)
+    }
+
     @Test func mirrorsRegistryPillIncludingPluginsRegisteredLater() async throws {
         let harness = Harness()
         let registry = harness.makeRegistry()

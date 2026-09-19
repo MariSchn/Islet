@@ -57,6 +57,9 @@ public final class NotchController {
     public var isHovering = false {
         didSet { scheduleHoverUpdate() }
     }
+    public var isDragTargeted = false {
+        didSet { scheduleHoverUpdate() }
+    }
 
     public var animation: NotchAnimation = .default
     public var pill: PillStatus?
@@ -98,14 +101,22 @@ public final class NotchController {
         isExpanded = false
     }
 
+    private var wantsExpansion: Bool {
+        isHovering || isDragTargeted
+    }
+
     private func scheduleHoverUpdate() {
         hoverTask?.cancel()
-        let target = isHovering
+        let target = wantsExpansion
         guard target != isExpanded else { return }
+        if isDragTargeted {
+            isExpanded = true
+            return
+        }
         let delay = target ? animation.expandDelay : animation.collapseDelay
         hoverTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: delay)
-            guard !Task.isCancelled, let self, self.isHovering == target else { return }
+            guard !Task.isCancelled, let self, self.wantsExpansion == target else { return }
             self.isExpanded = target
         }
     }
