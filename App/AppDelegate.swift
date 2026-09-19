@@ -1,3 +1,4 @@
+import AgentsPlugin
 import AppKit
 import HelloPlugin
 import IsletCore
@@ -36,6 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             try await registry.register(manifest: ShelfPlugin.manifest) { ShelfPlugin(context: $0) }
             try await registry.register(manifest: MediaPlugin.manifest) { MediaPlugin(context: $0) }
+            try await registry.register(manifest: AgentsPlugin.manifest) { AgentsPlugin(context: $0) }
             try await registry.register(manifest: HelloPlugin.manifest) { HelloPlugin(context: $0) }
         } catch {
             NSLog("Failed to register built-in plugin: \(error)")
