@@ -1,0 +1,45 @@
+name: Islet
+options:
+  bundleIdPrefix: com.marischn
+  deploymentTarget:
+    macOS: "15.0"
+  xcodeVersion: "27.0"
+  createIntermediateGroups: true
+packages:
+  IsletCore:
+    path: Packages/IsletCore
+targets:
+  Islet:
+    type: application
+    platform: macOS
+    sources:
+      - App
+    dependencies:
+      - package: IsletCore
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Islet
+        LSUIElement: true
+        LSMinimumSystemVersion: "15.0"
+        NSHumanReadableCopyright: ""
+    settings:
+      base:
+        PRODUCT_NAME: Islet
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+        ENABLE_HARDENED_RUNTIME: false
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
+schemes:
+  Islet:
+    build:
+      targets:
+        Islet: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - package: IsletCore/IsletCoreTests
