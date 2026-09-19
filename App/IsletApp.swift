@@ -3,6 +3,7 @@ import SwiftUI
 
 @main
 struct IsletApp: App {
+    @NSApplicationDelegateAdaptor private var appDelegate: AppDelegate
     @State private var registry = PluginRegistry(storageRoot: Self.storageRoot)
 
     private static var storageRoot: URL {
