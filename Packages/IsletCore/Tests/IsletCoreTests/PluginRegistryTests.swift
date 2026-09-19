@@ -75,6 +75,9 @@ final class Harness {
 
     isolated deinit {
         defaults.removePersistentDomain(forName: suiteName)
+        let preferencesFile = URL.libraryDirectory
+            .appending(path: "Preferences/\(suiteName).plist")
+        try? FileManager.default.removeItem(at: preferencesFile)
         try? FileManager.default.removeItem(at: root)
     }
 }
