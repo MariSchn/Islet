@@ -9,6 +9,8 @@ packages:
     path: Packages/IsletCore
   HelloPlugin:
     path: Plugins/HelloPlugin
+  ShelfPlugin:
+    path: Plugins/ShelfPlugin
 targets:
   Islet:
     type: application
@@ -18,6 +20,7 @@ targets:
     dependencies:
       - package: IsletCore
       - package: HelloPlugin
+      - package: ShelfPlugin
     info:
       path: App/Info.plist
       properties:
@@ -44,3 +47,4 @@ schemes:
       config: Debug
       targets:
         - package: IsletCore/IsletCoreTests
+        - package: ShelfPlugin/ShelfPluginTests

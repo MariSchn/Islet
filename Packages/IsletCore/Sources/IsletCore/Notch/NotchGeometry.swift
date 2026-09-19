@@ -86,6 +86,15 @@ public struct NotchGeometry: Sendable, Equatable {
         (pillTrailingWidth(for: pill.text) - Self.pillLeadingWidth) / 2
     }
 
+    public var expandedShapeFrame: CGRect {
+        CGRect(
+            x: screenFrame.midX - expandedShapeSize.width / 2,
+            y: screenFrame.maxY - expandedShapeSize.height,
+            width: expandedShapeSize.width,
+            height: expandedShapeSize.height
+        )
+    }
+
     public var panelSize: CGSize {
         CGSize(
             width: expandedShapeSize.width + 2 * Self.overshootMargin,
