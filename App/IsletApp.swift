@@ -7,23 +7,11 @@ struct IsletApp: App {
 
     var body: some Scene {
         MenuBarExtra("Islet", systemImage: "circle.hexagongrid") {
-            PluginMenu(registry: appDelegate.registry)
+            Button("Settings…") { appDelegate.showSettings() }
+                .keyboardShortcut(",")
             Divider()
             Button("Quit Islet") { NSApplication.shared.terminate(nil) }
                 .keyboardShortcut("q")
-        }
-    }
-}
-
-private struct PluginMenu: View {
-    let registry: PluginRegistry
-
-    var body: some View {
-        ForEach(registry.entries) { entry in
-            Toggle(entry.manifest.displayName, isOn: Binding(
-                get: { registry.isEnabled(entry.id) },
-                set: { enabled in Task { await registry.setEnabled(enabled, for: entry.id) } }
-            ))
         }
     }
 }

@@ -26,10 +26,18 @@ public struct NotchView<Content: View>: View {
         NotchShape(bottomRadius: controller.isExpanded ? 24 : 12)
     }
 
+    private var isIdle: Bool {
+        !controller.isExpanded && controller.pill == nil
+    }
+
+    private var fillOpacity: Double {
+        isIdle && !controller.settings.showsIdleNotchOutline ? 0.02 : 1
+    }
+
     public var body: some View {
         VStack(spacing: 0) {
             ZStack(alignment: .top) {
-                shape.fill(.black)
+                shape.fill(.black.opacity(fillOpacity))
                 if controller.isExpanded {
                     content()
                         .padding(.top, controller.geometry.notchSize.height)

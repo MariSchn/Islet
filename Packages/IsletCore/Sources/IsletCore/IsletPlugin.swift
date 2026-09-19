@@ -8,10 +8,13 @@ public protocol IsletPlugin: AnyObject {
     func makeScreen() -> AnyView
 
     var acceptsFileDrops: Bool { get }
+
+    func makeSettingsView() -> AnyView?
 }
 
 public extension IsletPlugin {
     func activate() async throws {}
     func deactivate() async {}
     var acceptsFileDrops: Bool { false }
+    func makeSettingsView() -> AnyView? { nil }
 }

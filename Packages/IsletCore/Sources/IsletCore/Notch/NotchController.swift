@@ -2,8 +2,8 @@ import AppKit
 import Observation
 import SwiftUI
 
-public struct NotchAnimation: Sendable, Equatable {
-    public enum Curve: Sendable, Equatable {
+public struct NotchAnimation: Sendable, Equatable, Codable {
+    public enum Curve: Sendable, Equatable, Codable {
         case easeOut
         case spring(dampingFraction: Double)
     }
@@ -65,15 +65,25 @@ public final class NotchController {
             scheduleHoverUpdate()
         }
     }
-    public var switchesToDropTargetOnDrag = true
 
-    public var animation: NotchAnimation = .default
+    public var switchesToDropTargetOnDrag: Bool {
+        get { settings.switchesToDropTargetOnDrag }
+        set { settings.switchesToDropTargetOnDrag = newValue }
+    }
+
+    public let settings: AppSettings
     public var pill: PillStatus?
+
+    public var animation: NotchAnimation {
+        get { settings.animation }
+        set { settings.animation = newValue }
+    }
 
     @ObservationIgnored private var hoverTask: Task<Void, Never>?
     @ObservationIgnored private var registry: PluginRegistry?
 
-    public init(geometry: NotchGeometry = .placeholder) {
+    public init(settings: AppSettings = AppSettings(), geometry: NotchGeometry = .placeholder) {
+        self.settings = settings
         self.geometry = geometry
     }
 
