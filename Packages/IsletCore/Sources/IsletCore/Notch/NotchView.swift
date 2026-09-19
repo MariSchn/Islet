@@ -13,7 +13,13 @@ public struct NotchView<Content: View>: View {
         if controller.isExpanded {
             return controller.geometry.expandedShapeSize
         }
-        return controller.pill == nil ? controller.geometry.notchSize : controller.geometry.pillShapeSize
+        guard let pill = controller.pill else { return controller.geometry.notchSize }
+        return controller.geometry.pillShapeSize(for: pill)
+    }
+
+    private var shapeOffset: CGFloat {
+        guard !controller.isExpanded, let pill = controller.pill else { return 0 }
+        return controller.geometry.pillShapeOffset(for: pill)
     }
 
     private var shape: NotchShape {
@@ -31,7 +37,7 @@ public struct NotchView<Content: View>: View {
                         .frame(width: shapeSize.width, height: shapeSize.height, alignment: .top)
                         .transition(.opacity)
                 } else if let pill = controller.pill {
-                    PillView(pill: pill, notchWidth: controller.geometry.notchSize.width)
+                    PillView(pill: pill, geometry: controller.geometry)
                         .frame(width: shapeSize.width, height: shapeSize.height)
                         .transition(.opacity)
                 }
@@ -39,9 +45,10 @@ public struct NotchView<Content: View>: View {
             .frame(width: shapeSize.width, height: shapeSize.height)
             .clipShape(shape)
             .contentShape(shape)
+            .offset(x: shapeOffset)
             .onHover { controller.isHovering = $0 }
             .animation(controller.animation.animation(expanding: controller.isExpanded), value: controller.isExpanded)
-            .animation(controller.animation.animation(expanding: controller.pill != nil), value: controller.pill == nil)
+            .animation(controller.animation.animation(expanding: controller.pill != nil), value: controller.pill)
             Spacer(minLength: 0)
         }
         .frame(width: controller.geometry.panelSize.width, height: controller.geometry.panelSize.height, alignment: .top)
@@ -50,7 +57,7 @@ public struct NotchView<Content: View>: View {
 
 private struct PillView: View {
     let pill: PillStatus
-    let notchWidth: CGFloat
+    let geometry: NotchGeometry
 
     var body: some View {
         HStack(spacing: 0) {
@@ -61,15 +68,15 @@ private struct PillView: View {
                     Circle().frame(width: 8, height: 8)
                 }
             }
-            .frame(maxWidth: .infinity)
-            Color.clear.frame(width: notchWidth)
+            .frame(width: NotchGeometry.pillLeadingWidth)
+            Color.clear.frame(width: geometry.notchSize.width)
             Text(pill.text)
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .frame(maxWidth: .infinity)
+                .padding(.horizontal, NotchGeometry.pillTextPadding)
+                .frame(width: geometry.pillTrailingWidth(for: pill.text), alignment: .leading)
         }
-        .font(.system(size: 12, weight: .medium))
+        .font(Font(NotchGeometry.pillFont))
         .foregroundStyle(pill.priority >= .attention ? .orange : .white)
-        .padding(.horizontal, 10)
     }
 }

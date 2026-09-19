@@ -18,10 +18,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.show()
         self.panel = panel
 
+        notchController.mirrorPill(from: registry)
         Task { @MainActor in
             await registerBuiltInPlugins()
         }
-        observePill()
     }
 
     private func registerBuiltInPlugins() async {
@@ -29,14 +29,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try await registry.register(manifest: HelloPlugin.manifest) { HelloPlugin(context: $0) }
         } catch {
             NSLog("Failed to register built-in plugin: \(error)")
-        }
-    }
-
-    private func observePill() {
-        withObservationTracking {
-            notchController.pill = registry.activePill
-        } onChange: {
-            Task { @MainActor [weak self] in self?.observePill() }
         }
     }
 }

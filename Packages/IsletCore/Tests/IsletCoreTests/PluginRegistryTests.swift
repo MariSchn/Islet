@@ -27,8 +27,20 @@ final class StubPlugin: IsletPlugin {
         if let pillAfterActivation { context.pillStatus = pillAfterActivation }
     }
 
-    func deactivate() async { deactivations += 1 }
-    func makeScreen() -> AnyView { AnyView(Text("stub")) }
+    var deactivationDelay: Duration = .zero
+
+    func deactivate() async {
+        deactivations += 1
+        if deactivationDelay > .zero {
+            try? await Task.sleep(for: deactivationDelay)
+        }
+    }
+    var screenBuilds = 0
+
+    func makeScreen() -> AnyView {
+        screenBuilds += 1
+        return AnyView(Text("stub"))
+    }
 }
 
 struct StubError: Error, Equatable {}
@@ -256,5 +268,36 @@ struct PluginRegistryTests {
         #expect(second.context.settings.value(forKey: "volume") == 7)
         stub.context.settings.set(nil as Int?, forKey: "volume")
         #expect(stub.context.settings.value(forKey: "volume") as Int? == nil)
+    }
+
+    @Test func reenableDuringSlowDeactivationKeepsPillFromReactivation() async throws {
+        let registry = harness.makeRegistry()
+        let stub = try await harness.registerStub(in: registry) {
+            $0.deactivationDelay = .milliseconds(100)
+            $0.pillAfterActivation = PillStatus(text: "connected")
+        }
+        let disabling = Task { @MainActor in
+            await registry.setEnabled(false, for: "test.stub")
+        }
+        try await Task.sleep(for: .milliseconds(20))
+
+        await registry.setEnabled(true, for: "test.stub")
+        await disabling.value
+        let entry = try #require(registry.entry(for: "test.stub"))
+
+        #expect(registry.isEnabled("test.stub"))
+        #expect(entry.state.isActive)
+        #expect(stub.context.pillStatus?.text == "connected")
+    }
+
+    @Test func screenIsBuiltOnceAndCached() async throws {
+        let registry = harness.makeRegistry()
+        let stub = try await harness.registerStub(in: registry)
+        let entry = try #require(registry.entry(for: "test.stub"))
+
+        _ = entry.screen
+        _ = entry.screen
+
+        #expect(stub.screenBuilds == 1)
     }
 }

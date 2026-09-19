@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import SwiftUI
 
 public enum PluginState: Sendable {
     case inactive
@@ -28,8 +29,16 @@ public final class PluginEntry: @MainActor Identifiable {
     public internal(set) var state: PluginState = .inactive
 
     @ObservationIgnored var pendingTransition: Task<Void, Never>?
+    @ObservationIgnored private var cachedScreen: AnyView?
 
     public var id: String { manifest.id }
+
+    public var screen: AnyView {
+        if let cachedScreen { return cachedScreen }
+        let screen = plugin.makeScreen()
+        cachedScreen = screen
+        return screen
+    }
 
     init(manifest: PluginManifest, context: PluginContext, plugin: any IsletPlugin) {
         self.manifest = manifest
@@ -112,7 +121,7 @@ public final class PluginRegistry {
         userDefaults.set(Array(disabledIDs).sorted(), forKey: disabledKey)
 
         await transition(entry, toActive: enabled)
-        if !enabled {
+        if !isEnabled(id) {
             entry.context.pillStatus = nil
         }
         ensureSelection()

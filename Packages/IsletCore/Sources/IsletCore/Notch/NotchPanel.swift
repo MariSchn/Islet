@@ -22,6 +22,7 @@ public final class NotchPanel: NSPanel {
         isMovable = false
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
+        appearance = NSAppearance(named: .darkAqua)
 
         contentView = NSHostingView(rootView: NotchView(controller: controller, content: content))
 
@@ -42,6 +43,7 @@ public final class NotchPanel: NSPanel {
         }
     }
 
+    public override var canBecomeKey: Bool { true }
     public override var canBecomeMain: Bool { false }
 
     public func show() {

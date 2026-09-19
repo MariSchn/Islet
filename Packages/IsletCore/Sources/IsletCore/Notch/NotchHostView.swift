@@ -11,7 +11,7 @@ public struct NotchHostView: View {
         VStack(spacing: 10) {
             NotchTabBar(registry: registry)
             if let selected = registry.selectedID, let entry = registry.entry(for: selected) {
-                entry.plugin.makeScreen()
+                PluginScreen(entry: entry)
                     .id(selected)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else {
@@ -21,7 +21,23 @@ public struct NotchHostView: View {
             }
         }
         .foregroundStyle(.white)
-        .colorScheme(.dark)
+    }
+}
+
+private struct PluginScreen: View {
+    let entry: PluginEntry
+
+    var body: some View {
+        switch entry.state {
+        case .active:
+            entry.screen
+        case .failed(let error):
+            Label("\(entry.manifest.displayName) failed to start: \(error.localizedDescription)", systemImage: "exclamationmark.triangle")
+                .foregroundStyle(.orange)
+        case .inactive, .activating, .deactivating:
+            ProgressView()
+                .controlSize(.small)
+        }
     }
 }
 

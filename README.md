@@ -11,7 +11,7 @@ xcodegen generate
 open Islet.xcodeproj
 ```
 
-Core logic lives in `Packages/IsletCore`; built-in plugins live in `Plugins/`, each as its own Swift package depending only on `IsletCore`. The core can be tested without Xcode:
+Core logic lives in `Packages/IsletCore`. Built-in plugins live in `Plugins/`, each as its own Swift package depending only on `IsletCore`; they are linked into the app and registered in `App/AppDelegate.swift`. The core can be tested without Xcode:
 
 ```sh
 cd Packages/IsletCore && swift test

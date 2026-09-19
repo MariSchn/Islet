@@ -14,11 +14,36 @@ struct NotchGeometryTests {
         #expect(geometry.panelSize == CGSize(width: 640, height: 312))
     }
 
-    @Test func pillShapeWidensNotchOnBothSidesAtNotchHeight() {
+    @Test func pillShapeFitsTextAndKeepsNotchInPlace() {
         let geometry = NotchGeometry(screenFrame: screen, notchSize: CGSize(width: 196, height: 32), hasHardwareNotch: true)
+        let short = PillStatus(text: "Hi")
+        let long = PillStatus(text: String(repeating: "Playing a very long track title ", count: 4))
+        let leading = NotchGeometry.pillLeadingWidth
 
-        #expect(geometry.pillShapeSize == CGSize(width: 196 + 2 * NotchGeometry.pillSideWidth, height: 32))
-        #expect(geometry.pillShapeSize.width <= geometry.panelSize.width)
+        let shortTrailing = geometry.pillTrailingWidth(for: short.text)
+        #expect(shortTrailing > 2 * NotchGeometry.pillTextPadding)
+        #expect(shortTrailing < 60)
+        #expect(geometry.pillTrailingWidth(for: long.text) == NotchGeometry.pillTrailingMaxWidth)
+
+        for pill in [short, long] {
+            let size = geometry.pillShapeSize(for: pill)
+            let offset = geometry.pillShapeOffset(for: pill)
+            #expect(size.height == 32)
+            #expect(size.width + 2 * abs(offset) <= geometry.panelSize.width)
+            let shapeMinX = geometry.panelFrame.midX - size.width / 2 + offset
+            #expect(shapeMinX + leading == screen.midX - 196 / 2)
+        }
+    }
+
+    @Test func pillStaysInsidePanelForVeryWideNotch() {
+        let geometry = NotchGeometry(screenFrame: screen, notchSize: CGSize(width: 800, height: 32), hasHardwareNotch: true)
+        let pill = PillStatus(text: String(repeating: "wide ", count: 20))
+
+        let size = geometry.pillShapeSize(for: pill)
+        let offset = geometry.pillShapeOffset(for: pill)
+
+        #expect(size.width + 2 * abs(offset) <= geometry.panelSize.width)
+        #expect(geometry.pillTrailingWidth(for: pill.text) < NotchGeometry.pillTrailingMaxWidth)
     }
 
     @Test func expandedShapeNeverNarrowerThanNotch() {
