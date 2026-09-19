@@ -18,6 +18,7 @@ public struct HorizontalSwipeRecognizer: Sendable, Equatable {
         self.threshold = threshold
     }
 
+    @discardableResult
     public mutating func handle(phase: Phase, deltaX: CGFloat, deltaY: CGFloat) -> NavigationDirection? {
         switch phase {
         case .began:

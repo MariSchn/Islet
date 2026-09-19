@@ -16,6 +16,7 @@ public struct NotchHostView: View {
             NotchNavigationBar(
                 registry: registry,
                 notchWidth: controller.geometry.notchSize.width,
+                sideWidth: controller.navigationSideWidth,
                 animation: switchAnimation,
                 openSettings: openSettings
             )
@@ -100,13 +101,14 @@ private struct PluginScreen: View {
 private struct NotchNavigationBar: View {
     let registry: PluginRegistry
     let notchWidth: CGFloat
+    let sideWidth: CGFloat
     let animation: Animation
     let openSettings: () -> Void
 
     var body: some View {
         HStack(spacing: 0) {
-            PluginTabCarousel(registry: registry, animation: animation)
-                .frame(maxWidth: .infinity)
+            PluginTabCarousel(registry: registry, width: sideWidth, animation: animation)
+                .frame(width: sideWidth)
             Color.clear
                 .frame(width: notchWidth)
             HStack(spacing: 4) {
@@ -115,30 +117,34 @@ private struct NotchNavigationBar: View {
                     .help("Islet Settings")
             }
             .padding(.trailing, 8)
-            .frame(maxWidth: .infinity)
+            .frame(width: sideWidth)
         }
     }
 }
 
 private struct PluginTabCarousel: View {
     let registry: PluginRegistry
+    let width: CGFloat
     let animation: Animation
 
     private static let step: CGFloat = 34
+    private static let buttonWidth: CGFloat = 30
     private static let fadeWidth: CGFloat = 16
 
     var body: some View {
         let entries = registry.enabledEntries
-        let selectedIndex = entries.firstIndex { $0.id == registry.selectedID } ?? 0
+        let selectedIndex = entries.firstIndex { $0.id == registry.selectedID }
         ZStack {
             ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                let isSelected = index == selectedIndex
-                NotchBarButton(systemImage: entry.manifest.systemImage, isSelected: isSelected) {
+                let distance = index - (selectedIndex ?? 0)
+                let offset = CGFloat(distance) * Self.step
+                NotchBarButton(systemImage: entry.manifest.systemImage, isSelected: index == selectedIndex) {
                     registry.select(entry.id)
                 }
                 .help(entry.manifest.displayName)
-                .opacity(isSelected ? 1 : 0.45)
-                .offset(x: CGFloat(index - selectedIndex) * Self.step)
+                .opacity(index == selectedIndex ? 1 : 0.45)
+                .offset(x: offset)
+                .allowsHitTesting(abs(offset) + Self.buttonWidth / 2 <= width / 2)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

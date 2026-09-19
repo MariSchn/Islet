@@ -66,7 +66,6 @@ public final class PluginRegistry {
     public private(set) var entries: [PluginEntry] = []
     public private(set) var disabledIDs: Set<String>
     public private(set) var selectedID: String?
-    public private(set) var selectionDirection: NavigationDirection = .forward
 
     private let storageRoot: URL
     private let userDefaults: UserDefaults
@@ -151,12 +150,6 @@ public final class PluginRegistry {
 
     public func select(_ id: String?) {
         guard id == nil || (entry(for: id!) != nil && isEnabled(id!)) else { return }
-        let enabled = enabledEntries
-        if let id, let selectedID,
-           let from = enabled.firstIndex(where: { $0.id == selectedID }),
-           let to = enabled.firstIndex(where: { $0.id == id }), from != to {
-            selectionDirection = to > from ? .forward : .backward
-        }
         selectedID = id
         userDefaults.set(id, forKey: selectedKey)
     }
