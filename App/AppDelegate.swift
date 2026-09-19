@@ -15,8 +15,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var settingsWindow = SettingsWindowController(settings: settings, registry: registry)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let panel = NotchPanel(controller: notchController) { [registry] in
-            NotchHostView(registry: registry)
+        let panel = NotchPanel(controller: notchController) { [registry, weak self] in
+            NotchHostView(registry: registry) { self?.showSettings() }
         }
         panel.show()
         self.panel = panel

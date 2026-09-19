@@ -10,7 +10,12 @@ public final class SettingsWindowController {
         hosting.sizingOptions = [.minSize]
         window = NSWindow(contentViewController: hosting)
         window.title = "Islet Settings"
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.toolbarStyle = .unified
+        window.styleMask.insert(.fullSizeContentView)
         window.isReleasedWhenClosed = false
+        window.setContentSize(NSSize(width: 820, height: 560))
         if !window.setFrameUsingName("IsletSettings") {
             window.center()
         }
