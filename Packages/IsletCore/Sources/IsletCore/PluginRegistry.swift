@@ -76,6 +76,10 @@ public final class PluginRegistry {
             .max { $0.priority < $1.priority }
     }
 
+    public var preferredDropTarget: PluginEntry? {
+        enabledEntries.first { $0.plugin.acceptsFileDrops }
+    }
+
     public func entry(for id: String) -> PluginEntry? {
         entries.first { $0.id == id }
     }

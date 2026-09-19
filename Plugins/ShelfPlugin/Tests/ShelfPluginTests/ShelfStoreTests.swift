@@ -3,7 +3,7 @@ import Testing
 @testable import ShelfPlugin
 
 @MainActor
-struct ShelfStoreTests {
+final class ShelfStoreTests {
     let directory: URL
     let fileA: URL
     let fileB: URL
@@ -17,14 +17,32 @@ struct ShelfStoreTests {
         try Data("b".utf8).write(to: fileB)
     }
 
+    isolated deinit {
+        try? FileManager.default.removeItem(at: directory)
+    }
+
+    private func canonical(_ url: URL) -> URL { ShelfItem.canonical(url) }
+
     @Test func addsNewestFirstAndIgnoresDuplicatesAndNonFileURLs() {
         let store = ShelfStore(directory: directory)
 
         store.add([fileA])
         let added = store.add([fileB, fileA, fileB, URL(string: "https://example.com")!])
 
-        #expect(added.map(\.url) == [fileB])
-        #expect(store.items.map(\.url) == [fileB, fileA])
+        #expect(added.map(\.url) == [canonical(fileB)])
+        #expect(store.items.map(\.url) == [canonical(fileB), canonical(fileA)])
+    }
+
+    @Test func dedupesSymlinkedPaths() throws {
+        let link = directory.appending(path: "link.txt")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: fileA)
+        let store = ShelfStore(directory: directory)
+
+        store.add([fileA])
+        let added = store.add([link])
+
+        #expect(added.isEmpty)
+        #expect(store.items.count == 1)
     }
 
     @Test func removeAndRemoveAll() {
@@ -32,7 +50,7 @@ struct ShelfStoreTests {
         store.add([fileA, fileB])
 
         store.remove(store.items[0].id)
-        #expect(store.items.map(\.url) == [fileB])
+        #expect(store.items.map(\.url) == [canonical(fileB)])
 
         store.removeAll()
         #expect(store.items.isEmpty)
@@ -45,10 +63,11 @@ struct ShelfStoreTests {
         let second = ShelfStore(directory: directory)
         second.load()
 
-        #expect(second.items == first.items)
+        #expect(second.items.map(\.id) == first.items.map(\.id))
+        #expect(second.items.map(\.url) == first.items.map(\.url))
     }
 
-    @Test func followsRenamedFilesThroughBookmarks() throws {
+    @Test func followsRenamedFilesThroughBookmarksAndSavesResolvedURL() throws {
         let first = ShelfStore(directory: directory)
         first.add([fileA])
         let moved = directory.appending(path: "renamed.txt")
@@ -56,9 +75,38 @@ struct ShelfStoreTests {
 
         let second = ShelfStore(directory: directory)
         second.load()
+        #expect(second.items.first?.url == canonical(moved))
 
-        #expect(second.items.first?.url == moved.standardizedFileURL)
-        #expect(second.items.first?.isReachable == true)
+        let data = try Data(contentsOf: directory.appending(path: "shelf.json"))
+        #expect(String(decoding: data, as: UTF8.self).contains("renamed.txt"))
+    }
+
+    @Test func deletedFileKeepsItsEntryAndBecomesUnreachable() async throws {
+        let first = ShelfStore(directory: directory)
+        first.add([fileA])
+        #expect(first.items[0].isReachable)
+        try FileManager.default.removeItem(at: fileA)
+
+        let second = ShelfStore(directory: directory)
+        second.load()
+        for _ in 0..<50 where second.items.first?.isReachable == true {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        #expect(second.items.first?.url == canonical(fileA))
+        #expect(second.items.first?.isReachable == false)
+    }
+
+    @Test func corruptFileIsSetAsideInsteadOfOverwritten() throws {
+        let shelfFile = directory.appending(path: "shelf.json")
+        try Data("not json".utf8).write(to: shelfFile)
+
+        let store = ShelfStore(directory: directory)
+        store.load()
+
+        #expect(store.items.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: shelfFile.appendingPathExtension("corrupt").path))
+        #expect(!FileManager.default.fileExists(atPath: shelfFile.path))
     }
 
     @Test func loadWithoutFileKeepsEmptyShelf() {

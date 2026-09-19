@@ -28,6 +28,7 @@ struct ShelfScreen: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear { store.refreshReachability() }
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6]))
@@ -66,12 +67,22 @@ private struct ShelfItemView: View {
     let item: ShelfItem
     let onRemove: () -> Void
     @State private var isHovering = false
+    @State private var icon: NSImage?
 
     var body: some View {
         VStack(spacing: 4) {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: item.url.path))
-                .resizable()
-                .frame(width: 44, height: 44)
+            Group {
+                if let icon {
+                    Image(nsImage: icon).resizable()
+                } else {
+                    Color.clear
+                }
+            }
+            .frame(width: 44, height: 44)
+            .task(id: item.url) {
+                let url = item.url
+                icon = await Task.detached { NSWorkspace.shared.icon(forFile: url.path) }.value
+            }
             Text(item.name)
                 .font(.caption)
                 .lineLimit(2)
@@ -96,7 +107,10 @@ private struct ShelfItemView: View {
             }
         }
         .onHover { isHovering = $0 }
-        .onDrag { NSItemProvider(contentsOf: item.url) ?? NSItemProvider() }
+        .onDrag {
+            isHovering = false
+            return NSItemProvider(object: item.url as NSURL)
+        }
         .contextMenu {
             Button("Open") { NSWorkspace.shared.open(item.url) }
             Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([item.url]) }

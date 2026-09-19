@@ -36,6 +36,7 @@ final class StubPlugin: IsletPlugin {
         }
     }
     var screenBuilds = 0
+    var acceptsFileDrops = false
 
     func makeScreen() -> AnyView {
         screenBuilds += 1
@@ -75,10 +76,11 @@ final class Harness {
     }
 
     @discardableResult
-    func registerSecond(in registry: PluginRegistry) async throws -> StubPlugin {
+    func registerSecond(in registry: PluginRegistry, configure: (StubPlugin) -> Void = { _ in }) async throws -> StubPlugin {
         var created: StubPlugin?
         try await registry.register(manifest: secondManifest) { context in
             let plugin = StubPlugin(context: context)
+            configure(plugin)
             created = plugin
             return plugin
         }
@@ -299,5 +301,17 @@ struct PluginRegistryTests {
         _ = entry.screen
 
         #expect(stub.screenBuilds == 1)
+    }
+
+    @Test func preferredDropTargetIsFirstEnabledPluginAcceptingDrops() async throws {
+        let registry = harness.makeRegistry()
+        try await harness.registerStub(in: registry)
+        #expect(registry.preferredDropTarget == nil)
+
+        try await harness.registerSecond(in: registry) { $0.acceptsFileDrops = true }
+        #expect(registry.preferredDropTarget?.id == "test.second")
+
+        await registry.setEnabled(false, for: "test.second")
+        #expect(registry.preferredDropTarget == nil)
     }
 }

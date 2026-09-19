@@ -46,6 +46,16 @@ struct NotchGeometryTests {
         #expect(geometry.pillTrailingWidth(for: pill.text) < NotchGeometry.pillTrailingMaxWidth)
     }
 
+    @Test func expandedShapeFrameIsCenteredAtTopInScreenCoordinates() {
+        let external = CGRect(x: 1512, y: 200, width: 2560, height: 1440)
+        let geometry = NotchGeometry(screenFrame: external, notchSize: CGSize(width: 200, height: 24), hasHardwareNotch: false)
+
+        #expect(geometry.expandedShapeFrame.midX == external.midX)
+        #expect(geometry.expandedShapeFrame.maxY == external.maxY)
+        #expect(geometry.expandedShapeFrame.size == geometry.expandedShapeSize)
+        #expect(geometry.panelFrame.contains(geometry.expandedShapeFrame))
+    }
+
     @Test func expandedShapeNeverNarrowerThanNotch() {
         let geometry = NotchGeometry(screenFrame: screen, notchSize: CGSize(width: 800, height: 32), hasHardwareNotch: true)
 

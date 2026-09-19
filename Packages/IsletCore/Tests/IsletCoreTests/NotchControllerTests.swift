@@ -98,11 +98,28 @@ struct NotchControllerTests {
         #expect(controller.isExpanded)
     }
 
+    @Test func dragEndResyncsHoverFromPointerLocation() async throws {
+        let controller = makeController()
+        controller.isHovering = true
+        controller.isDragTargeted = true
+
+        controller.dragEnded(pointerInside: false)
+        try await Task.sleep(for: settle)
+        #expect(!controller.isHovering)
+        #expect(!controller.isExpanded)
+
+        controller.isDragTargeted = true
+        controller.dragEnded(pointerInside: true)
+        try await Task.sleep(for: settle)
+        #expect(controller.isHovering)
+        #expect(controller.isExpanded)
+    }
+
     @Test func mirrorsRegistryPillIncludingPluginsRegisteredLater() async throws {
         let harness = Harness()
         let registry = harness.makeRegistry()
         let controller = makeController()
-        controller.mirrorPill(from: registry)
+        controller.attach(registry)
         #expect(controller.pill == nil)
 
         let stub = try await harness.registerStub(in: registry)
@@ -113,5 +130,24 @@ struct NotchControllerTests {
         await registry.setEnabled(false, for: "test.stub")
         await Task.yield()
         #expect(controller.pill == nil)
+    }
+
+    @Test func dragSwitchesToFirstDropAcceptingPluginUnlessDisabled() async throws {
+        let harness = Harness()
+        let registry = harness.makeRegistry()
+        let controller = makeController()
+        controller.attach(registry)
+        try await harness.registerStub(in: registry)
+        try await harness.registerSecond(in: registry) { $0.acceptsFileDrops = true }
+        #expect(registry.selectedID == "test.stub")
+
+        controller.isDragTargeted = true
+        #expect(registry.selectedID == "test.second")
+
+        controller.isDragTargeted = false
+        registry.select("test.stub")
+        controller.switchesToDropTargetOnDrag = false
+        controller.isDragTargeted = true
+        #expect(registry.selectedID == "test.stub")
     }
 }

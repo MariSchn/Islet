@@ -58,14 +58,20 @@ public final class NotchController {
         didSet { scheduleHoverUpdate() }
     }
     public var isDragTargeted = false {
-        didSet { scheduleHoverUpdate() }
+        didSet {
+            if isDragTargeted, !oldValue {
+                switchToDropTargetIfWanted()
+            }
+            scheduleHoverUpdate()
+        }
     }
+    public var switchesToDropTargetOnDrag = true
 
     public var animation: NotchAnimation = .default
     public var pill: PillStatus?
 
     @ObservationIgnored private var hoverTask: Task<Void, Never>?
-    @ObservationIgnored private var pillSource: PluginRegistry?
+    @ObservationIgnored private var registry: PluginRegistry?
 
     public init(geometry: NotchGeometry = .placeholder) {
         self.geometry = geometry
@@ -75,13 +81,18 @@ public final class NotchController {
         self.geometry = geometry
     }
 
-    public func mirrorPill(from registry: PluginRegistry) {
-        pillSource = registry
+    public func attach(_ registry: PluginRegistry) {
+        self.registry = registry
         observePill()
     }
 
+    private func switchToDropTargetIfWanted() {
+        guard switchesToDropTargetOnDrag, let target = registry?.preferredDropTarget else { return }
+        registry?.select(target.id)
+    }
+
     private func observePill() {
-        guard let registry = pillSource else { return }
+        guard let registry else { return }
         withObservationTracking {
             pill = registry.activePill
         } onChange: {
@@ -89,6 +100,11 @@ public final class NotchController {
                 self?.observePill()
             }
         }
+    }
+
+    public func dragEnded(pointerInside: Bool) {
+        isDragTargeted = false
+        isHovering = pointerInside
     }
 
     public func expand() {

@@ -18,4 +18,6 @@ public final class ShelfPlugin: IsletPlugin {
     public func makeScreen() -> AnyView {
         AnyView(ShelfScreen(store: store))
     }
+
+    public var acceptsFileDrops: Bool { true }
 }

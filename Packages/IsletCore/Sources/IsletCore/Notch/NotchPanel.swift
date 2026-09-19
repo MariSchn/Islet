@@ -24,7 +24,10 @@ public final class NotchPanel: NSPanel {
         isReleasedWhenClosed = false
         appearance = NSAppearance(named: .darkAqua)
 
-        contentView = NSHostingView(rootView: NotchView(controller: controller, content: content))
+        contentView = NotchHostingView(
+            controller: controller,
+            rootView: NotchView(controller: controller, content: content)
+        )
 
         NotificationCenter.default.addObserver(
             self,
@@ -56,5 +59,47 @@ public final class NotchPanel: NSPanel {
         let geometry = NotchGeometry(screen: screen)
         controller.update(geometry: geometry)
         setFrame(geometry.panelFrame, display: true)
+    }
+}
+
+@MainActor
+private final class NotchHostingView<Content: View>: NSHostingView<Content> {
+    private let controller: NotchController
+
+    init(controller: NotchController, rootView: Content) {
+        self.controller = controller
+        super.init(rootView: rootView)
+        registerForDraggedTypes([.fileURL, .URL, .string, .tiff, .png])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { nil }
+
+    @available(*, unavailable)
+    required init(rootView: Content) { fatalError("use init(controller:rootView:)") }
+
+    override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        controller.isDragTargeted = true
+        return super.draggingEntered(sender)
+    }
+
+    override func draggingExited(_ sender: (any NSDraggingInfo)?) {
+        controller.dragEnded(pointerInside: isPointerInsideExpandedShape)
+        super.draggingExited(sender)
+    }
+
+    override func draggingEnded(_ sender: any NSDraggingInfo) {
+        controller.dragEnded(pointerInside: isPointerInsideExpandedShape)
+        super.draggingEnded(sender)
+    }
+
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        let accepted = super.performDragOperation(sender)
+        controller.dragEnded(pointerInside: isPointerInsideExpandedShape)
+        return accepted
+    }
+
+    private var isPointerInsideExpandedShape: Bool {
+        controller.geometry.expandedShapeFrame.contains(NSEvent.mouseLocation)
     }
 }

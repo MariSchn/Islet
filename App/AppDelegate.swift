@@ -19,7 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.show()
         self.panel = panel
 
-        notchController.mirrorPill(from: registry)
+        notchController.attach(registry)
         Task { @MainActor in
             await registerBuiltInPlugins()
         }
