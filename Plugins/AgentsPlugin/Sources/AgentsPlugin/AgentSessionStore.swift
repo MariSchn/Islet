@@ -13,6 +13,7 @@ public final class AgentSessionStore {
     private let now: () -> Date
     private var dismissedIDs: Set<String> = []
     @ObservationIgnored private var expiryTask: Task<Void, Never>?
+    @ObservationIgnored private var decisions: [UUID: CheckedContinuation<PermissionDecision?, Never>] = [:]
 
     public init(now: @escaping () -> Date = Date.init) {
         self.now = now
@@ -26,10 +27,20 @@ public final class AgentSessionStore {
         sessions.filter { $0.state == .working }
     }
 
+    public func handle(_ event: HookEvent) async -> HookReply {
+        apply(event)
+        guard event.kind == .permissionRequest,
+              let request = sessions.first(where: { $0.id == event.sessionID })?.pendingRequest,
+              let decision = await awaitDecision(for: request.id)
+        else { return .empty }
+        return decision.reply(for: request)
+    }
+
     public func apply(_ event: HookEvent) {
         let timestamp = now()
         if event.kind == .sessionEnd {
             dismissedIDs.remove(event.sessionID)
+            withdrawPendingRequest(for: event.sessionID)
             sessions.removeAll { $0.id == event.sessionID }
             onChange?()
             return
@@ -57,6 +68,10 @@ public final class AgentSessionStore {
         if let cwd = event.cwd { session.cwd = cwd }
         if let host = event.host { session.host = host }
         session.updatedAt = timestamp
+        if event.kind != .notification, let request = session.pendingRequest {
+            resolve(request.id, with: nil)
+            session.pendingRequest = nil
+        }
 
         switch event.kind {
         case .sessionStart:
@@ -71,7 +86,10 @@ public final class AgentSessionStore {
             session.activity = event.activityDescription
             session.state = .working
         case .permissionRequest:
-            session.state = .needsAttention(event.activityDescription.map { "Wants to \($0)" } ?? "Needs permission")
+            guard let toolName = event.toolName else { return }
+            let request = PendingRequest(toolName: toolName, toolInput: event.toolInput)
+            session.pendingRequest = request
+            session.state = .needsAttention(Self.attentionReason(for: request, activity: event.activityDescription))
         case .notification:
             switch event.notificationType {
             case "permission_prompt":
@@ -103,8 +121,57 @@ public final class AgentSessionStore {
     public func dismiss(_ id: String) {
         guard sessions.contains(where: { $0.id == id }) else { return }
         dismissedIDs.insert(id)
+        withdrawPendingRequest(for: id)
         sessions.removeAll { $0.id == id }
         onChange?()
+    }
+
+    public func decide(_ requestID: UUID, _ decision: PermissionDecision) {
+        guard let index = sessions.firstIndex(where: { $0.pendingRequest?.id == requestID }),
+              let request = sessions[index].pendingRequest
+        else { return }
+        resolve(requestID, with: decision)
+        sessions[index].pendingRequest = nil
+        sessions[index].updatedAt = now()
+        sessions[index].state = .working
+        if decision == .deny {
+            sessions[index].activity = "Denied \(request.toolName)"
+        }
+        onChange?()
+    }
+
+    private func awaitDecision(for requestID: UUID) async -> PermissionDecision? {
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                decisions[requestID] = continuation
+            }
+        } onCancel: {
+            Task { @MainActor in self.withdraw(requestID) }
+        }
+    }
+
+    private func withdraw(_ requestID: UUID) {
+        resolve(requestID, with: nil)
+        guard let index = sessions.firstIndex(where: { $0.pendingRequest?.id == requestID }) else { return }
+        sessions[index].pendingRequest = nil
+        onChange?()
+    }
+
+    private func withdrawPendingRequest(for sessionID: String) {
+        if let request = sessions.first(where: { $0.id == sessionID })?.pendingRequest {
+            resolve(request.id, with: nil)
+        }
+    }
+
+    private func resolve(_ requestID: UUID, with decision: PermissionDecision?) {
+        decisions.removeValue(forKey: requestID)?.resume(returning: decision)
+    }
+
+    private static func attentionReason(for request: PendingRequest, activity: String?) -> String {
+        switch request.kind {
+        case .permission: activity.map { "Wants to \($0)" } ?? "Needs permission"
+        case .question(let questions): questions.count == 1 ? "Has a question" : "Has \(questions.count) questions"
+        }
     }
 
     public var pillStatus: PillStatus? {
