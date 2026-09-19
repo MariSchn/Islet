@@ -10,7 +10,6 @@ public struct HookEvent: Sendable, Equatable, Decodable {
         case permissionRequest = "PermissionRequest"
         case notification = "Notification"
         case stop = "Stop"
-        case subagentStop = "SubagentStop"
     }
 
     public var kind: Kind
@@ -21,6 +20,7 @@ public struct HookEvent: Sendable, Equatable, Decodable {
     public var prompt: String?
     public var message: String?
     public var notificationType: String?
+    public var source: String?
     public var host: String?
 
     private enum CodingKeys: String, CodingKey {
@@ -32,9 +32,10 @@ public struct HookEvent: Sendable, Equatable, Decodable {
         case prompt
         case message
         case notificationType = "notification_type"
+        case source
     }
 
-    public init(kind: Kind, sessionID: String, cwd: String? = nil, toolName: String? = nil, toolInput: JSONValue? = nil, prompt: String? = nil, message: String? = nil, notificationType: String? = nil, host: String? = nil) {
+    public init(kind: Kind, sessionID: String, cwd: String? = nil, toolName: String? = nil, toolInput: JSONValue? = nil, prompt: String? = nil, message: String? = nil, notificationType: String? = nil, source: String? = nil, host: String? = nil) {
         self.kind = kind
         self.sessionID = sessionID
         self.cwd = cwd
@@ -43,6 +44,7 @@ public struct HookEvent: Sendable, Equatable, Decodable {
         self.prompt = prompt
         self.message = message
         self.notificationType = notificationType
+        self.source = source
         self.host = host
     }
 
@@ -56,6 +58,7 @@ public struct HookEvent: Sendable, Equatable, Decodable {
         prompt = try container.decodeIfPresent(String.self, forKey: .prompt)
         message = try container.decodeIfPresent(String.self, forKey: .message)
         notificationType = try container.decodeIfPresent(String.self, forKey: .notificationType)
+        source = try container.decodeIfPresent(String.self, forKey: .source)
     }
 
     public static func decode(_ data: Data, host: String? = nil) throws -> HookEvent {

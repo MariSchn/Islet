@@ -2,6 +2,7 @@ import SwiftUI
 
 struct AgentsScreen: View {
     let controller: AgentsController
+    @State private var installError: String?
 
     var body: some View {
         if controller.store.sessions.isEmpty {
@@ -17,14 +18,27 @@ struct AgentsScreen: View {
                 } else if controller.isHookInstalled {
                     Text("No agent sessions")
                         .foregroundStyle(.secondary)
-                    Text("Sessions appear here once Claude Code starts working.")
+                    Text("Sessions started after installing the hooks appear here once you send a prompt.")
                         .font(.callout)
                         .foregroundStyle(.tertiary)
                 } else {
                     Text("Claude Code hooks are not installed")
                         .foregroundStyle(.secondary)
-                    Button("Install Hooks") { try? controller.installHooks() }
-                        .buttonStyle(.bordered)
+                    Button("Install Hooks") {
+                        do {
+                            try controller.installHooks()
+                            installError = nil
+                        } catch {
+                            installError = error.localizedDescription
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    if let installError {
+                        Text(installError)
+                            .font(.callout)
+                            .foregroundStyle(.orange)
+                            .multilineTextAlignment(.center)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -73,21 +87,23 @@ private struct SessionRow: View {
                 }
                 Text(detail)
                     .font(.system(size: 11))
-                    .foregroundStyle(session.state.needsAttention ? AnyShapeStyle(.orange) : AnyShapeStyle(.tertiary))
+                    .foregroundStyle(session.state.requiresAttention ? AnyShapeStyle(.orange) : AnyShapeStyle(.tertiary))
                     .lineLimit(1)
-            }
-            if isHovering {
-                Button(action: dismiss) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Remove from list")
             }
         }
         .padding(.horizontal, 10)
         .frame(height: AgentsPlugin.rowHeight)
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.white.opacity(isHovering ? 0.1 : 0.06)))
+        .overlay(alignment: .topTrailing) {
+            Button(action: dismiss) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Remove from list")
+            .padding(6)
+            .opacity(isHovering ? 1 : 0)
+        }
         .onHover { isHovering = $0 }
     }
 
@@ -107,7 +123,7 @@ private struct StateLabel: View {
     var body: some View {
         switch session.state {
         case .working, .starting:
-            Text(session.startedAt, style: .timer)
+            Text(session.turnStartedAt, style: .timer)
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(.secondary)
         case .needsAttention:
@@ -167,15 +183,16 @@ struct AgentsSettings: View {
                         }
                     }
                 }
-                LabeledContent("Listening on", value: "127.0.0.1:\(controller.installer.port)")
+                if let serverError = controller.serverError {
+                    Text(serverError).foregroundStyle(.orange)
+                } else {
+                    LabeledContent("Listening on", value: "127.0.0.1:\(controller.installer.port)")
+                }
                 if let error {
                     Text(error).foregroundStyle(.red)
                 }
-                if let serverError = controller.serverError {
-                    Text(serverError).foregroundStyle(.orange)
-                }
             } footer: {
-                Text("Installing adds a small script to ~/.claude and registers it in ~/.claude/settings.json so Claude Code reports session activity to Islet. Nothing leaves your Mac.")
+                Text("Installing adds a small script to ~/.claude and registers it in ~/.claude/settings.json (the file is reformatted) so Claude Code reports session activity to Islet. Already running Claude Code sessions need to be restarted. Nothing leaves your Mac.")
             }
         }
         .onAppear { controller.refreshInstallState() }

@@ -6,25 +6,40 @@ struct HTTPRequest: Sendable, Equatable {
     var headers: [String: String]
     var body: Data
 
-    static func parse(_ data: Data) -> (request: HTTPRequest, consumed: Int)? {
-        guard let headerEnd = data.range(of: Data("\r\n\r\n".utf8)) else { return nil }
-        guard let head = String(data: data[data.startIndex..<headerEnd.lowerBound], encoding: .utf8) else { return nil }
+    enum ParseResult: Sendable, Equatable {
+        case incomplete
+        case invalid
+        case tooLarge(remainingBody: Int)
+        case complete(HTTPRequest)
+    }
+
+    static let maxHeaderSize = 16 << 10
+
+    static func parse(_ data: Data, maxBodySize: Int) -> ParseResult {
+        guard let headerEnd = data.range(of: Data("\r\n\r\n".utf8)) else {
+            return data.count > maxHeaderSize ? .invalid : .incomplete
+        }
+        guard let head = String(data: data[data.startIndex..<headerEnd.lowerBound], encoding: .utf8) else { return .invalid }
         var lines = head.components(separatedBy: "\r\n")
         let requestLine = lines.removeFirst().split(separator: " ")
-        guard requestLine.count >= 2 else { return nil }
+        guard requestLine.count == 3 else { return .invalid }
         var headers: [String: String] = [:]
         for line in lines {
-            guard let colon = line.firstIndex(of: ":") else { continue }
+            guard let colon = line.firstIndex(of: ":") else { return .invalid }
             headers[line[..<colon].lowercased()] = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
         }
-        let length = headers["content-length"].flatMap(Int.init) ?? 0
+        let length: Int
+        if let value = headers["content-length"] {
+            guard let parsed = Int(value), parsed >= 0 else { return .invalid }
+            length = parsed
+        } else {
+            length = 0
+        }
         let bodyStart = headerEnd.upperBound
-        guard data.endIndex - bodyStart >= length else { return nil }
+        guard length <= maxBodySize else { return .tooLarge(remainingBody: length - (data.endIndex - bodyStart)) }
+        guard data.endIndex - bodyStart >= length else { return .incomplete }
         let body = data[bodyStart..<(bodyStart + length)]
-        return (
-            HTTPRequest(method: String(requestLine[0]), path: String(requestLine[1]), headers: headers, body: Data(body)),
-            bodyStart + length - data.startIndex
-        )
+        return .complete(HTTPRequest(method: String(requestLine[0]), path: String(requestLine[1]), headers: headers, body: Data(body)))
     }
 
     var bearerToken: String? {
@@ -48,6 +63,7 @@ struct HTTPResponse: Sendable {
         case 400: reason = "Bad Request"
         case 401: reason = "Unauthorized"
         case 404: reason = "Not Found"
+        case 413: reason = "Payload Too Large"
         default: reason = "Error"
         }
         var head = "HTTP/1.1 \(status) \(reason)\r\n"

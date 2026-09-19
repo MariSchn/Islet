@@ -17,7 +17,7 @@ public struct AgentSession: Identifiable, Sendable, Equatable {
         case needsAttention(String)
         case done
 
-        public var needsAttention: Bool {
+        public var requiresAttention: Bool {
             if case .needsAttention = self { return true }
             return false
         }
@@ -31,6 +31,7 @@ public struct AgentSession: Identifiable, Sendable, Equatable {
     public var activity: String?
     public var state: State
     public var startedAt: Date
+    public var turnStartedAt: Date
     public var updatedAt: Date
 
     public var projectName: String {

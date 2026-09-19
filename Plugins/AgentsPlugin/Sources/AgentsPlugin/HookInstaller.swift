@@ -20,8 +20,9 @@ public struct HookInstaller: Sendable {
     public var script: String {
         """
         #!/bin/sh
-        curl -sS -m 5 -X POST "http://127.0.0.1:\(port)\(HookServer.hookPath)" \\
+        curl -sf --connect-timeout 1 -m 5 -X POST "http://127.0.0.1:\(port)\(HookServer.hookPath)" \\
           -H "Content-Type: application/json" \\
+          -H "Expect:" \\
           -H "Authorization: Bearer \(token)" \\
           -H "X-Islet-Host: $(hostname -s 2>/dev/null || hostname)" \\
           --data-binary @- 2>/dev/null
@@ -40,7 +41,7 @@ public struct HookInstaller: Sendable {
     public func install() throws {
         try FileManager.default.createDirectory(at: claudeDirectory, withIntermediateDirectories: true)
         try script.write(to: scriptURL, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: scriptURL.path)
 
         var settings = try readSettings() ?? [:]
         var hooks = settings["hooks"] as? [String: Any] ?? [:]
@@ -77,14 +78,20 @@ public struct HookInstaller: Sendable {
         }
     }
 
+    public struct UnreadableSettings: Error, LocalizedError {
+        public var errorDescription: String? { "~/.claude/settings.json is not a JSON object" }
+    }
+
     private func readSettings() throws -> [String: Any]? {
         guard FileManager.default.fileExists(atPath: settingsURL.path) else { return nil }
         let data = try Data(contentsOf: settingsURL)
-        return try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        if String(decoding: data, as: UTF8.self).allSatisfy(\.isWhitespace) { return [:] }
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw UnreadableSettings() }
+        return object
     }
 
     private func writeSettings(_ settings: [String: Any]) throws {
-        let data = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys])
+        let data = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
         try data.write(to: settingsURL, options: .atomic)
     }
 }

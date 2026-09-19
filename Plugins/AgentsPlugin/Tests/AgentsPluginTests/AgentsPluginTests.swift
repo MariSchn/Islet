@@ -58,12 +58,53 @@ struct AgentSessionStoreTests {
         #expect(store.sessions[0].state == .done)
         #expect(store.pillStatus?.text == "proj finished")
 
-        store.dismiss("s1")
-        #expect(store.pillStatus == nil)
-        store.apply(HookEvent(kind: .stop, sessionID: "s1", cwd: "/tmp/proj"))
+        store.apply(HookEvent(kind: .notification, sessionID: "s1", notificationType: "idle_prompt"))
+        #expect(store.sessions[0].state == .done)
 
         store.apply(HookEvent(kind: .sessionEnd, sessionID: "s1"))
         #expect(store.sessions.isEmpty)
+    }
+
+    @Test func ignoresIrrelevantNotificationsAndCompaction() {
+        let store = AgentSessionStore()
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s", cwd: "/p", prompt: "go"))
+        store.apply(HookEvent(kind: .notification, sessionID: "s", message: "Authentication successful", notificationType: "auth_success"))
+        #expect(store.sessions[0].state == .working)
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "s", source: "compact"))
+        #expect(store.sessions[0].state == .working)
+        store.apply(HookEvent(kind: .notification, sessionID: "s", notificationType: "idle_prompt"))
+        #expect(store.sessions[0].state == .needsAttention("Waiting for your input"))
+        store.apply(HookEvent(kind: .notification, sessionID: "s", message: "Pick one", notificationType: "elicitation_dialog"))
+        #expect(store.sessions[0].state == .needsAttention("Pick one"))
+    }
+
+    @Test func dismissedSessionsStayHiddenUntilTheNextPrompt() {
+        let store = AgentSessionStore()
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s", cwd: "/p", prompt: "go"))
+        store.dismiss("s")
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "s", toolName: "Read"))
+        store.apply(HookEvent(kind: .stop, sessionID: "s"))
+        #expect(store.sessions.isEmpty)
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s", prompt: "again"))
+        #expect(store.sessions.count == 1)
+        #expect(store.sessions[0].task == "again")
+    }
+
+    @Test func finishedSessionsLeaveThePillAfterAWhileAndYieldToWorkingOnes() {
+        var clock = Date(timeIntervalSince1970: 1_000_000)
+        let store = AgentSessionStore { clock }
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", cwd: "/one", prompt: "x"))
+        store.apply(HookEvent(kind: .stop, sessionID: "a"))
+        #expect(store.pillStatus?.text == "one finished")
+
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "b", cwd: "/two", prompt: "y"))
+        #expect(store.pillStatus?.text == "two")
+        store.apply(HookEvent(kind: .sessionEnd, sessionID: "b"))
+        #expect(store.pillStatus?.text == "one finished")
+
+        clock = clock.addingTimeInterval(AgentSessionStore.finishedPillDuration + 1)
+        #expect(store.pillStatus == nil)
+        #expect(store.sessions.count == 1)
     }
 
     @Test func multipleSessionsAreCountedAndNewestFirst() {
@@ -73,7 +114,7 @@ struct AgentSessionStoreTests {
         #expect(store.sessions.map(\.id) == ["b", "a"])
         #expect(store.pillStatus?.text == "2 agents working")
 
-        store.apply(HookEvent(kind: .notification, sessionID: "a", notificationType: "idle_prompt"))
+        store.apply(HookEvent(kind: .notification, sessionID: "a", message: "Claude needs your permission", notificationType: "permission_prompt"))
         store.apply(HookEvent(kind: .permissionRequest, sessionID: "b", toolName: "Bash", toolInput: .object(["command": .string("rm -rf build")])))
         #expect(store.sessions.first { $0.id == "b" }?.state == .needsAttention("Wants to $ rm -rf build"))
         #expect(store.pillStatus?.text == "2 agents need you")
@@ -89,7 +130,7 @@ struct AgentSessionStoreTests {
         store.apply(HookEvent(kind: .sessionStart, sessionID: "a"))
         store.apply(HookEvent(kind: .sessionEnd, sessionID: "a"))
         store.dismiss("nope")
-        #expect(changes == 3)
+        #expect(changes == 2)
     }
 }
 
@@ -133,7 +174,8 @@ struct HookInstallerTests {
         #expect(script.contains("Bearer deadbeef"))
         #expect(script.contains("127.0.0.1:7365/hook"))
         let permissions = try FileManager.default.attributesOfItem(atPath: installer.scriptURL.path)[.posixPermissions] as! Int
-        #expect(permissions & 0o111 == 0o111)
+        #expect(permissions == 0o700)
+        #expect(try String(contentsOf: installer.settingsURL, encoding: .utf8).contains("\"command\" : \"/"))
 
         try installer.install()
         #expect((try JSONSerialization.jsonObject(with: Data(contentsOf: installer.settingsURL)) as! [String: Any])["hooks"].map { ($0 as! [String: Any])["PreToolUse"] as! [[String: Any]] }?.count == 2)
@@ -155,6 +197,13 @@ struct HookInstallerTests {
         #expect(after.isEmpty)
     }
 
+    @Test func refusesToOverwriteSettingsThatAreNotAnObject() throws {
+        let installer = try makeInstaller()
+        try "[1, 2]".write(to: installer.settingsURL, atomically: true, encoding: .utf8)
+        #expect(throws: HookInstaller.UnreadableSettings.self) { try installer.install() }
+        #expect(try String(contentsOf: installer.settingsURL, encoding: .utf8) == "[1, 2]")
+    }
+
     @Test func outdatedScriptCountsAsNotInstalled() throws {
         let installer = try makeInstaller()
         try installer.install()
@@ -166,13 +215,25 @@ struct HookInstallerTests {
 struct HTTPRequestTests {
     @Test func parsesPostWithBodyAndWaitsForCompleteBody() {
         let head = "POST /hook HTTP/1.1\r\nHost: x\r\nContent-Length: 5\r\nAuthorization: Bearer t\r\n\r\n"
-        #expect(HTTPRequest.parse(Data((head + "ab").utf8)) == nil)
-        let parsed = HTTPRequest.parse(Data((head + "abcde!").utf8))
-        #expect(parsed?.request.method == "POST")
-        #expect(parsed?.request.path == "/hook")
-        #expect(parsed?.request.bearerToken == "t")
-        #expect(parsed?.request.body == Data("abcde".utf8))
-        #expect(parsed?.consumed == head.utf8.count + 5)
+        #expect(HTTPRequest.parse(Data((head + "ab").utf8), maxBodySize: 100) == .incomplete)
+        #expect(HTTPRequest.parse(Data("POST /hook HTTP/1.1\r\nHo".utf8), maxBodySize: 100) == .incomplete)
+        guard case .complete(let request) = HTTPRequest.parse(Data((head + "abcde").utf8), maxBodySize: 100) else {
+            Issue.record("expected a complete request")
+            return
+        }
+        #expect(request.method == "POST")
+        #expect(request.path == "/hook")
+        #expect(request.bearerToken == "t")
+        #expect(request.body == Data("abcde".utf8))
+    }
+
+    @Test func rejectsMalformedAndOversizedRequests() {
+        #expect(HTTPRequest.parse(Data("POST /hook HTTP/1.1\r\nContent-Length: -3\r\n\r\n".utf8), maxBodySize: 100) == .invalid)
+        #expect(HTTPRequest.parse(Data("POST /hook HTTP/1.1\r\nContent-Length: abc\r\n\r\n".utf8), maxBodySize: 100) == .invalid)
+        #expect(HTTPRequest.parse(Data("GARBAGE\r\n\r\n".utf8), maxBodySize: 100) == .invalid)
+        #expect(HTTPRequest.parse(Data("POST /hook HTTP/1.1\r\nno colon\r\n\r\n".utf8), maxBodySize: 100) == .invalid)
+        #expect(HTTPRequest.parse(Data("POST /hook HTTP/1.1\r\nContent-Length: 101\r\n\r\n".utf8), maxBodySize: 100) == .tooLarge(remainingBody: 101))
+        #expect(HTTPRequest.parse(Data(repeating: UInt8(ascii: "a"), count: HTTPRequest.maxHeaderSize + 1), maxBodySize: 100) == .invalid)
     }
 
     @Test func serializesResponse() {
@@ -189,7 +250,10 @@ struct HookServerTests {
         let server = HookServer(port: port, token: "secret") { event in await received.add(event) }
         try await server.start()
         defer { Task { await server.stop() } }
-        try await Task.sleep(for: .milliseconds(100))
+
+        let second = HookServer(port: port, token: "other") { _ in }
+        await #expect(throws: (any Error).self) { try await second.start() }
+        #expect(await !second.isListening)
 
         let url = URL(string: "http://127.0.0.1:\(port)/hook")!
         var request = URLRequest(url: url)
@@ -210,7 +274,19 @@ struct HookServerTests {
         request.httpBody = Data("not json".utf8)
         let (_, bad) = try await URLSession.shared.data(for: request)
         #expect((bad as? HTTPURLResponse)?.statusCode == 400)
+
+        request.httpBody = Data(repeating: UInt8(ascii: "x"), count: HookServer.maxBodySize + 1)
+        let (_, large) = try await URLSession.shared.data(for: request)
+        #expect((large as? HTTPURLResponse)?.statusCode == 413)
         #expect(await received.events.count == 1)
+
+        await server.stop()
+        #expect(await !server.isListening)
+        try await server.start()
+        request.httpBody = Data(#"{"session_id":"t","hook_event_name":"Stop"}"#.utf8)
+        let (_, again) = try await URLSession.shared.data(for: request)
+        #expect((again as? HTTPURLResponse)?.statusCode == 200)
+        #expect(await received.events.count == 2)
     }
 
     actor Received {

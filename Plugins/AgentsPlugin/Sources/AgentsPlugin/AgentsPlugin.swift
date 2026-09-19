@@ -89,7 +89,7 @@ public final class AgentsController {
             try await server.start()
             serverError = nil
         } catch {
-            serverError = "Could not listen on port \(server.port): \(error.localizedDescription)"
+            serverError = "Could not listen on 127.0.0.1:\(server.port). Is another app using the port?"
         }
         refreshInstallState()
     }
