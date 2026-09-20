@@ -48,6 +48,10 @@ public struct HookInstaller: Sendable {
         """
         #!/bin/sh
         timeout="${1:-5}"
+        payload=$(cat)
+        title=""
+        transcript=$(printf '%s' "$payload" | sed -n 's/.*"transcript_path":"\\([^"]*\\)".*/\\1/p')
+        [ -f "$transcript" ] && title=$(grep -o '"customTitle":"[^"]*"' "$transcript" 2>/dev/null | tail -n 1 | sed 's/^"customTitle":"//; s/"$//')
         tty=""
         pid=$$
         while [ "$pid" -gt 1 ]; do
@@ -56,7 +60,7 @@ public struct HookInstaller: Sendable {
           case "$2" in ""|"?"|"??") ;; *) tty="/dev/$2" ;; esac
           pid=$1
         done
-        curl -sf --connect-timeout 1 -m "$timeout" -X POST "http://127.0.0.1:\(port)\(HookServer.hookPath)" \\
+        printf '%s' "$payload" | curl -sf --connect-timeout 1 -m "$timeout" -X POST "http://127.0.0.1:\(port)\(HookServer.hookPath)" \\
           -H "Content-Type: application/json" \\
           -H "Expect:" \\
           -H "Authorization: Bearer \(token)" \\
@@ -64,6 +68,7 @@ public struct HookInstaller: Sendable {
           -H "X-Islet-Host: $(hostname -s 2>/dev/null || hostname)" \\
           -H "X-Islet-Terminal: ${__CFBundleIdentifier:-$TERM_PROGRAM}" \\
           -H "X-Islet-TTY: $tty" \\
+          -H "X-Islet-Title: $title" \\
           --data-binary @- 2>/dev/null
         exit 0
 

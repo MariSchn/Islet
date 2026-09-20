@@ -106,9 +106,7 @@ private struct SessionRow: View {
                 .frame(width: 22, height: 22)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(session.projectName)
-                        .font(.system(size: 13, weight: .semibold))
-                        .lineLimit(1)
+                    SessionTitle(session: session)
                     if let terminal {
                         Button { terminal.activate(tty: session.isRemote ? nil : session.tty, cwd: session.isRemote ? nil : session.cwd) } label: {
                             Image(nsImage: terminal.icon)
@@ -397,6 +395,30 @@ private struct StateLabel: View {
             Text(session.updatedAt, style: .relative)
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)
+        }
+    }
+}
+
+private struct SessionTitle: View {
+    let session: AgentSession
+
+    var body: some View {
+        if let title = session.title {
+            HStack(spacing: 5) {
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+                Text("·")
+                    .foregroundStyle(.tertiary)
+                Text(session.projectName)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .font(.system(size: 13))
+        } else {
+            Text(session.projectName)
+                .font(.system(size: 13, weight: .semibold))
+                .lineLimit(1)
         }
     }
 }

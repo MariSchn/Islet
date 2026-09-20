@@ -94,6 +94,7 @@ public final class AgentSessionStore {
         session.isUnreachable = false
         if let terminal = event.terminal { session.terminal = terminal }
         if let tty = event.tty { session.tty = tty }
+        session.title = event.title
         session.updatedAt = timestamp
         if event.toolName == "ExitPlanMode", let plan = event.toolInput?["plan"]?.stringValue {
             session.plan = plan
