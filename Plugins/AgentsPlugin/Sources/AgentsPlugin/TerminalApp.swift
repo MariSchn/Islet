@@ -19,6 +19,7 @@ public struct TerminalApp: Sendable, Equatable, Hashable {
         "Hyper": "co.zeit.hyper",
         "Tabby": "org.tabby",
         "vscode": "com.microsoft.VSCode",
+        "cursor": "com.todesktop.230313mzl4w4u92",
     ]
 
     private static let editors: Set<String> = [

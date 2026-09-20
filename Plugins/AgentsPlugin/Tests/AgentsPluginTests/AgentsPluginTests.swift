@@ -24,6 +24,10 @@ struct HookEventTests {
         #expect(HookEvent(kind: .preToolUse, sessionID: "x", toolName: "apply_patch").activityDescription == "Apply patch")
         #expect(try HookEvent.decode(Data(#"{"session_id":"a","hook_event_name":"Stop"}"#.utf8), agent: "codex").agent == .codex)
         #expect(try HookEvent.decode(Data(#"{"session_id":"a","hook_event_name":"Stop"}"#.utf8), agent: "unknown").agent == .claudeCode)
+        let auto = try HookEvent.decode(Data(#"{"session_id":"a","hook_event_name":"PermissionRequest","permission_mode":"auto","agent_type":"Explore"}"#.utf8))
+        #expect(auto.isAutoApproved)
+        #expect(auto.agentType == "Explore")
+        #expect(!event.isAutoApproved)
     }
 
     @Test func resolvesTheHostingTerminalFromBundleIdentifierOrProgramName() throws {
@@ -40,6 +44,7 @@ struct HookEventTests {
         #expect(try HookEvent.decode(payload, title: "").title == nil)
         #expect(TerminalApp(identifier: "Apple_Terminal")?.targeting == .terminalTab)
         #expect(TerminalApp(identifier: "com.todesktop.230313mzl4w4u92")?.targeting == .editorFolder)
+        #expect(TerminalApp(identifier: "cursor")?.bundleIdentifier == "com.todesktop.230313mzl4w4u92")
         #expect(TerminalApp(identifier: "ghostty")?.targeting == .application)
     }
 
@@ -185,6 +190,15 @@ struct AgentSessionStoreTests {
         clock = clock.addingTimeInterval(AgentSessionStore.unreachableTimeout + 1)
         store.markUnreachableSessions()
         #expect(store.sessions[0].isUnreachable == false)
+    }
+
+    @Test func thePillNamesSessionsByTitleWhenTheyHaveOne() {
+        let store = AgentSessionStore()
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", cwd: "/p/proj", prompt: "hi"))
+        store.apply(HookEvent(kind: .stop, sessionID: "a", cwd: "/p/proj"))
+        #expect(store.pillStatus?.text == "proj finished")
+        store.apply(HookEvent(kind: .stop, sessionID: "a", cwd: "/p/proj", title: "islet-main"))
+        #expect(store.pillStatus?.text == "islet-main finished")
     }
 
     @Test func sessionsCarryTheirCurrentTitle() {
@@ -388,6 +402,27 @@ struct AgentSessionStoreTests {
         #expect(store.sessions.first?.pendingRequests.isEmpty == true)
     }
 
+    @Test func autoModePermissionRequestsAreLeftToTheAgent() async {
+        let store = AgentSessionStore()
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "Fix the build"))
+        let reply = await store.handle(HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "Bash", toolInput: .object(["command": .string("rm -rf build")]), permissionMode: "auto"))
+        #expect(reply == .empty)
+        #expect(store.sessions.first?.pendingRequests.isEmpty == true)
+        #expect(store.sessions.first?.state == .working)
+        #expect(store.sessions.first?.activity == "$ rm -rf build")
+    }
+
+    @Test func subagentTaskNotificationsKeepTheOriginalTask() {
+        let store = AgentSessionStore()
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "Review the plugin"))
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "a", toolName: "Read", toolInput: .object(["file_path": .string("/p/Main.swift")]), agentType: "Explore"))
+        #expect(store.sessions.first?.activity == "Explore: Read Main.swift")
+        store.apply(HookEvent(kind: .stop, sessionID: "a"))
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "<task-notification>\n<task-id>abc</task-id>"))
+        #expect(store.sessions.first?.task == "Review the plugin")
+        #expect(store.sessions.first?.state == .working)
+    }
+
     @Test func notifiesOnEveryChange() {
         let store = AgentSessionStore()
         var changes = 0
@@ -564,12 +599,17 @@ struct HookInstallerTests {
         let payload = #"{"session_id":"a","hook_event_name":"Stop","transcript_path":"\#(transcript.path)"}"#
 
         let path = installer.directory.path + ":/usr/bin:/bin"
-        for (transcriptExists, expectedTitle) in [(true, "islet main"), (false, "")] {
+        let environments: [(exists: Bool, title: String, terminal: String, environment: [String: String])] = [
+            (true, "islet main", "com.example.terminal", ["__CFBundleIdentifier": "com.example.terminal", "TERM_PROGRAM": "fallback"]),
+            (true, "islet main", "cursor", ["TERM_PROGRAM": "vscode", "VSCODE_GIT_ASKPASS_MAIN": "/home/me/.cursor-server/bin/abc/extensions/git/dist/askpass-main.js"]),
+            (false, "", "fallback", ["TERM_PROGRAM": "fallback"]),
+        ]
+        for (transcriptExists, expectedTitle, expectedTerminal, environment) in environments {
             if !transcriptExists { try FileManager.default.removeItem(at: transcript) }
             let process = Process()
             process.executableURL = URL(filePath: "/bin/sh")
             process.arguments = [installer.scriptURL.path]
-            process.environment = transcriptExists ? ["PATH": path, "__CFBundleIdentifier": "com.example.terminal", "TERM_PROGRAM": "fallback"] : ["PATH": path, "TERM_PROGRAM": "fallback"]
+            process.environment = environment.merging(["PATH": path]) { $1 }
             process.currentDirectoryURL = cwd
             let input = Pipe()
             process.standardInput = input
@@ -580,7 +620,7 @@ struct HookInstallerTests {
             let call = try String(contentsOf: capture, encoding: .utf8).components(separatedBy: "\n")
             #expect(call.contains("X-Islet-Title: \(expectedTitle)"))
             #expect(call.contains("X-Islet-Agent: claude-code"))
-            #expect(call.contains("X-Islet-Terminal: \(transcriptExists ? "com.example.terminal" : "fallback")"))
+            #expect(call.contains("X-Islet-Terminal: \(expectedTerminal)"))
             #expect(call.filter { $0.contains("deadbeef") } == ["header = \"Authorization: Bearer deadbeef\""])
             #expect(call.contains { $0.hasPrefix("X-Islet-TTY: ") && !$0.contains("/dev/db") })
             #expect(call.last == payload)

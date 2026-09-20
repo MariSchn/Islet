@@ -33,12 +33,12 @@ final class SessionAlerter {
         case .needsAttention(let session):
             if settings.attentionSound { play(Self.attentionSound) }
             if settings.attentionNotification {
-                notify(id: "attention-\(session.id)", title: "\(session.projectName) needs you", body: Self.reason(for: session))
+                notify(id: "attention-\(session.id)", title: "\(session.displayName) needs you", body: Self.reason(for: session))
             }
         case .finished(let session):
             if settings.finishedSound { play(Self.finishedSound) }
             if settings.finishedNotification {
-                notify(id: "finished-\(session.id)", title: "\(session.projectName) finished", body: session.task ?? session.agent.displayName)
+                notify(id: "finished-\(session.id)", title: "\(session.displayName) finished", body: session.task ?? session.agent.displayName)
             }
         }
     }

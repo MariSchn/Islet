@@ -63,7 +63,7 @@ struct AgentsScreen: View {
                     ForEach(controller.store.sessions) { session in
                         SessionRow(
                             session: session,
-                            terminal: session.terminal.flatMap(InstalledTerminal.init),
+                            terminal: session.terminal.flatMap(InstalledTerminal.lookup),
                             isExpanded: controller.expandedSessionIDs.contains(session.id),
                             dismiss: { controller.store.dismiss(session.id) },
                             toggleExpanded: { controller.toggleExpanded(session.id) },
@@ -407,10 +407,16 @@ private struct StateLabel: View {
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.orange)
         case .done:
-            Text(session.updatedAt, style: .relative)
-                .font(.system(size: 11))
+            Text(Self.duration(session.updatedAt.timeIntervalSince(session.turnStartedAt)))
+                .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(.tertiary)
         }
+    }
+
+    static func duration(_ interval: TimeInterval) -> String {
+        let seconds = Int(max(interval, 0))
+        let (hours, minutes) = (seconds / 3600, seconds / 60 % 60)
+        return hours > 0 ? String(format: "%d:%02d:%02d", hours, minutes, seconds % 60) : String(format: "%d:%02d", minutes, seconds % 60)
     }
 }
 

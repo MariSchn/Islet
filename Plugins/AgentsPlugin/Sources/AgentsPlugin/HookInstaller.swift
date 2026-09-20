@@ -67,6 +67,7 @@ public struct HookInstaller: Sendable {
           fi
           pid=$1
         done
+        case "$terminal" in vscode) case "$VSCODE_GIT_ASKPASS_MAIN" in *[Cc]ursor*) terminal=cursor ;; esac ;; esac
         body=$(mktemp) || exit 0
         printf '%s' "$payload" > "$body"
         printf 'header = "Authorization: Bearer \(token)"\n' | curl -sf --connect-timeout 1 -m "$timeout" -K - -X POST "http://127.0.0.1:\(port)\(HookServer.hookPath)" \\

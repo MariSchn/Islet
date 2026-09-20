@@ -109,7 +109,9 @@ public final class AgentSessionStore {
             session.state = .starting
             session.activity = nil
         case .userPromptSubmit:
-            session.task = event.prompt.map(Self.summarize)
+            if !event.isTaskNotification {
+                session.task = event.prompt.map(Self.summarize)
+            }
             session.activity = nil
             session.state = .working
             session.turnStartedAt = timestamp
@@ -118,7 +120,10 @@ public final class AgentSessionStore {
             session.state = .working
             Self.record(event, in: &session, at: timestamp)
         case .permissionRequest:
-            if let toolName = event.toolName, let request = PendingRequest(toolName: toolName, toolInput: event.toolInput) {
+            if event.isAutoApproved {
+                session.activity = event.activityDescription
+                session.state = .working
+            } else if let toolName = event.toolName, let request = PendingRequest(toolName: toolName, toolInput: event.toolInput) {
                 session.pendingRequests.append(request)
                 session.state = .needsAttention(Self.attentionReason(for: session.pendingRequests[0]))
             } else {
@@ -253,17 +258,17 @@ public final class AgentSessionStore {
     public var pillStatus: PillStatus? {
         let attention = attentionSessions
         if let first = attention.first {
-            let text = attention.count == 1 ? "\(first.projectName) needs you" : "\(attention.count) agents need you"
+            let text = attention.count == 1 ? "\(first.displayName) needs you" : "\(attention.count) agents need you"
             return PillStatus(text: text, systemImage: "terminal.fill", priority: .attention)
         }
         let working = workingSessions
         if !working.isEmpty {
-            let text = working.count == 1 ? (working[0].activity ?? working[0].projectName) : "\(working.count) agents working"
+            let text = working.count == 1 ? (working[0].activity ?? working[0].displayName) : "\(working.count) agents working"
             return PillStatus(text: text, systemImage: "terminal", priority: .info)
         }
         let finished = recentlyFinishedSessions
         guard let first = finished.first else { return nil }
-        let text = finished.count == 1 ? "\(first.projectName) finished" : "\(finished.count) agents finished"
+        let text = finished.count == 1 ? "\(first.displayName) finished" : "\(finished.count) agents finished"
         return PillStatus(text: text, systemImage: "checkmark.circle.fill", priority: .info)
     }
 
