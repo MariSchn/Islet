@@ -18,6 +18,10 @@ public struct NotchView<Content: View>: View {
         return controller.geometry.pillShapeSize(for: pill, contentSize: controller.contentSize)
     }
 
+    private var hoverRegionSize: CGSize {
+        controller.isExpanded ? controller.expandedHoverSize : shapeSize
+    }
+
     private var shapeOffset: CGFloat {
         guard !controller.isExpanded, let pill = controller.pill else { return 0 }
         return controller.geometry.pillShapeOffset(for: pill, contentSize: controller.contentSize)
@@ -65,6 +69,17 @@ public struct NotchView<Content: View>: View {
             }
             .frame(width: shapeSize.width, height: shapeSize.height)
             .clipShape(shape)
+            .contentShape(shape)
+            .onHover { isInside in
+                if isInside {
+                    controller.pointerEnteredShape()
+                }
+            }
+            .frame(width: hoverRegionSize.width, height: hoverRegionSize.height, alignment: .top)
+            .background(
+                shape.fill(.black)
+                    .opacity(controller.hoverHoldSize == nil ? 0 : hitTestableInvisibleOpacity)
+            )
             .contentShape(shape)
             .offset(x: shapeOffset)
             .onHover { controller.isHovering = $0 }

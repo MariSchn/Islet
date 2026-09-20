@@ -63,7 +63,14 @@ public struct NotchAnimation: Sendable, Equatable, Codable {
 @Observable
 public final class NotchController {
     public private(set) var geometry: NotchGeometry
-    public private(set) var isExpanded = false
+    public private(set) var isExpanded = false {
+        didSet {
+            if !isExpanded {
+                hoverHoldSize = nil
+            }
+        }
+    }
+    public private(set) var hoverHoldSize: CGSize?
     public var isHovering = false {
         didSet { scheduleHoverUpdate() }
     }
@@ -95,6 +102,11 @@ public final class NotchController {
         geometry.expandedShapeFrame(for: contentSize)
     }
 
+    public var expandedHoverSize: CGSize {
+        guard let hoverHoldSize else { return expandedShapeSize }
+        return Self.union(hoverHoldSize, expandedShapeSize)
+    }
+
     public var navigationSideWidth: CGFloat {
         geometry.navigationSideWidth(for: contentSize)
     }
@@ -106,10 +118,17 @@ public final class NotchController {
 
     @ObservationIgnored private var hoverTask: Task<Void, Never>?
     @ObservationIgnored private var registry: PluginRegistry?
+    @ObservationIgnored private var trackedExpandedShapeSize: CGSize = .zero
+    @ObservationIgnored private let pointerLocation: @MainActor () -> CGPoint
 
-    public init(settings: AppSettings, geometry: NotchGeometry = .placeholder) {
+    public init(
+        settings: AppSettings,
+        geometry: NotchGeometry = .placeholder,
+        pointerLocation: @escaping @MainActor () -> CGPoint = { NSEvent.mouseLocation }
+    ) {
         self.settings = settings
         self.geometry = geometry
+        self.pointerLocation = pointerLocation
     }
 
     public func update(geometry: NotchGeometry) {
@@ -130,11 +149,36 @@ public final class NotchController {
         guard let registry else { return }
         withObservationTracking {
             pill = registry.activePill
+            trackedExpandedShapeSize = expandedShapeSize
         } onChange: {
             Task { @MainActor [weak self] in
-                self?.observeRegistry()
+                guard let self else { return }
+                self.holdHoverRegionIfShapeLeftPointer(previousSize: self.trackedExpandedShapeSize)
+                self.observeRegistry()
             }
         }
+    }
+
+    private func holdHoverRegionIfShapeLeftPointer(previousSize: CGSize) {
+        guard isExpanded, previousSize != expandedShapeSize else { return }
+        if isPointerInsideExpandedShape {
+            hoverHoldSize = nil
+        } else {
+            hoverHoldSize = hoverHoldSize.map { Self.union($0, previousSize) } ?? previousSize
+        }
+    }
+
+    public func pointerEnteredShape() {
+        guard isPointerInsideExpandedShape else { return }
+        hoverHoldSize = nil
+    }
+
+    private var isPointerInsideExpandedShape: Bool {
+        expandedShapeFrame.contains(pointerLocation())
+    }
+
+    private static func union(_ lhs: CGSize, _ rhs: CGSize) -> CGSize {
+        CGSize(width: max(lhs.width, rhs.width), height: max(lhs.height, rhs.height))
     }
 
     @discardableResult
