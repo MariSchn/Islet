@@ -20,6 +20,19 @@ struct HookEventTests {
         #expect(HookEvent(kind: .preToolUse, sessionID: "x", toolName: "Mystery").activityDescription == "Mystery")
     }
 
+    @Test func resolvesTheHostingTerminalFromBundleIdentifierOrProgramName() throws {
+        let payload = Data(#"{"session_id":"a","hook_event_name":"Stop"}"#.utf8)
+        #expect(try HookEvent.decode(payload, terminal: "com.googlecode.iterm2").terminal == TerminalApp(identifier: "com.googlecode.iterm2"))
+        #expect(try HookEvent.decode(payload, terminal: "Apple_Terminal").terminal?.bundleIdentifier == "com.apple.Terminal")
+        #expect(try HookEvent.decode(payload, terminal: " ").terminal == nil)
+        #expect(try HookEvent.decode(payload).terminal == nil)
+        #expect(try HookEvent.decode(payload, tty: "/dev/ttys004").tty == "/dev/ttys004")
+        #expect(try HookEvent.decode(payload, tty: "").tty == nil)
+        #expect(TerminalApp(identifier: "Apple_Terminal")?.targeting == .terminalTab)
+        #expect(TerminalApp(identifier: "com.todesktop.230313mzl4w4u92")?.targeting == .editorFolder)
+        #expect(TerminalApp(identifier: "ghostty")?.targeting == .application)
+    }
+
     @Test func rejectsUnknownEvents() {
         #expect(throws: (any Error).self) {
             try HookEvent.decode(Data(#"{"session_id":"a","hook_event_name":"Nope"}"#.utf8))
@@ -323,6 +336,8 @@ struct HookInstallerTests {
         let script = try String(contentsOf: installer.scriptURL, encoding: .utf8)
         #expect(script.contains("Bearer deadbeef"))
         #expect(script.contains("127.0.0.1:7365/hook"))
+        #expect(script.contains(#"-H "X-Islet-Terminal: ${__CFBundleIdentifier:-$TERM_PROGRAM}""#))
+        #expect(script.contains(#"-H "X-Islet-TTY: $tty""#))
         let permissions = try FileManager.default.attributesOfItem(atPath: installer.scriptURL.path)[.posixPermissions] as! Int
         #expect(permissions == 0o700)
         #expect(try String(contentsOf: installer.settingsURL, encoding: .utf8).contains("\"command\" : \"'/"))
@@ -414,11 +429,13 @@ struct HookServerTests {
         request.httpMethod = "POST"
         request.setValue("Bearer secret", forHTTPHeaderField: "Authorization")
         request.setValue("devbox", forHTTPHeaderField: "X-Islet-Host")
+        request.setValue("ghostty", forHTTPHeaderField: "X-Islet-Terminal")
+        request.setValue("/dev/ttys004", forHTTPHeaderField: "X-Islet-TTY")
         request.httpBody = Data(#"{"session_id":"s","hook_event_name":"Stop"}"#.utf8)
         let (body, response) = try await URLSession.shared.data(for: request)
         #expect((response as? HTTPURLResponse)?.statusCode == 200)
         #expect(body == Data("{}".utf8))
-        #expect(await received.events == [HookEvent(kind: .stop, sessionID: "s", host: "devbox")])
+        #expect(await received.events == [HookEvent(kind: .stop, sessionID: "s", host: "devbox", terminal: TerminalApp(identifier: "com.mitchellh.ghostty"), tty: "/dev/ttys004")])
 
         request.setValue("Bearer wrong", forHTTPHeaderField: "Authorization")
         let (_, unauthorized) = try await URLSession.shared.data(for: request)

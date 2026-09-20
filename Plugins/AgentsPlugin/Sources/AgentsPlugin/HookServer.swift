@@ -182,7 +182,7 @@ public actor HookServer {
             response = .json(401, #"{"error":"unauthorized"}"#)
         } else if request.method != "POST" || request.path != Self.hookPath {
             response = .json(404, #"{"error":"not found"}"#)
-        } else if let event = try? HookEvent.decode(request.body, host: request.headers["x-islet-host"]) {
+        } else if let event = try? HookEvent.decode(request.body, host: request.headers["x-islet-host"], terminal: request.headers["x-islet-terminal"], tty: request.headers["x-islet-tty"]) {
             let reply = await handler(event)
             guard !Task.isCancelled else { return }
             response = .json(200, reply.body)

@@ -22,6 +22,8 @@ public struct HookEvent: Sendable, Equatable, Decodable {
     public var notificationType: String?
     public var source: String?
     public var host: String?
+    public var terminal: TerminalApp?
+    public var tty: String?
 
     private enum CodingKeys: String, CodingKey {
         case kind = "hook_event_name"
@@ -35,7 +37,7 @@ public struct HookEvent: Sendable, Equatable, Decodable {
         case source
     }
 
-    public init(kind: Kind, sessionID: String, cwd: String? = nil, toolName: String? = nil, toolInput: JSONValue? = nil, prompt: String? = nil, message: String? = nil, notificationType: String? = nil, source: String? = nil, host: String? = nil) {
+    public init(kind: Kind, sessionID: String, cwd: String? = nil, toolName: String? = nil, toolInput: JSONValue? = nil, prompt: String? = nil, message: String? = nil, notificationType: String? = nil, source: String? = nil, host: String? = nil, terminal: TerminalApp? = nil, tty: String? = nil) {
         self.kind = kind
         self.sessionID = sessionID
         self.cwd = cwd
@@ -46,6 +48,8 @@ public struct HookEvent: Sendable, Equatable, Decodable {
         self.notificationType = notificationType
         self.source = source
         self.host = host
+        self.terminal = terminal
+        self.tty = tty
     }
 
     public init(from decoder: any Decoder) throws {
@@ -61,9 +65,11 @@ public struct HookEvent: Sendable, Equatable, Decodable {
         source = try container.decodeIfPresent(String.self, forKey: .source)
     }
 
-    public static func decode(_ data: Data, host: String? = nil) throws -> HookEvent {
+    public static func decode(_ data: Data, host: String? = nil, terminal: String? = nil, tty: String? = nil) throws -> HookEvent {
         var event = try JSONDecoder().decode(HookEvent.self, from: data)
         event.host = host
+        event.terminal = terminal.flatMap(TerminalApp.init)
+        event.tty = tty.flatMap { $0.hasPrefix("/dev/") ? $0 : nil }
         return event
     }
 

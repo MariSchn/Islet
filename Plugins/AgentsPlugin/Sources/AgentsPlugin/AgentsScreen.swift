@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct AgentsScreen: View {
@@ -49,6 +50,7 @@ struct AgentsScreen: View {
                     ForEach(controller.store.sessions) { session in
                         SessionRow(
                             session: session,
+                            terminal: session.terminal.flatMap(InstalledTerminal.init),
                             dismiss: { controller.store.dismiss(session.id) },
                             decide: { controller.decide($0, $1) }
                         )
@@ -62,6 +64,7 @@ struct AgentsScreen: View {
 
 private struct SessionRow: View {
     let session: AgentSession
+    let terminal: InstalledTerminal?
     let dismiss: () -> Void
     let decide: (UUID, PermissionDecision) -> Void
     @State private var isHovering = false
@@ -78,6 +81,9 @@ private struct SessionRow: View {
         }
         .padding(.horizontal, 10)
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.white.opacity(isHovering ? 0.1 : 0.06)))
+        .contentShape(Rectangle())
+        .onTapGesture { terminal?.activate(tty: session.tty, cwd: session.cwd) }
+        .help(terminal.map { "Show in \($0.name)" } ?? "")
         .onHover { isHovering = $0 }
     }
 
@@ -90,6 +96,11 @@ private struct SessionRow: View {
                     Text(session.projectName)
                         .font(.system(size: 13, weight: .semibold))
                         .lineLimit(1)
+                    if let terminal {
+                        Image(nsImage: terminal.icon)
+                            .resizable()
+                            .frame(width: 14, height: 14)
+                    }
                     if let host = session.host {
                         Text(host)
                             .font(.system(size: 11))
