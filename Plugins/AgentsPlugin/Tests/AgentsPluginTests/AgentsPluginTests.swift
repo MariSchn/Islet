@@ -25,9 +25,9 @@ struct HookEventTests {
         #expect(try HookEvent.decode(Data(#"{"session_id":"a","hook_event_name":"Stop"}"#.utf8), agent: "codex").agent == .codex)
         #expect(try HookEvent.decode(Data(#"{"session_id":"a","hook_event_name":"Stop"}"#.utf8), agent: "unknown").agent == .claudeCode)
         let auto = try HookEvent.decode(Data(#"{"session_id":"a","hook_event_name":"PermissionRequest","permission_mode":"auto","agent_type":"Explore"}"#.utf8))
-        #expect(auto.isAutoApproved)
+        #expect(auto.isInAutoMode)
         #expect(auto.agentType == "Explore")
-        #expect(!event.isAutoApproved)
+        #expect(!event.isInAutoMode)
     }
 
     @Test func resolvesTheHostingTerminalFromBundleIdentifierOrProgramName() throws {
@@ -410,6 +410,32 @@ struct AgentSessionStoreTests {
         #expect(store.sessions.first?.pendingRequests.isEmpty == true)
         #expect(store.sessions.first?.state == .working)
         #expect(store.sessions.first?.activity == "$ rm -rf build")
+        let question = HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "AskUserQuestion", toolInput: .object(["questions": .array([.object(["question": .string("Which?"), "options": .array([.object(["label": .string("A")])])])])]), permissionMode: "auto")
+        async let answer = store.handle(question)
+        try? await waitForPendingRequest(in: store)
+        #expect(store.sessions.first?.state == .needsAttention("Has a question"))
+        store.decide(store.sessions.first!.pendingRequests[0].id, .answers(["Which?": "A"]))
+        #expect(await answer != .empty)
+        store.apply(HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "ExitPlanMode", toolInput: .object([:]), permissionMode: "auto"))
+        #expect(store.sessions.first?.state == .needsAttention("Wants to ExitPlanMode"))
+    }
+
+    @Test func taskNotificationsNeitherWithdrawRequestsNorReviveDismissedSessions() async throws {
+        let store = AgentSessionStore()
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "Deploy"))
+        async let reply = store.handle(HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "Bash", toolInput: .object(["command": .string("make deploy")])))
+        try await waitForPendingRequest(in: store)
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "<task-notification>done</task-notification>"))
+        #expect(store.sessions.first?.pendingRequests.count == 1)
+        #expect(store.sessions.first?.state.requiresAttention == true)
+        store.decide(store.sessions.first!.pendingRequests[0].id, .allow)
+        #expect(await reply != .empty)
+
+        store.dismiss("a")
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "<task-notification>done</task-notification>"))
+        #expect(store.sessions.isEmpty)
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "Again"))
+        #expect(store.sessions.count == 1)
     }
 
     @Test func subagentTaskNotificationsKeepTheOriginalTask() {
@@ -602,6 +628,7 @@ struct HookInstallerTests {
         let environments: [(exists: Bool, title: String, terminal: String, environment: [String: String])] = [
             (true, "islet main", "com.example.terminal", ["__CFBundleIdentifier": "com.example.terminal", "TERM_PROGRAM": "fallback"]),
             (true, "islet main", "cursor", ["TERM_PROGRAM": "vscode", "VSCODE_GIT_ASKPASS_MAIN": "/home/me/.cursor-server/bin/abc/extensions/git/dist/askpass-main.js"]),
+            (true, "islet main", "vscode", ["TERM_PROGRAM": "vscode", "VSCODE_GIT_ASKPASS_MAIN": "/home/me/.vscode-server/bin/abc/extensions/git/dist/askpass-main.js"]),
             (false, "", "fallback", ["TERM_PROGRAM": "fallback"]),
         ]
         for (transcriptExists, expectedTitle, expectedTerminal, environment) in environments {

@@ -66,7 +66,7 @@ public final class AgentSessionStore {
             return
         }
         if dismissedIDs.contains(event.sessionID) {
-            guard event.kind == .userPromptSubmit else { return }
+            guard event.kind == .userPromptSubmit, !event.isTaskNotification else { return }
             dismissedIDs.remove(event.sessionID)
         }
 
@@ -112,6 +112,7 @@ public final class AgentSessionStore {
             if !event.isTaskNotification {
                 session.task = event.prompt.map(Self.summarize)
             }
+            guard session.pendingRequests.isEmpty else { break }
             session.activity = nil
             session.state = .working
             session.turnStartedAt = timestamp
@@ -120,10 +121,11 @@ public final class AgentSessionStore {
             session.state = .working
             Self.record(event, in: &session, at: timestamp)
         case .permissionRequest:
-            if event.isAutoApproved {
+            let request = event.toolName.flatMap { PendingRequest(toolName: $0, toolInput: event.toolInput) }
+            if let request, event.isInAutoMode, case .permission = request.kind {
                 session.activity = event.activityDescription
                 session.state = .working
-            } else if let toolName = event.toolName, let request = PendingRequest(toolName: toolName, toolInput: event.toolInput) {
+            } else if let request {
                 session.pendingRequests.append(request)
                 session.state = .needsAttention(Self.attentionReason(for: session.pendingRequests[0]))
             } else {
@@ -238,7 +240,8 @@ public final class AgentSessionStore {
 
     private static func withdraws(_ request: PendingRequest, on event: HookEvent) -> Bool {
         switch event.kind {
-        case .userPromptSubmit, .stop, .sessionStart, .sessionEnd: true
+        case .stop, .sessionStart, .sessionEnd: true
+        case .userPromptSubmit: !event.isTaskNotification
         case .postToolUse: event.toolName == request.toolName && event.toolInput == request.toolInput
         case .preToolUse, .permissionRequest, .notification: false
         }

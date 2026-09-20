@@ -93,7 +93,7 @@ public struct HookEvent: Sendable, Equatable, Decodable {
         !value.isEmpty && value.unicodeScalars.allSatisfy { identifierCharacters.contains($0) }
     }
 
-    public var isAutoApproved: Bool {
+    public var isInAutoMode: Bool {
         permissionMode == "auto"
     }
 
