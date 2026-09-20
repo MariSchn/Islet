@@ -10,11 +10,31 @@ public final class AgentsPlugin: IsletPlugin {
     static let rowSpacing: CGFloat = 4
     static let contentPadding: CGFloat = 12
     static let maxVisibleRows = 4
+    static let requestPadding: CGFloat = 8
+    static let requestDetailHeight: CGFloat = 30
+    static let questionDetailHeight: CGFloat = 46
+    static let requestButtonHeight: CGFloat = 24
+    static let requestSpacing: CGFloat = 6
+    static let maxContentHeight = 2 * contentPadding + CGFloat(maxVisibleRows) * rowHeight + CGFloat(maxVisibleRows - 1) * rowSpacing
 
-    static func contentSize(forSessionCount count: Int) -> CGSize {
-        guard count > 0 else { return CGSize(width: contentWidth, height: emptyContentHeight) }
-        let rows = CGFloat(min(count, maxVisibleRows))
-        return CGSize(width: contentWidth, height: 2 * contentPadding + rows * rowHeight + (rows - 1) * rowSpacing)
+    static func contentSize(for sessions: [AgentSession]) -> CGSize {
+        guard !sessions.isEmpty else { return CGSize(width: contentWidth, height: emptyContentHeight) }
+        let rows = sessions.map(rowHeight(for:)).reduce(0, +) + CGFloat(sessions.count - 1) * rowSpacing
+        return CGSize(width: contentWidth, height: min(2 * contentPadding + rows, maxContentHeight))
+    }
+
+    static func rowHeight(for session: AgentSession) -> CGFloat {
+        rowHeight + (session.pendingRequest.map(requestHeight(for:)) ?? 0)
+    }
+
+    static func requestHeight(for request: PendingRequest) -> CGFloat {
+        switch request.kind {
+        case .permission:
+            return 2 * requestPadding + requestDetailHeight + requestSpacing + requestButtonHeight
+        case .question(let questions):
+            let options = questions.map { CGFloat($0.options.count) * requestButtonHeight + CGFloat($0.options.count - 1) * requestSpacing + ($0.multiSelect ? requestSpacing + requestButtonHeight : 0) }
+            return 2 * requestPadding + questionDetailHeight + requestSpacing + (options.max() ?? 0)
+        }
     }
 
     private static let tokenKey = "hookToken"
@@ -37,12 +57,12 @@ public final class AgentsPlugin: IsletPlugin {
         )
         controller.store.onChange = { [context, controller] in
             context.pillStatus = controller.store.pillStatus
-            context.contentSize = Self.contentSize(forSessionCount: controller.store.sessions.count)
+            context.contentSize = Self.contentSize(for: controller.store.sessions)
         }
     }
 
     public func activate() async throws {
-        context.contentSize = Self.contentSize(forSessionCount: controller.store.sessions.count)
+        context.contentSize = Self.contentSize(for: controller.store.sessions)
         await controller.start()
     }
 
@@ -80,7 +100,7 @@ public final class AgentsController {
         installer = HookInstaller(claudeDirectory: claudeDirectory, port: port, token: token)
         isHookInstalled = installer.isInstalled
         server = HookServer(port: port, token: token) { event in
-            await MainActor.run { store.apply(event) }
+            await store.handle(event)
         }
     }
 
@@ -90,6 +110,9 @@ public final class AgentsController {
             serverError = nil
         } catch {
             serverError = "Could not listen on 127.0.0.1:\(server.port). Is another app using the port?"
+        }
+        if installer.needsUpgrade {
+            try? installer.install()
         }
         refreshInstallState()
     }
@@ -110,5 +133,9 @@ public final class AgentsController {
     public func uninstallHooks() throws {
         try installer.uninstall()
         refreshInstallState()
+    }
+
+    public func decide(_ requestID: UUID, _ decision: PermissionDecision) {
+        store.decide(requestID, decision)
     }
 }

@@ -123,6 +123,132 @@ struct AgentSessionStoreTests {
         #expect(store.sessions.map(\.id) == ["b"])
     }
 
+    @Test func permissionRequestsWaitForADecision() async throws {
+        let store = AgentSessionStore()
+        let event = HookEvent(kind: .permissionRequest, sessionID: "a", cwd: "/x/one", toolName: "Bash", toolInput: .object(["command": .string("rm -rf build")]))
+        async let reply = store.handle(event)
+        try await waitForPendingRequest(in: store)
+        let request = try #require(store.sessions.first?.pendingRequest)
+        #expect(request.kind == .permission(tool: "Bash", detail: "rm -rf build"))
+        #expect(store.pillStatus?.text == "one needs you")
+
+        store.decide(request.id, .allow)
+        #expect(await reply.body == #"{"hookSpecificOutput":{"decision":{"behavior":"allow"},"hookEventName":"PermissionRequest"}}"#)
+        #expect(store.sessions.first?.pendingRequest == nil)
+        #expect(store.sessions.first?.state == .working)
+
+        async let denied = store.handle(event)
+        try await waitForPendingRequest(in: store)
+        store.decide(try #require(store.sessions.first?.pendingRequest?.id), .deny)
+        #expect(await denied.body.contains(#""behavior":"deny""#))
+        #expect(store.sessions.first?.activity == "Denied Bash")
+    }
+
+    @Test func questionsAreAnsweredThroughUpdatedInput() async throws {
+        let store = AgentSessionStore()
+        let input: JSONValue = .object([
+            "questions": .array([
+                .object(["question": .string("Which framework?"), "header": .string("Framework"), "options": .array([.object(["label": .string("React"), "description": .string("Popular")]), .object(["label": .string("Vue")])]), "multiSelect": .bool(false)]),
+            ]),
+        ])
+        async let reply = store.handle(HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "AskUserQuestion", toolInput: input))
+        try await waitForPendingRequest(in: store)
+        let request = try #require(store.sessions.first?.pendingRequest)
+        #expect(request.kind == .question([PendingRequest.Question(text: "Which framework?", header: "Framework", options: [.init(label: "React", description: "Popular"), .init(label: "Vue")])]))
+        #expect(store.sessions.first?.state == .needsAttention("Has a question"))
+
+        store.decide(request.id, .answers(["Which framework?": "Vue"]))
+        let body = await reply.body
+        let output = try #require(try JSONSerialization.jsonObject(with: Data(body.utf8)) as? [String: Any])
+        let decision = try #require((output["hookSpecificOutput"] as? [String: Any])?["decision"] as? [String: Any])
+        #expect(decision["behavior"] as? String == "allow")
+        let updated = try #require(decision["updatedInput"] as? [String: Any])
+        #expect((updated["questions"] as? [Any])?.count == 1)
+        #expect(updated["answers"] as? [String: String] == ["Which framework?": "Vue"])
+    }
+
+    @Test func pendingRequestsAreWithdrawnWhenTheSessionMovesOn() async throws {
+        let store = AgentSessionStore()
+        let event = HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "Bash", toolInput: .object(["command": .string("ls")]))
+        async let reply = store.handle(event)
+        try await waitForPendingRequest(in: store)
+        #expect(store.sessions.first?.pendingRequest != nil)
+
+        store.apply(HookEvent(kind: .notification, sessionID: "a", message: "Claude needs your permission", notificationType: "permission_prompt"))
+        #expect(store.sessions.first?.pendingRequest != nil)
+        #expect(store.sessions.first?.state == .needsAttention("Wants to $ ls"))
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "a", toolName: "Grep", toolInput: .object(["pattern": .string("x")])))
+        #expect(store.sessions.first?.pendingRequest != nil)
+
+        store.apply(HookEvent(kind: .stop, sessionID: "a"))
+        #expect(await reply == .empty)
+        #expect(store.sessions.first?.pendingRequest == nil)
+        #expect(store.sessions.first?.state == .done)
+
+        async let cancelled = store.handle(event)
+        try await waitForPendingRequest(in: store)
+        store.dismiss("a")
+        #expect(await cancelled == .empty)
+
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "again"))
+        let task = Task { await store.handle(event) }
+        try await waitForPendingRequest(in: store)
+        #expect(store.sessions.first?.pendingRequest != nil)
+        task.cancel()
+        #expect(await task.value == .empty)
+        let deadline = ContinuousClock.now + .seconds(2)
+        while store.sessions.first?.pendingRequest != nil {
+            try #require(ContinuousClock.now < deadline)
+            await Task.yield()
+        }
+        #expect(store.sessions.first?.state == .working)
+    }
+
+    func waitForPendingRequest(in store: AgentSessionStore, count: Int = 1) async throws {
+        let deadline = ContinuousClock.now + .seconds(2)
+        while (store.sessions.first?.pendingRequests.count ?? 0) < count {
+            try #require(ContinuousClock.now < deadline)
+            await Task.yield()
+        }
+    }
+
+    @Test func concurrentRequestsAreQueuedAndAnsweredIndividually() async throws {
+        let store = AgentSessionStore()
+        let first = HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "Bash", toolInput: .object(["command": .string("ls")]))
+        let second = HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "Edit", toolInput: .object(["file_path": .string("/x/a.swift")]))
+        async let firstReply = store.handle(first)
+        try await waitForPendingRequest(in: store)
+        async let secondReply = store.handle(second)
+        try await waitForPendingRequest(in: store, count: 2)
+        let requests = try #require(store.sessions.first?.pendingRequests)
+        #expect(requests.map(\.toolName) == ["Bash", "Edit"])
+        #expect(store.sessions.first?.state == .needsAttention("Wants to $ ls"))
+
+        store.decide(UUID(), .allow)
+        #expect(store.sessions.first?.pendingRequests.count == 2)
+
+        store.decide(requests[1].id, .deny)
+        #expect(await secondReply.body.contains("deny"))
+        #expect(store.sessions.first?.pendingRequest?.toolName == "Bash")
+        #expect(store.sessions.first?.state == .needsAttention("Wants to $ ls"))
+
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "a", toolName: "Bash", toolInput: .object(["command": .string("ls")])))
+        #expect(await firstReply == .empty)
+        #expect(store.sessions.first?.pendingRequests.isEmpty == true)
+        #expect(store.sessions.first?.state == .working)
+    }
+
+    @Test func unsupportedToolsOnlyRaiseAttention() async throws {
+        let store = AgentSessionStore()
+        let reply = await store.handle(HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "ExitPlanMode", toolInput: .object([:])))
+        #expect(reply == .empty)
+        #expect(store.sessions.first?.pendingRequests.isEmpty == true)
+        #expect(store.sessions.first?.state == .needsAttention("Wants to ExitPlanMode"))
+        let question = await store.handle(HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "AskUserQuestion", toolInput: .object(["questions": .array([])])))
+        #expect(question == .empty)
+        #expect(store.sessions.first?.pendingRequests.isEmpty == true)
+    }
+
     @Test func notifiesOnEveryChange() {
         let store = AgentSessionStore()
         var changes = 0
@@ -137,10 +263,30 @@ struct AgentSessionStoreTests {
 @MainActor
 struct AgentsPluginSizingTests {
     @Test func contentGrowsWithSessionsUpToAScrollingMaximum() {
-        #expect(AgentsPlugin.contentSize(forSessionCount: 0) == CGSize(width: 520, height: 130))
-        #expect(AgentsPlugin.contentSize(forSessionCount: 1) == CGSize(width: 520, height: 78))
-        #expect(AgentsPlugin.contentSize(forSessionCount: 2) == CGSize(width: 520, height: 136))
-        #expect(AgentsPlugin.contentSize(forSessionCount: 4) == AgentsPlugin.contentSize(forSessionCount: 9))
+        func sessions(_ count: Int) -> [AgentSession] {
+            (0..<count).map { AgentSession(id: "\($0)", agent: .claudeCode, host: nil, cwd: nil, task: nil, activity: nil, state: .working, startedAt: .now, turnStartedAt: .now, updatedAt: .now) }
+        }
+        #expect(AgentsPlugin.contentSize(for: []) == CGSize(width: 520, height: 130))
+        #expect(AgentsPlugin.contentSize(for: sessions(1)) == CGSize(width: 520, height: 78))
+        #expect(AgentsPlugin.contentSize(for: sessions(2)) == CGSize(width: 520, height: 136))
+        #expect(AgentsPlugin.contentSize(for: sessions(4)) == AgentsPlugin.contentSize(for: sessions(9)))
+    }
+
+    @Test func pendingRequestsMakeRowsTaller() {
+        var session = AgentSession(id: "a", agent: .claudeCode, host: nil, cwd: nil, task: nil, activity: nil, state: .working, startedAt: .now, turnStartedAt: .now, updatedAt: .now)
+        let plain = AgentsPlugin.contentSize(for: [session]).height
+        session.pendingRequests = [PendingRequest(toolName: "Bash", toolInput: .object(["command": .string("ls")]))!]
+        let permission = AgentsPlugin.contentSize(for: [session]).height
+        #expect(permission > plain)
+        session.pendingRequests = [PendingRequest(toolName: "AskUserQuestion", toolInput: .object([
+            "questions": .array([
+                .object(["question": .string("Which?"), "options": .array([.object(["label": .string("A")]), .object(["label": .string("B")]), .object(["label": .string("C")])])]),
+                .object(["question": .string("Multi?"), "multiSelect": .bool(true), "options": .array([.object(["label": .string("X")])])]),
+            ]),
+        ]))!]
+        let question = AgentsPlugin.contentSize(for: [session]).height
+        #expect(question > permission)
+        #expect(question <= AgentsPlugin.maxContentHeight)
     }
 }
 
@@ -169,13 +315,17 @@ struct HookInstallerTests {
         let preToolUse = hooks["PreToolUse"] as! [[String: Any]]
         #expect(preToolUse.count == 2)
         #expect((preToolUse[0]["matcher"] as? String) == "Bash")
+        let permissionHook = ((hooks["PermissionRequest"] as! [[String: Any]])[0]["hooks"] as! [[String: Any]])[0]
+        #expect(permissionHook["command"] as? String == "'" + installer.scriptURL.path + "' 600")
+        #expect(permissionHook["timeout"] as? Int == 605)
+        #expect((((preToolUse[1]["hooks"] as! [[String: Any]])[0])["timeout"] as? Int) == 10)
 
         let script = try String(contentsOf: installer.scriptURL, encoding: .utf8)
         #expect(script.contains("Bearer deadbeef"))
         #expect(script.contains("127.0.0.1:7365/hook"))
         let permissions = try FileManager.default.attributesOfItem(atPath: installer.scriptURL.path)[.posixPermissions] as! Int
         #expect(permissions == 0o700)
-        #expect(try String(contentsOf: installer.settingsURL, encoding: .utf8).contains("\"command\" : \"/"))
+        #expect(try String(contentsOf: installer.settingsURL, encoding: .utf8).contains("\"command\" : \"'/"))
 
         try installer.install()
         #expect((try JSONSerialization.jsonObject(with: Data(contentsOf: installer.settingsURL)) as! [String: Any])["hooks"].map { ($0 as! [String: Any])["PreToolUse"] as! [[String: Any]] }?.count == 2)
@@ -243,15 +393,19 @@ struct HTTPRequestTests {
     }
 }
 
+@Suite(.serialized)
 struct HookServerTests {
     @Test func receivesAuthorizedEventsAndRejectsOthers() async throws {
         let received = Received()
-        let port = UInt16.random(in: 20000..<40000)
-        let server = HookServer(port: port, token: "secret") { event in await received.add(event) }
+        let port = try freePort()
+        let server = HookServer(port: port, token: "secret") { event in
+            await received.add(event)
+            return .empty
+        }
         try await server.start()
         defer { Task { await server.stop() } }
 
-        let second = HookServer(port: port, token: "other") { _ in }
+        let second = HookServer(port: port, token: "other") { _ in .empty }
         await #expect(throws: (any Error).self) { try await second.start() }
         #expect(await !second.isListening)
 
@@ -289,8 +443,81 @@ struct HookServerTests {
         #expect(await received.events.count == 2)
     }
 
+    @Test func repliesWaitForTheHandlerAndCancelWhenTheClientLeaves() async throws {
+        let gate = Gate()
+        let port = try freePort()
+        let server = HookServer(port: port, token: "secret") { _ in
+            await gate.wait()
+        }
+        try await server.start()
+        defer { Task { await server.stop() } }
+
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/hook")!)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 1
+        request.setValue("Bearer secret", forHTTPHeaderField: "Authorization")
+        request.httpBody = Data(#"{"session_id":"s","hook_event_name":"PermissionRequest","tool_name":"Bash"}"#.utf8)
+        await #expect(throws: (any Error).self) { try await URLSession.shared.data(for: request) }
+        let deadline = ContinuousClock.now + .seconds(2)
+        while await gate.cancelled == 0 {
+            try #require(ContinuousClock.now < deadline)
+            await Task.yield()
+        }
+
+        request.timeoutInterval = 10
+        let final = request
+        async let response = URLSession.shared.data(for: final)
+        try await Task.sleep(for: .milliseconds(200))
+        await gate.open(with: HookReply(body: #"{"ok":true}"#))
+        let (body, _) = try await response
+        #expect(body == Data(#"{"ok":true}"#.utf8))
+
+        let dropped = Task { try await URLSession.shared.data(for: final) }
+        try await Task.sleep(for: .milliseconds(200))
+        await server.stop()
+        await #expect(throws: (any Error).self) { try await dropped.value }
+        #expect(await gate.cancelled == 2)
+    }
+
+    func freePort() throws -> UInt16 {
+        let socket = Darwin.socket(AF_INET, SOCK_STREAM, 0)
+        defer { Darwin.close(socket) }
+        var address = sockaddr_in()
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_addr.s_addr = inet_addr("127.0.0.1")
+        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let bound = withUnsafeMutablePointer(to: &address) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { Darwin.bind(socket, $0, length) == 0 && getsockname(socket, $0, &length) == 0 }
+        }
+        try #require(bound)
+        return UInt16(bigEndian: address.sin_port)
+    }
+
     actor Received {
         var events: [HookEvent] = []
         func add(_ event: HookEvent) { events.append(event) }
+    }
+
+    actor Gate {
+        var cancelled = 0
+        private var waiters: [CheckedContinuation<HookReply, Never>] = []
+
+        func wait() async -> HookReply {
+            await withTaskCancellationHandler {
+                await withCheckedContinuation { waiters.append($0) }
+            } onCancel: {
+                Task { await self.cancel() }
+            }
+        }
+
+        func open(with reply: HookReply) {
+            waiters.forEach { $0.resume(returning: reply) }
+            waiters.removeAll()
+        }
+
+        private func cancel() {
+            cancelled += 1
+            open(with: .empty)
+        }
     }
 }

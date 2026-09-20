@@ -2,18 +2,25 @@ import Foundation
 import Network
 
 public actor HookServer {
-    public typealias Handler = @Sendable (HookEvent) async -> Void
+    public typealias Handler = @Sendable (HookEvent) async -> HookReply
 
     public static let defaultPort: UInt16 = 7365
     public static let hookPath = "/hook"
     public static let maxBodySize = 16 << 20
-    public static let connectionTimeout: Duration = .seconds(10)
+    public static let requestTimeout: Duration = .seconds(10)
+    public static let replyTimeout: Duration = .seconds(600)
+
+    private struct Client {
+        let connection: NWConnection
+        var timeout: Task<Void, Never>?
+        var work: Task<Void, Never>?
+    }
 
     public let port: UInt16
     public let token: String
     private let handler: Handler
     private var listener: NWListener?
-    private var connections: [ObjectIdentifier: NWConnection] = [:]
+    private var clients: [ObjectIdentifier: Client] = [:]
     private let queue = DispatchQueue(label: "islet.agents.hook-server")
 
     public init(port: UInt16 = HookServer.defaultPort, token: String, handler: @escaping Handler) {
@@ -73,28 +80,65 @@ public actor HookServer {
         listener != nil
     }
 
-    public func stop() {
-        listener?.cancel()
-        listener = nil
-        for connection in connections.values {
-            connection.cancel()
+    public func stop() async {
+        for id in clients.keys {
+            close(id)
         }
-        connections.removeAll()
+        guard let listener else { return }
+        self.listener = nil
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let resumed = Resumed()
+            listener.stateUpdateHandler = { state in
+                if case .cancelled = state, resumed.claim() { continuation.resume() }
+            }
+            listener.cancel()
+        }
     }
 
     private func accept(_ connection: NWConnection) {
-        connections[ObjectIdentifier(connection)] = connection
+        let id = ObjectIdentifier(connection)
+        clients[id] = Client(connection: connection, timeout: closeTask(for: id, after: Self.requestTimeout))
         connection.start(queue: queue)
         receive(on: connection, buffer: Data())
+    }
+
+    private func closeTask(for id: ObjectIdentifier, after delay: Duration) -> Task<Void, Never> {
         Task {
-            try? await Task.sleep(for: Self.connectionTimeout)
-            close(connection)
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled else { return }
+            close(id)
         }
     }
 
     private func close(_ connection: NWConnection) {
-        guard connections.removeValue(forKey: ObjectIdentifier(connection)) != nil else { return }
-        connection.cancel()
+        close(ObjectIdentifier(connection))
+    }
+
+    private func close(_ id: ObjectIdentifier) {
+        guard let client = clients.removeValue(forKey: id) else { return }
+        client.timeout?.cancel()
+        client.work?.cancel()
+        client.connection.cancel()
+    }
+
+    private func handle(_ request: HTTPRequest, on connection: NWConnection) {
+        let id = ObjectIdentifier(connection)
+        guard var client = clients[id] else { return }
+        client.timeout?.cancel()
+        client.timeout = closeTask(for: id, after: Self.replyTimeout)
+        client.work = Task { await respond(to: request, on: connection) }
+        clients[id] = client
+        watchForDisconnect(on: connection)
+    }
+
+    private nonisolated func watchForDisconnect(on connection: NWConnection) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 1 << 16) { [self] _, _, isComplete, error in
+            if error != nil || isComplete {
+                Task { await self.close(connection) }
+            } else {
+                self.watchForDisconnect(on: connection)
+            }
+        }
     }
 
     private nonisolated func receive(on connection: NWConnection, buffer: Data) {
@@ -103,7 +147,7 @@ public actor HookServer {
             if let data { buffer.append(data) }
             switch HTTPRequest.parse(buffer, maxBodySize: Self.maxBodySize) {
             case .complete(let request):
-                Task { await self.respond(to: request, on: connection) }
+                Task { await self.handle(request, on: connection) }
             case .invalid:
                 Task { await self.send(.json(400, #"{"error":"bad request"}"#), on: connection) }
             case .tooLarge(let remaining):
@@ -139,8 +183,9 @@ public actor HookServer {
         } else if request.method != "POST" || request.path != Self.hookPath {
             response = .json(404, #"{"error":"not found"}"#)
         } else if let event = try? HookEvent.decode(request.body, host: request.headers["x-islet-host"]) {
-            await handler(event)
-            response = .json()
+            let reply = await handler(event)
+            guard !Task.isCancelled else { return }
+            response = .json(200, reply.body)
         } else {
             response = .json(400, #"{"error":"invalid hook payload"}"#)
         }
@@ -152,6 +197,16 @@ public actor HookServer {
             guard let self else { return }
             Task { await self.close(connection) }
         })
+    }
+}
+
+public struct HookReply: Sendable, Equatable {
+    public static let empty = HookReply(body: "{}")
+
+    public var body: String
+
+    public init(body: String) {
+        self.body = body
     }
 }
 

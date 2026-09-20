@@ -13,6 +13,7 @@ public final class AgentSessionStore {
     private let now: () -> Date
     private var dismissedIDs: Set<String> = []
     @ObservationIgnored private var expiryTask: Task<Void, Never>?
+    @ObservationIgnored private var decisions: [UUID: CheckedContinuation<PermissionDecision?, Never>] = [:]
 
     public init(now: @escaping () -> Date = Date.init) {
         self.now = now
@@ -26,10 +27,21 @@ public final class AgentSessionStore {
         sessions.filter { $0.state == .working }
     }
 
+    public func handle(_ event: HookEvent) async -> HookReply {
+        let before = Set(sessions.first { $0.id == event.sessionID }?.pendingRequests.map(\.id) ?? [])
+        apply(event)
+        guard event.kind == .permissionRequest,
+              let request = sessions.first(where: { $0.id == event.sessionID })?.pendingRequests.first(where: { !before.contains($0.id) }),
+              let decision = await awaitDecision(for: request.id)
+        else { return .empty }
+        return decision.reply(for: request)
+    }
+
     public func apply(_ event: HookEvent) {
         let timestamp = now()
         if event.kind == .sessionEnd {
             dismissedIDs.remove(event.sessionID)
+            withdrawPendingRequest(for: event.sessionID)
             sessions.removeAll { $0.id == event.sessionID }
             onChange?()
             return
@@ -57,6 +69,10 @@ public final class AgentSessionStore {
         if let cwd = event.cwd { session.cwd = cwd }
         if let host = event.host { session.host = host }
         session.updatedAt = timestamp
+        for request in session.pendingRequests where Self.withdraws(request, on: event) {
+            resolve(request.id, with: nil)
+            session.pendingRequests.removeAll { $0.id == request.id }
+        }
 
         switch event.kind {
         case .sessionStart:
@@ -71,12 +87,19 @@ public final class AgentSessionStore {
             session.activity = event.activityDescription
             session.state = .working
         case .permissionRequest:
-            session.state = .needsAttention(event.activityDescription.map { "Wants to \($0)" } ?? "Needs permission")
+            if let toolName = event.toolName, let request = PendingRequest(toolName: toolName, toolInput: event.toolInput) {
+                session.pendingRequests.append(request)
+                session.state = .needsAttention(Self.attentionReason(for: session.pendingRequests[0]))
+            } else {
+                session.state = .needsAttention(event.activityDescription.map { "Wants to \($0)" } ?? "Needs permission")
+            }
         case .notification:
             switch event.notificationType {
             case "permission_prompt":
+                guard session.pendingRequests.isEmpty else { break }
                 session.state = .needsAttention(event.message ?? "Needs permission")
             case "elicitation_dialog":
+                guard session.pendingRequests.isEmpty else { break }
                 session.state = .needsAttention(event.message ?? "Waiting for your answer")
             case "idle_prompt":
                 guard session.state != .done else { return }
@@ -103,8 +126,74 @@ public final class AgentSessionStore {
     public func dismiss(_ id: String) {
         guard sessions.contains(where: { $0.id == id }) else { return }
         dismissedIDs.insert(id)
+        withdrawPendingRequest(for: id)
         sessions.removeAll { $0.id == id }
         onChange?()
+    }
+
+    public func decide(_ requestID: UUID, _ decision: PermissionDecision) {
+        guard let index = sessions.firstIndex(where: { $0.pendingRequests.contains { $0.id == requestID } }),
+              let request = sessions[index].pendingRequests.first(where: { $0.id == requestID })
+        else { return }
+        resolve(requestID, with: decision)
+        sessions[index].pendingRequests.removeAll { $0.id == requestID }
+        sessions[index].updatedAt = now()
+        if decision == .deny {
+            sessions[index].activity = "Denied \(request.toolName)"
+        }
+        settleState(at: index)
+        onChange?()
+    }
+
+    private func settleState(at index: Int) {
+        if let next = sessions[index].pendingRequests.first {
+            sessions[index].state = .needsAttention(Self.attentionReason(for: next))
+        } else {
+            sessions[index].state = .working
+        }
+    }
+
+    private func awaitDecision(for requestID: UUID) async -> PermissionDecision? {
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                decisions[requestID] = continuation
+            }
+        } onCancel: {
+            Task { @MainActor in self.withdraw(requestID) }
+        }
+    }
+
+    private func withdraw(_ requestID: UUID) {
+        resolve(requestID, with: nil)
+        guard let index = sessions.firstIndex(where: { $0.pendingRequests.contains { $0.id == requestID } }) else { return }
+        sessions[index].pendingRequests.removeAll { $0.id == requestID }
+        settleState(at: index)
+        onChange?()
+    }
+
+    private func withdrawPendingRequest(for sessionID: String) {
+        for request in sessions.first(where: { $0.id == sessionID })?.pendingRequests ?? [] {
+            resolve(request.id, with: nil)
+        }
+    }
+
+    private static func withdraws(_ request: PendingRequest, on event: HookEvent) -> Bool {
+        switch event.kind {
+        case .userPromptSubmit, .stop, .sessionStart, .sessionEnd: true
+        case .postToolUse: event.toolName == request.toolName && event.toolInput == request.toolInput
+        case .preToolUse, .permissionRequest, .notification: false
+        }
+    }
+
+    private func resolve(_ requestID: UUID, with decision: PermissionDecision?) {
+        decisions.removeValue(forKey: requestID)?.resume(returning: decision)
+    }
+
+    private static func attentionReason(for request: PendingRequest) -> String {
+        switch request.kind {
+        case .permission(let tool, _): request.activityDescription.map { "Wants to \($0)" } ?? "Wants to use \(tool)"
+        case .question(let questions): questions.count == 1 ? "Has a question" : "Has \(questions.count) questions"
+        }
     }
 
     public var pillStatus: PillStatus? {

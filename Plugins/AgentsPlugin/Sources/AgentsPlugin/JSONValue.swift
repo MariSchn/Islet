@@ -1,6 +1,6 @@
 import Foundation
 
-public enum JSONValue: Sendable, Equatable, Decodable {
+public enum JSONValue: Sendable, Equatable, Codable {
     case string(String)
     case number(Double)
     case bool(Bool)
@@ -25,6 +25,18 @@ public enum JSONValue: Sendable, Equatable, Decodable {
         }
     }
 
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .string(let value): try container.encode(value)
+        case .number(let value): try container.encode(value)
+        case .bool(let value): try container.encode(value)
+        case .null: try container.encodeNil()
+        case .array(let value): try container.encode(value)
+        case .object(let value): try container.encode(value)
+        }
+    }
+
     public subscript(key: String) -> JSONValue? {
         if case .object(let object) = self { return object[key] }
         return nil
@@ -32,6 +44,16 @@ public enum JSONValue: Sendable, Equatable, Decodable {
 
     public var stringValue: String? {
         if case .string(let value) = self { return value }
+        return nil
+    }
+
+    public var boolValue: Bool? {
+        if case .bool(let value) = self { return value }
+        return nil
+    }
+
+    public var arrayValue: [JSONValue]? {
+        if case .array(let value) = self { return value }
         return nil
     }
 }

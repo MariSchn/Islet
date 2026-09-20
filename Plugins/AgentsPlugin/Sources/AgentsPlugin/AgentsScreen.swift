@@ -47,11 +47,15 @@ struct AgentsScreen: View {
             ScrollView {
                 VStack(spacing: AgentsPlugin.rowSpacing) {
                     ForEach(controller.store.sessions) { session in
-                        SessionRow(session: session) { controller.store.dismiss(session.id) }
+                        SessionRow(
+                            session: session,
+                            dismiss: { controller.store.dismiss(session.id) },
+                            decide: { controller.decide($0, $1) }
+                        )
                     }
                 }
             }
-            .scrollDisabled(controller.store.sessions.count <= AgentsPlugin.maxVisibleRows)
+            .scrollDisabled(AgentsPlugin.contentSize(for: controller.store.sessions).height < AgentsPlugin.maxContentHeight)
         }
     }
 }
@@ -59,9 +63,25 @@ struct AgentsScreen: View {
 private struct SessionRow: View {
     let session: AgentSession
     let dismiss: () -> Void
+    let decide: (UUID, PermissionDecision) -> Void
     @State private var isHovering = false
 
     var body: some View {
+        VStack(spacing: 0) {
+            summary
+                .frame(height: AgentsPlugin.rowHeight)
+            if let request = session.pendingRequest {
+                RequestView(request: request) { decide(request.id, $0) }
+                    .id(request.id)
+                    .frame(height: AgentsPlugin.requestHeight(for: request))
+            }
+        }
+        .padding(.horizontal, 10)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.white.opacity(isHovering ? 0.1 : 0.06)))
+        .onHover { isHovering = $0 }
+    }
+
+    private var summary: some View {
         HStack(alignment: .center, spacing: 10) {
             StateIndicator(state: session.state)
                 .frame(width: 22, height: 22)
@@ -77,7 +97,17 @@ private struct SessionRow: View {
                             .lineLimit(1)
                     }
                     Spacer(minLength: 0)
-                    StateLabel(session: session)
+                    ZStack(alignment: .trailing) {
+                        StateLabel(session: session)
+                            .opacity(isHovering ? 0 : 1)
+                        Button(action: dismiss) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Remove from list")
+                        .opacity(isHovering ? 1 : 0)
+                    }
                 }
                 if let task = session.task {
                     Text(task)
@@ -91,20 +121,6 @@ private struct SessionRow: View {
                     .lineLimit(1)
             }
         }
-        .padding(.horizontal, 10)
-        .frame(height: AgentsPlugin.rowHeight)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.white.opacity(isHovering ? 0.1 : 0.06)))
-        .overlay(alignment: .topTrailing) {
-            Button(action: dismiss) {
-                Image(systemName: "xmark.circle.fill")
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            .help("Remove from list")
-            .padding(6)
-            .opacity(isHovering ? 1 : 0)
-        }
-        .onHover { isHovering = $0 }
     }
 
     private var detail: String {
@@ -114,6 +130,139 @@ private struct SessionRow: View {
         case .needsAttention(let reason): reason
         case .done: "Finished"
         }
+    }
+}
+
+private struct RequestView: View {
+    let request: PendingRequest
+    let decide: (PermissionDecision) -> Void
+
+    var body: some View {
+        switch request.kind {
+        case .permission(_, let detail):
+            VStack(alignment: .leading, spacing: AgentsPlugin.requestSpacing) {
+                Text(detail ?? request.toolName)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, minHeight: AgentsPlugin.requestDetailHeight, maxHeight: AgentsPlugin.requestDetailHeight, alignment: .topLeading)
+                HStack(spacing: AgentsPlugin.requestSpacing) {
+                    RequestButton("Allow", systemImage: "checkmark", tint: .green) { decide(.allow) }
+                    RequestButton("Deny", systemImage: "xmark", tint: .red) { decide(.deny) }
+                }
+            }
+            .padding(.vertical, AgentsPlugin.requestPadding)
+        case .question(let questions):
+            QuestionView(questions: questions) { decide(.answers($0)) }
+                .padding(.vertical, AgentsPlugin.requestPadding)
+        }
+    }
+}
+
+private struct QuestionView: View {
+    let questions: [PendingRequest.Question]
+    let submit: ([String: String]) -> Void
+    @State private var index = 0
+    @State private var answers: [String: String] = [:]
+    @State private var selection: [Int] = []
+
+    private var question: PendingRequest.Question { questions[index] }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AgentsPlugin.requestSpacing) {
+            VStack(alignment: .leading, spacing: 2) {
+                if let header = question.header {
+                    Text(questions.count > 1 ? "\(header) · \(index + 1) of \(questions.count)" : header)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                        .textCase(.uppercase)
+                }
+                Text(question.text)
+                    .font(.system(size: 12))
+                    .lineLimit(2)
+            }
+            .frame(maxWidth: .infinity, minHeight: AgentsPlugin.questionDetailHeight, maxHeight: AgentsPlugin.questionDetailHeight, alignment: .topLeading)
+            ForEach(Array(question.options.enumerated()), id: \.offset) { offset, option in
+                RequestButton(
+                    option.label,
+                    subtitle: option.description,
+                    systemImage: question.multiSelect ? (selection.contains(offset) ? "checkmark.square.fill" : "square") : "arrow.turn.down.right",
+                    tint: .accentColor,
+                    fullWidth: true
+                ) { choose(offset) }
+            }
+            if question.multiSelect {
+                RequestButton(index + 1 < questions.count ? "Next" : "Submit", systemImage: "checkmark", tint: .green) {
+                    record(selection.sorted().map { question.options[$0].label }.joined(separator: ", "))
+                }
+                .disabled(selection.isEmpty)
+                .opacity(selection.isEmpty ? 0.4 : 1)
+            }
+        }
+        .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    private func choose(_ offset: Int) {
+        if question.multiSelect {
+            if let position = selection.firstIndex(of: offset) {
+                selection.remove(at: position)
+            } else {
+                selection.append(offset)
+            }
+        } else {
+            record(question.options[offset].label)
+        }
+    }
+
+    private func record(_ answer: String) {
+        answers[question.text] = answer
+        selection = []
+        if index + 1 < questions.count {
+            index += 1
+        } else {
+            submit(answers)
+        }
+    }
+}
+
+private struct RequestButton: View {
+    let title: String
+    let subtitle: String?
+    let systemImage: String
+    let tint: Color
+    let fullWidth: Bool
+    let action: () -> Void
+
+    init(_ title: String, subtitle: String? = nil, systemImage: String, tint: Color, fullWidth: Bool = false, action: @escaping () -> Void) {
+        self.title = title
+        self.subtitle = subtitle
+        self.systemImage = systemImage
+        self.tint = tint
+        self.fullWidth = fullWidth
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Label(title, systemImage: systemImage)
+                    .font(.system(size: 11, weight: .medium))
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+                .padding(.horizontal, 10)
+                .frame(maxWidth: fullWidth ? .infinity : nil, alignment: .leading)
+                .frame(height: AgentsPlugin.requestButtonHeight)
+                .background(Capsule().fill(tint.opacity(0.18)))
+                .foregroundStyle(tint)
+        }
+        .buttonStyle(.plain)
     }
 }
 

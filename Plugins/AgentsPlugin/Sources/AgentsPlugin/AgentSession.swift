@@ -30,9 +30,12 @@ public struct AgentSession: Identifiable, Sendable, Equatable {
     public var task: String?
     public var activity: String?
     public var state: State
+    public var pendingRequests: [PendingRequest] = []
     public var startedAt: Date
     public var turnStartedAt: Date
     public var updatedAt: Date
+
+    public var pendingRequest: PendingRequest? { pendingRequests.first }
 
     public var projectName: String {
         guard let cwd, !cwd.isEmpty else { return agent.displayName }

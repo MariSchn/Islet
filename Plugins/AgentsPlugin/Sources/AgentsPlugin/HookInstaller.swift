@@ -20,7 +20,7 @@ public struct HookInstaller: Sendable {
     public var script: String {
         """
         #!/bin/sh
-        curl -sf --connect-timeout 1 -m 5 -X POST "http://127.0.0.1:\(port)\(HookServer.hookPath)" \\
+        curl -sf --connect-timeout 1 -m "${1:-5}" -X POST "http://127.0.0.1:\(port)\(HookServer.hookPath)" \\
           -H "Content-Type: application/json" \\
           -H "Expect:" \\
           -H "Authorization: Bearer \(token)" \\
@@ -32,10 +32,20 @@ public struct HookInstaller: Sendable {
     }
 
     public var isInstalled: Bool {
+        hasAllHooks && isScriptCurrent
+    }
+
+    public var needsUpgrade: Bool {
+        (hasAllHooks || FileManager.default.fileExists(atPath: scriptURL.path)) && !isInstalled
+    }
+
+    private var hasAllHooks: Bool {
         guard let settings = try? readSettings(), let hooks = settings["hooks"] as? [String: Any] else { return false }
-        let hasAllEvents = Self.events.allSatisfy { Self.containsHook(hooks[$0]) }
-        let script = try? String(contentsOf: scriptURL, encoding: .utf8)
-        return hasAllEvents && script == self.script
+        return Self.events.allSatisfy { Self.containsHook(hooks[$0]) }
+    }
+
+    private var isScriptCurrent: Bool {
+        (try? String(contentsOf: scriptURL, encoding: .utf8)) == script
     }
 
     public func install() throws {
@@ -47,7 +57,7 @@ public struct HookInstaller: Sendable {
         var hooks = settings["hooks"] as? [String: Any] ?? [:]
         for event in Self.events {
             var groups = Self.withoutIsletHooks(hooks[event])
-            groups.append(["hooks": [["type": "command", "command": scriptURL.path, "timeout": 10]]])
+            groups.append(["hooks": [Self.hookEntry(for: event, script: scriptURL.path)]])
             hooks[event] = groups
         }
         settings["hooks"] = hooks
@@ -66,6 +76,13 @@ public struct HookInstaller: Sendable {
         try? FileManager.default.removeItem(at: scriptURL)
     }
 
+    static func hookEntry(for event: String, script: String) -> [String: Any] {
+        let blocking = event == "PermissionRequest"
+        let quoted = "'" + script.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        let command = blocking ? "\(quoted) \(Int(HookServer.replyTimeout.components.seconds))" : quoted
+        return ["type": "command", "command": command, "timeout": blocking ? Int(HookServer.replyTimeout.components.seconds) + 5 : 10]
+    }
+
     private static func containsHook(_ groups: Any?) -> Bool {
         let all = groups as? [[String: Any]] ?? []
         return withoutIsletHooks(all).count < all.count
@@ -74,7 +91,7 @@ public struct HookInstaller: Sendable {
     private static func withoutIsletHooks(_ groups: Any?) -> [[String: Any]] {
         (groups as? [[String: Any]] ?? []).filter { group in
             let commands = (group["hooks"] as? [[String: Any]] ?? []).compactMap { $0["command"] as? String }
-            return !commands.contains { $0.hasSuffix(scriptName) }
+            return !commands.contains { $0.contains(scriptName) }
         }
     }
 
