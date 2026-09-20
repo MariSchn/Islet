@@ -33,6 +33,15 @@ struct HookEventTests {
         #expect(TerminalApp(identifier: "ghostty")?.targeting == .application)
     }
 
+    @Test func describesLineCountsForFileTools() {
+        #expect(ActivityEntry.detail(for: "Edit", input: .object(["old_string": .string("a\nb"), "new_string": .string("a\nb\nc")])) == "+3 −2")
+        #expect(ActivityEntry.detail(for: "Write", input: .object(["content": .string("x\ny\n")])) == "3 lines")
+        #expect(ActivityEntry.detail(for: "Read", input: .object(["offset": .number(10), "limit": .number(20)])) == "lines 10–29")
+        #expect(ActivityEntry.detail(for: "Read", input: .object(["file_path": .string("/a")])) == nil)
+        #expect(ActivityEntry.detail(for: "Grep", input: .object(["path": .string("/Users/me/repo/Sources")])) == "Sources")
+        #expect(ActivityEntry.detail(for: "Bash", input: .object(["command": .string("ls")])) == nil)
+    }
+
     @Test func rejectsUnknownEvents() {
         #expect(throws: (any Error).self) {
             try HookEvent.decode(Data(#"{"session_id":"a","hook_event_name":"Nope"}"#.utf8))
@@ -42,6 +51,33 @@ struct HookEventTests {
 
 @MainActor
 struct AgentSessionStoreTests {
+    @Test func recordsRecentToolCallsAndPlans() {
+        let store = AgentSessionStore()
+        let read = JSONValue.object(["file_path": .string("/a/b.swift")])
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "s1", toolName: "Read", toolInput: read))
+        #expect(store.sessions[0].activities.map(\.title) == ["Read b.swift"])
+        #expect(store.sessions[0].activities[0].isComplete == false)
+
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "s1", toolName: "Read", toolInput: read))
+        #expect(store.sessions[0].activities.count == 1)
+        #expect(store.sessions[0].activities[0].isComplete == true)
+
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "s1", toolName: "Bash", toolInput: .object(["command": .string("ls")])))
+        #expect(store.sessions[0].activities.map(\.title) == ["Read b.swift", "$ ls"])
+
+        for index in 0..<ActivityEntry.limit {
+            store.apply(HookEvent(kind: .postToolUse, sessionID: "s1", toolName: "Grep", toolInput: .object(["pattern": .string("\(index)")])))
+        }
+        #expect(store.sessions[0].activities.count == ActivityEntry.limit)
+        #expect(store.sessions[0].activities.first?.title == "Search 0")
+
+        #expect(store.sessions[0].plan == nil)
+        store.apply(HookEvent(kind: .permissionRequest, sessionID: "s1", toolName: "ExitPlanMode", toolInput: .object(["plan": .string("# Do it\n- step")])))
+        #expect(store.sessions[0].plan == "# Do it\n- step")
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s1", prompt: "go"))
+        #expect(store.sessions[0].plan == "# Do it\n- step")
+    }
+
     @Test func walksThroughSessionLifecycle() {
         let store = AgentSessionStore()
         store.apply(HookEvent(kind: .sessionStart, sessionID: "s1", cwd: "/tmp/proj"))
@@ -274,22 +310,38 @@ struct AgentSessionStoreTests {
 }
 
 @MainActor
+struct MarkdownTextTests {
+    @Test func splitsMarkdownIntoBlocks() {
+        let blocks = MarkdownText.parse("# Title\n\nSome *text*\nthat wraps\n\n- one\n* two\n1. first\n```\nlet x = 1\n```\n")
+        let expected: [MarkdownText.Block] = [
+            .heading("Title", level: 1),
+            .paragraph("Some *text* that wraps"),
+            .bullet("one"),
+            .bullet("two"),
+            .numbered("first", number: "1"),
+            .code("let x = 1"),
+        ]
+        #expect(blocks == expected)
+    }
+}
+
+@MainActor
 struct AgentsPluginSizingTests {
     @Test func contentGrowsWithSessionsUpToAScrollingMaximum() {
         func sessions(_ count: Int) -> [AgentSession] {
             (0..<count).map { AgentSession(id: "\($0)", agent: .claudeCode, host: nil, cwd: nil, task: nil, activity: nil, state: .working, startedAt: .now, turnStartedAt: .now, updatedAt: .now) }
         }
-        #expect(AgentsPlugin.contentSize(for: []) == CGSize(width: 520, height: 130))
-        #expect(AgentsPlugin.contentSize(for: sessions(1)) == CGSize(width: 520, height: 78))
-        #expect(AgentsPlugin.contentSize(for: sessions(2)) == CGSize(width: 520, height: 136))
-        #expect(AgentsPlugin.contentSize(for: sessions(4)) == AgentsPlugin.contentSize(for: sessions(9)))
+        #expect(AgentsPlugin.contentSize(for: [], expanded: []) == CGSize(width: 520, height: 130))
+        #expect(AgentsPlugin.contentSize(for: sessions(1), expanded: []) == CGSize(width: 520, height: 78))
+        #expect(AgentsPlugin.contentSize(for: sessions(2), expanded: []) == CGSize(width: 520, height: 136))
+        #expect(AgentsPlugin.contentSize(for: sessions(4), expanded: []) == AgentsPlugin.contentSize(for: sessions(9), expanded: []))
     }
 
     @Test func pendingRequestsMakeRowsTaller() {
         var session = AgentSession(id: "a", agent: .claudeCode, host: nil, cwd: nil, task: nil, activity: nil, state: .working, startedAt: .now, turnStartedAt: .now, updatedAt: .now)
-        let plain = AgentsPlugin.contentSize(for: [session]).height
+        let plain = AgentsPlugin.contentSize(for: [session], expanded: []).height
         session.pendingRequests = [PendingRequest(toolName: "Bash", toolInput: .object(["command": .string("ls")]))!]
-        let permission = AgentsPlugin.contentSize(for: [session]).height
+        let permission = AgentsPlugin.contentSize(for: [session], expanded: []).height
         #expect(permission > plain)
         session.pendingRequests = [PendingRequest(toolName: "AskUserQuestion", toolInput: .object([
             "questions": .array([
@@ -297,9 +349,21 @@ struct AgentsPluginSizingTests {
                 .object(["question": .string("Multi?"), "multiSelect": .bool(true), "options": .array([.object(["label": .string("X")])])]),
             ]),
         ]))!]
-        let question = AgentsPlugin.contentSize(for: [session]).height
+        let question = AgentsPlugin.contentSize(for: [session], expanded: []).height
         #expect(question > permission)
         #expect(question <= AgentsPlugin.maxContentHeight)
+    }
+
+    @Test func expandedRowsGrowWithActivityAndPlan() {
+        var session = AgentSession(id: "a", agent: .claudeCode, host: nil, cwd: nil, task: nil, activity: nil, state: .working, startedAt: .now, turnStartedAt: .now, updatedAt: .now)
+        let collapsed = AgentsPlugin.contentSize(for: [session], expanded: []).height
+        let empty = AgentsPlugin.contentSize(for: [session], expanded: ["a"]).height
+        #expect(empty > collapsed)
+        session.activities = (0..<3).map { _ in ActivityEntry(event: HookEvent(kind: .preToolUse, sessionID: "a", toolName: "Read"), at: .now, isComplete: true) }
+        let withActivity = AgentsPlugin.contentSize(for: [session], expanded: ["a"]).height
+        #expect(withActivity == empty + 2 * AgentsPlugin.activityEntryHeight)
+        session.plan = "# Plan"
+        #expect(AgentsPlugin.contentSize(for: [session], expanded: ["a"]).height > withActivity)
     }
 }
 

@@ -73,6 +73,9 @@ public final class AgentSessionStore {
         if let terminal = event.terminal { session.terminal = terminal }
         if let tty = event.tty { session.tty = tty }
         session.updatedAt = timestamp
+        if event.toolName == "ExitPlanMode", let plan = event.toolInput?["plan"]?.stringValue {
+            session.plan = plan
+        }
         for request in session.pendingRequests where Self.withdraws(request, on: event) {
             resolve(request.id, with: nil)
             session.pendingRequests.removeAll { $0.id == request.id }
@@ -90,6 +93,7 @@ public final class AgentSessionStore {
         case .preToolUse, .postToolUse:
             session.activity = event.activityDescription
             session.state = .working
+            Self.record(event, in: &session, at: timestamp)
         case .permissionRequest:
             if let toolName = event.toolName, let request = PendingRequest(toolName: toolName, toolInput: event.toolInput) {
                 session.pendingRequests.append(request)
@@ -178,6 +182,17 @@ public final class AgentSessionStore {
     private func withdrawPendingRequest(for sessionID: String) {
         for request in sessions.first(where: { $0.id == sessionID })?.pendingRequests ?? [] {
             resolve(request.id, with: nil)
+        }
+    }
+
+    private static func record(_ event: HookEvent, in session: inout AgentSession, at timestamp: Date) {
+        if event.kind == .postToolUse, let index = session.activities.lastIndex(where: { !$0.isComplete && $0.matches(event) }) {
+            session.activities[index].isComplete = true
+            return
+        }
+        session.activities.append(ActivityEntry(event: event, at: timestamp, isComplete: event.kind == .postToolUse))
+        if session.activities.count > ActivityEntry.limit {
+            session.activities.removeFirst(session.activities.count - ActivityEntry.limit)
         }
     }
 

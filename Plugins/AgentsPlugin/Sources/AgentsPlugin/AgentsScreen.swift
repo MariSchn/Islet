@@ -3,6 +3,7 @@ import SwiftUI
 
 struct AgentsScreen: View {
     let controller: AgentsController
+    @Environment(\.notchAnimation) private var animation
     @State private var installError: String?
 
     var body: some View {
@@ -51,13 +52,17 @@ struct AgentsScreen: View {
                         SessionRow(
                             session: session,
                             terminal: session.terminal.flatMap(InstalledTerminal.init),
+                            isExpanded: controller.expandedSessionIDs.contains(session.id),
                             dismiss: { controller.store.dismiss(session.id) },
+                            toggleExpanded: { controller.toggleExpanded(session.id) },
                             decide: { controller.decide($0, $1) }
                         )
                     }
                 }
+                .animation(animation, value: controller.expandedSessionIDs)
             }
-            .scrollDisabled(AgentsPlugin.contentSize(for: controller.store.sessions).height < AgentsPlugin.maxContentHeight)
+            .scrollIndicators(.never)
+            .scrollBounceBehavior(.basedOnSize)
         }
     }
 }
@@ -65,9 +70,12 @@ struct AgentsScreen: View {
 private struct SessionRow: View {
     let session: AgentSession
     let terminal: InstalledTerminal?
+    let isExpanded: Bool
     let dismiss: () -> Void
+    let toggleExpanded: () -> Void
     let decide: (UUID, PermissionDecision) -> Void
     @State private var isHovering = false
+    @State private var isHoveringTerminal = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -78,12 +86,17 @@ private struct SessionRow: View {
                     .id(request.id)
                     .frame(height: AgentsPlugin.requestHeight(for: request))
             }
+            ActivityView(session: session)
+                .frame(height: AgentsPlugin.detailHeight(for: session), alignment: .top)
+                .frame(height: isExpanded ? AgentsPlugin.detailHeight(for: session) : 0, alignment: .top)
+                .clipped()
+                .allowsHitTesting(isExpanded)
+                .accessibilityHidden(!isExpanded)
         }
         .padding(.horizontal, 10)
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.white.opacity(isHovering ? 0.1 : 0.06)))
         .contentShape(Rectangle())
-        .onTapGesture { terminal?.activate(tty: session.tty, cwd: session.cwd) }
-        .help(terminal.map { "Show in \($0.name)" } ?? "")
+        .onTapGesture(perform: toggleExpanded)
         .onHover { isHovering = $0 }
     }
 
@@ -97,9 +110,16 @@ private struct SessionRow: View {
                         .font(.system(size: 13, weight: .semibold))
                         .lineLimit(1)
                     if let terminal {
-                        Image(nsImage: terminal.icon)
-                            .resizable()
-                            .frame(width: 14, height: 14)
+                        Button { terminal.activate(tty: session.tty, cwd: session.cwd) } label: {
+                            Image(nsImage: terminal.icon)
+                                .resizable()
+                                .frame(width: 16, height: 16)
+                                .padding(2)
+                                .background(RoundedRectangle(cornerRadius: 5).fill(.white.opacity(isHoveringTerminal ? 0.18 : 0)))
+                        }
+                        .buttonStyle(.plain)
+                        .onHover { isHoveringTerminal = $0 }
+                        .help("Show in \(terminal.name)")
                     }
                     if let host = session.host {
                         Text(host)
@@ -119,6 +139,11 @@ private struct SessionRow: View {
                         .help("Remove from list")
                         .opacity(isHovering ? 1 : 0)
                     }
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                        .frame(width: 16, height: 16)
                 }
                 if let task = session.task {
                     Text(task)
@@ -141,6 +166,74 @@ private struct SessionRow: View {
         case .needsAttention(let reason): reason
         case .done: "Finished"
         }
+    }
+}
+
+private struct ActivityView: View {
+    let session: AgentSession
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let plan = session.plan {
+                SectionHeader("Plan")
+                ScrollView {
+                    MarkdownText(plan)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .scrollIndicators(.never)
+                .scrollBounceBehavior(.basedOnSize)
+                .frame(height: AgentsPlugin.planHeight)
+                .padding(.bottom, AgentsPlugin.requestSpacing)
+            }
+            SectionHeader("Recent activity")
+            if session.activities.isEmpty {
+                Text("No tool calls yet")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                    .frame(height: AgentsPlugin.activityEntryHeight)
+            }
+            ForEach(session.activities) { entry in
+                HStack(spacing: 6) {
+                    Image(systemName: entry.systemImage)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 12)
+                    Text(entry.title)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(entry.isComplete ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    if let detail = entry.detail {
+                        Text(detail)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                    }
+                    if !entry.isComplete {
+                        ProgressView()
+                            .controlSize(.mini)
+                    }
+                }
+                .frame(height: AgentsPlugin.activityEntryHeight)
+            }
+        }
+        .padding(.vertical, AgentsPlugin.requestPadding)
+    }
+}
+
+private struct SectionHeader: View {
+    let title: String
+
+    init(_ title: String) {
+        self.title = title
+    }
+
+    var body: some View {
+        Text(title)
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(.tertiary)
+            .textCase(.uppercase)
+            .frame(height: AgentsPlugin.activityHeaderHeight, alignment: .leading)
     }
 }
 

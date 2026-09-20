@@ -15,16 +15,28 @@ public final class AgentsPlugin: IsletPlugin {
     static let questionDetailHeight: CGFloat = 46
     static let requestButtonHeight: CGFloat = 24
     static let requestSpacing: CGFloat = 6
+    static let activityEntryHeight: CGFloat = 18
+    static let activityHeaderHeight: CGFloat = 16
+    static let planHeight: CGFloat = 140
     static let maxContentHeight = 2 * contentPadding + CGFloat(maxVisibleRows) * rowHeight + CGFloat(maxVisibleRows - 1) * rowSpacing
 
-    static func contentSize(for sessions: [AgentSession]) -> CGSize {
+    static func contentSize(for sessions: [AgentSession], expanded: Set<String>) -> CGSize {
         guard !sessions.isEmpty else { return CGSize(width: contentWidth, height: emptyContentHeight) }
-        let rows = sessions.map(rowHeight(for:)).reduce(0, +) + CGFloat(sessions.count - 1) * rowSpacing
+        let rows = sessions.map { rowHeight(for: $0, expanded: expanded.contains($0.id)) }.reduce(0, +) + CGFloat(sessions.count - 1) * rowSpacing
         return CGSize(width: contentWidth, height: min(2 * contentPadding + rows, maxContentHeight))
     }
 
-    static func rowHeight(for session: AgentSession) -> CGFloat {
-        rowHeight + (session.pendingRequest.map(requestHeight(for:)) ?? 0)
+    static func rowHeight(for session: AgentSession, expanded: Bool) -> CGFloat {
+        rowHeight + (session.pendingRequest.map(requestHeight(for:)) ?? 0) + (expanded ? detailHeight(for: session) : 0)
+    }
+
+    static func detailHeight(for session: AgentSession) -> CGFloat {
+        var height = 2 * requestPadding
+        if session.plan != nil {
+            height += activityHeaderHeight + planHeight + requestSpacing
+        }
+        height += activityHeaderHeight + CGFloat(max(session.activities.count, 1)) * activityEntryHeight
+        return height
     }
 
     static func requestHeight(for request: PendingRequest) -> CGFloat {
@@ -57,12 +69,12 @@ public final class AgentsPlugin: IsletPlugin {
         )
         controller.store.onChange = { [context, controller] in
             context.pillStatus = controller.store.pillStatus
-            context.contentSize = Self.contentSize(for: controller.store.sessions)
+            context.contentSize = Self.contentSize(for: controller.store.sessions, expanded: controller.expandedSessionIDs)
         }
     }
 
     public func activate() async throws {
-        context.contentSize = Self.contentSize(for: controller.store.sessions)
+        context.contentSize = Self.contentSize(for: controller.store.sessions, expanded: controller.expandedSessionIDs)
         await controller.start()
     }
 
@@ -91,6 +103,7 @@ public final class AgentsController {
     public let installer: HookInstaller
     public private(set) var isHookInstalled: Bool
     public private(set) var serverError: String?
+    public private(set) var expandedSessionIDs: Set<String> = []
 
     private let server: HookServer
 
@@ -137,5 +150,12 @@ public final class AgentsController {
 
     public func decide(_ requestID: UUID, _ decision: PermissionDecision) {
         store.decide(requestID, decision)
+    }
+
+    public func toggleExpanded(_ sessionID: String) {
+        if expandedSessionIDs.remove(sessionID) == nil {
+            expandedSessionIDs.insert(sessionID)
+        }
+        store.onChange?()
     }
 }
