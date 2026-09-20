@@ -74,7 +74,7 @@ public struct PendingRequest: Sendable, Equatable, Identifiable {
 
     private static func permissionDetail(tool: String, input: JSONValue?) -> String? {
         switch tool {
-        case "Bash": input?["command"]?.stringValue
+        case "Bash", "shell", "exec_command": HookEvent.command(in: input)
         case "Read", "Edit", "MultiEdit", "Write": input?["file_path"]?.stringValue
         case "NotebookEdit": input?["notebook_path"]?.stringValue
         case "WebFetch": input?["url"]?.stringValue

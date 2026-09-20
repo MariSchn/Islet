@@ -72,6 +72,7 @@ public final class AgentsPlugin: IsletPlugin {
         controller = AgentsController(
             token: token,
             claudeDirectory: URL.homeDirectory.appending(path: ".claude", directoryHint: .isDirectory),
+            codexDirectory: URL.homeDirectory.appending(path: ".codex", directoryHint: .isDirectory),
             alerts: alerts
         )
         controller.onAlertSettingsChange = { [context] alerts in
@@ -114,7 +115,9 @@ public final class AgentsPlugin: IsletPlugin {
 public final class AgentsController {
     public let store: AgentSessionStore
     public let installer: HookInstaller
+    public let codexInstaller: HookInstaller
     public private(set) var isHookInstalled: Bool
+    public private(set) var isCodexHookInstalled: Bool
     public private(set) var serverError: String?
     public private(set) var expandedSessionIDs: Set<String> = []
     public var onAlertSettingsChange: ((AlertSettings) -> Void)?
@@ -129,12 +132,14 @@ public final class AgentsController {
     private let server: HookServer
     private let alerter: SessionAlerter
 
-    public init(token: String, claudeDirectory: URL, port: UInt16 = HookServer.defaultPort, alerts: AlertSettings = AlertSettings()) {
+    public init(token: String, claudeDirectory: URL, codexDirectory: URL, port: UInt16 = HookServer.defaultPort, alerts: AlertSettings = AlertSettings()) {
         let store = AgentSessionStore()
         self.store = store
-        installer = HookInstaller(claudeDirectory: claudeDirectory, port: port, token: token)
+        installer = HookInstaller(agent: .claudeCode, directory: claudeDirectory, port: port, token: token)
+        codexInstaller = HookInstaller(agent: .codex, directory: codexDirectory, port: port, token: token)
         isHookInstalled = installer.isInstalled
-        server = HookServer(port: port, token: token, installScript: installer.remoteInstallScript) { event in
+        isCodexHookInstalled = codexInstaller.isInstalled
+        server = HookServer(port: port, token: token, installScript: HookInstaller.remoteInstallScript(for: [installer, codexInstaller])) { event in
             await store.handle(event)
         }
         let alerter = SessionAlerter(settings: alerts)
@@ -149,10 +154,14 @@ public final class AgentsController {
         } catch {
             serverError = "Could not listen on 127.0.0.1:\(server.port). Is another app using the port?"
         }
-        if installer.needsUpgrade {
+        for installer in [installer, codexInstaller] where installer.needsUpgrade {
             try? installer.install()
         }
         refreshInstallState()
+    }
+
+    public var isCodexAvailable: Bool {
+        isCodexHookInstalled || FileManager.default.fileExists(atPath: codexInstaller.directory.path)
     }
 
     public func stop() async {
@@ -161,16 +170,31 @@ public final class AgentsController {
 
     public func refreshInstallState() {
         isHookInstalled = installer.isInstalled
+        isCodexHookInstalled = codexInstaller.isInstalled
     }
 
-    public func installHooks() throws {
-        try installer.install()
+    public func installHooks(for agent: AgentSession.Agent = .claudeCode) throws {
+        try installer(for: agent).install()
         refreshInstallState()
     }
 
-    public func uninstallHooks() throws {
-        try installer.uninstall()
+    public func uninstallHooks(for agent: AgentSession.Agent = .claudeCode) throws {
+        try installer(for: agent).uninstall()
         refreshInstallState()
+    }
+
+    public func isHookInstalled(for agent: AgentSession.Agent) -> Bool {
+        switch agent {
+        case .claudeCode: isHookInstalled
+        case .codex: isCodexHookInstalled
+        }
+    }
+
+    private func installer(for agent: AgentSession.Agent) -> HookInstaller {
+        switch agent {
+        case .claudeCode: installer
+        case .codex: codexInstaller
+        }
     }
 
     public func decide(_ requestID: UUID, _ decision: PermissionDecision) {

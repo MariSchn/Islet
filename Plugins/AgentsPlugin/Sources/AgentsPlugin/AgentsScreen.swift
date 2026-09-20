@@ -24,7 +24,7 @@ struct AgentsScreen: View {
                         .font(.callout)
                         .foregroundStyle(.tertiary)
                 } else {
-                    Text("Claude Code hooks are not installed")
+                    Text("Agent hooks are not installed")
                         .foregroundStyle(.secondary)
                     Button("Install Hooks") {
                         do {
@@ -120,6 +120,14 @@ private struct SessionRow: View {
                         .buttonStyle(.plain)
                         .onHover { isHoveringTerminal = $0 }
                         .help("Show in \(terminal.name)")
+                    }
+                    if session.agent != .claudeCode {
+                        Text(session.agent.displayName)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Capsule().fill(.white.opacity(0.12)))
                     }
                     if session.isRemote, let host = session.host {
                         Label(host, systemImage: session.isUnreachable ? "network.slash" : "network")
@@ -425,22 +433,12 @@ struct AgentsSettings: View {
     var body: some View {
         Form {
             Section {
-                LabeledContent("Claude Code hooks") {
-                    HStack {
-                        Text(controller.isHookInstalled ? "Installed" : "Not installed")
-                            .foregroundStyle(.secondary)
-                        Button(controller.isHookInstalled ? "Remove" : "Install") {
-                            do {
-                                if controller.isHookInstalled {
-                                    try controller.uninstallHooks()
-                                } else {
-                                    try controller.installHooks()
-                                }
-                                error = nil
-                            } catch {
-                                self.error = error.localizedDescription
-                            }
-                        }
+                HookRow(title: "Claude Code hooks", isInstalled: controller.isHookInstalled, error: $error) { installed in
+                    installed ? try controller.uninstallHooks(for: .claudeCode) : try controller.installHooks(for: .claudeCode)
+                }
+                if controller.isCodexAvailable {
+                    HookRow(title: "Codex hooks", isInstalled: controller.isCodexHookInstalled, error: $error) { installed in
+                        installed ? try controller.uninstallHooks(for: .codex) : try controller.installHooks(for: .codex)
                     }
                 }
                 if let serverError = controller.serverError {
@@ -452,7 +450,7 @@ struct AgentsSettings: View {
                     Text(error).foregroundStyle(.red)
                 }
             } footer: {
-                Text("Installing adds a small script to ~/.claude and registers it in ~/.claude/settings.json (the file is reformatted) so Claude Code reports session activity to Islet. Already running Claude Code sessions need to be restarted. Nothing leaves your Mac.")
+                Text("Installing adds a small script to ~/.claude (registered in ~/.claude/settings.json) or ~/.codex (registered in ~/.codex/hooks.json) so the agent reports session activity to Islet; the files are reformatted. Already running sessions need to be restarted. Codex additionally needs the hooks feature enabled in ~/.codex/config.toml and the hooks trusted once via /hooks. Nothing leaves your Mac.")
             }
             Section {
                 LabeledContent("Needs attention") {
@@ -482,6 +480,30 @@ struct AgentsSettings: View {
             }
         }
         .onAppear { controller.refreshInstallState() }
+    }
+}
+
+private struct HookRow: View {
+    let title: String
+    let isInstalled: Bool
+    @Binding var error: String?
+    let toggle: (Bool) throws -> Void
+
+    var body: some View {
+        LabeledContent(title) {
+            HStack {
+                Text(isInstalled ? "Installed" : "Not installed")
+                    .foregroundStyle(.secondary)
+                Button(isInstalled ? "Remove" : "Install") {
+                    do {
+                        try toggle(isInstalled)
+                        error = nil
+                    } catch {
+                        self.error = error.localizedDescription
+                    }
+                }
+            }
+        }
     }
 }
 

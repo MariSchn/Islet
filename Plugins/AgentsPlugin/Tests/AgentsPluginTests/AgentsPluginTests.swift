@@ -18,6 +18,12 @@ struct HookEventTests {
         let rawBash = HookEvent(kind: .preToolUse, sessionID: "x", toolName: "Bash", toolInput: .object(["command": .string("ls")]))
         #expect(rawBash.activityDescription == "$ ls")
         #expect(HookEvent(kind: .preToolUse, sessionID: "x", toolName: "Mystery").activityDescription == "Mystery")
+        let codexShell = HookEvent(kind: .preToolUse, sessionID: "x", toolName: "shell", toolInput: .object(["command": .array([.string("ls"), .string("-la")])]))
+        #expect(codexShell.activityDescription == "$ ls -la")
+        #expect(PendingRequest(toolName: "shell", toolInput: codexShell.toolInput)?.kind == .permission(tool: "shell", detail: "ls -la"))
+        #expect(HookEvent(kind: .preToolUse, sessionID: "x", toolName: "apply_patch").activityDescription == "Apply patch")
+        #expect(try HookEvent.decode(Data(#"{"session_id":"a","hook_event_name":"Stop"}"#.utf8), agent: "codex").agent == .codex)
+        #expect(try HookEvent.decode(Data(#"{"session_id":"a","hook_event_name":"Stop"}"#.utf8), agent: "unknown").agent == .claudeCode)
     }
 
     @Test func resolvesTheHostingTerminalFromBundleIdentifierOrProgramName() throws {
@@ -424,10 +430,23 @@ struct AgentsPluginSizingTests {
 }
 
 struct HookInstallerTests {
-    func makeInstaller() throws -> HookInstaller {
+    func makeInstaller(agent: AgentSession.Agent = .claudeCode) throws -> HookInstaller {
         let directory = FileManager.default.temporaryDirectory.appending(path: "AgentsPluginTests." + UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        return HookInstaller(claudeDirectory: directory, port: 7365, token: "deadbeef")
+        return HookInstaller(agent: agent, directory: directory, port: 7365, token: "deadbeef")
+    }
+
+    @Test func installsCodexHooksIntoHooksJSON() throws {
+        let installer = try makeInstaller(agent: .codex)
+        #expect(installer.settingsURL.lastPathComponent == "hooks.json")
+        #expect(!installer.events.contains("Notification"))
+        try installer.install()
+        #expect(installer.isInstalled)
+        #expect(try String(contentsOf: installer.scriptURL, encoding: .utf8).contains("-H \"X-Islet-Agent: codex\""))
+        let hooks = (try JSONSerialization.jsonObject(with: Data(contentsOf: installer.settingsURL)) as? [String: Any])?["hooks"] as? [String: Any]
+        #expect(Set(hooks?.keys.map { $0 } ?? []) == Set(installer.events))
+        try installer.uninstall()
+        #expect(!installer.isInstalled)
     }
 
     @Test func installsScriptAndMergesHooksWithoutTouchingOtherSettings() throws {
@@ -444,7 +463,7 @@ struct HookInstallerTests {
         let settings = try JSONSerialization.jsonObject(with: Data(contentsOf: installer.settingsURL)) as! [String: Any]
         #expect(settings["model"] as? String == "opus")
         let hooks = settings["hooks"] as! [String: Any]
-        #expect(Set(hooks.keys) == Set(HookInstaller.events))
+        #expect(Set(hooks.keys) == Set(installer.events))
         let preToolUse = hooks["PreToolUse"] as! [[String: Any]]
         #expect(preToolUse.count == 2)
         #expect((preToolUse[0]["matcher"] as? String) == "Bash")
@@ -452,6 +471,9 @@ struct HookInstallerTests {
         #expect(permissionHook["command"] as? String == "'" + installer.scriptURL.path + "' 600")
         #expect(permissionHook["timeout"] as? Int == 605)
         #expect((((preToolUse[1]["hooks"] as! [[String: Any]])[0])["timeout"] as? Int) == 10)
+        let sessionEnd = ((hooks["SessionEnd"] as! [[String: Any]])[0]["hooks"] as! [[String: Any]])[0]
+        #expect(sessionEnd["timeout"] as? Int == 3)
+        #expect(sessionEnd["command"] as? String == "'" + installer.scriptURL.path + "' 2")
 
         let script = try String(contentsOf: installer.scriptURL, encoding: .utf8)
         #expect(script.contains("Bearer deadbeef"))
@@ -491,24 +513,27 @@ struct HookInstallerTests {
 
     @Test func remoteInstallScriptReproducesTheLocalInstallation() throws {
         let installer = try makeInstaller()
+        let codex = try makeInstaller(agent: .codex)
         let remote = FileManager.default.temporaryDirectory.appending(path: "AgentsPluginTests.remote." + UUID().uuidString)
-        try FileManager.default.createDirectory(at: remote, withIntermediateDirectories: true)
+        let remoteCodex = remote.appending(path: "codex")
+        try FileManager.default.createDirectory(at: remoteCodex, withIntermediateDirectories: true)
         try #"{"model":"opus","hooks":{"Stop":[{"hooks":[{"type":"command","command":"echo done"}]}]}}"#.write(to: remote.appending(path: "settings.json"), atomically: true, encoding: .utf8)
 
         let process = Process()
         process.executableURL = URL(filePath: "/bin/sh")
-        process.environment = ["HOME": "/nonexistent", "PATH": "/usr/bin:/bin", "CLAUDE_CONFIG_DIR": remote.path]
+        process.environment = ["HOME": "/nonexistent", "PATH": "/usr/bin:/bin", "CLAUDE_CONFIG_DIR": remote.path, "CODEX_HOME": remoteCodex.path]
         let input = Pipe()
         process.standardInput = input
         process.standardOutput = Pipe()
         try process.run()
-        input.fileHandleForWriting.write(Data(installer.remoteInstallScript.utf8))
+        input.fileHandleForWriting.write(Data(HookInstaller.remoteInstallScript(for: [installer, codex]).utf8))
         try input.fileHandleForWriting.close()
         process.waitUntilExit()
         #expect(process.terminationStatus == 0)
 
-        let remoteInstaller = HookInstaller(claudeDirectory: remote, port: 7365, token: "deadbeef")
+        let remoteInstaller = HookInstaller(directory: remote, port: 7365, token: "deadbeef")
         #expect(remoteInstaller.isInstalled)
+        #expect(HookInstaller(agent: .codex, directory: remoteCodex, port: 7365, token: "deadbeef").isInstalled)
         let settings = try JSONSerialization.jsonObject(with: Data(contentsOf: remoteInstaller.settingsURL)) as? [String: Any]
         #expect(settings?["model"] as? String == "opus")
         let stop = (settings?["hooks"] as? [String: Any])?["Stop"] as? [[String: Any]]
@@ -525,6 +550,21 @@ struct HookInstallerTests {
         try installer.install()
         try "#!/bin/sh\nexit 0\n".write(to: installer.scriptURL, atomically: true, encoding: .utf8)
         #expect(!installer.isInstalled)
+        #expect(installer.needsUpgrade)
+    }
+
+    @Test func outdatedHookEntriesCountAsNotInstalled() throws {
+        let installer = try makeInstaller()
+        try installer.install()
+        var settings = try JSONSerialization.jsonObject(with: Data(contentsOf: installer.settingsURL)) as! [String: Any]
+        var hooks = settings["hooks"] as! [String: Any]
+        hooks["SessionEnd"] = [["hooks": [["type": "command", "command": "'" + installer.scriptURL.path + "'", "timeout": 10]]]]
+        settings["hooks"] = hooks
+        try JSONSerialization.data(withJSONObject: settings).write(to: installer.settingsURL)
+        #expect(!installer.isInstalled)
+        #expect(installer.needsUpgrade)
+        try installer.install()
+        #expect(installer.isInstalled)
     }
 }
 
@@ -579,6 +619,7 @@ struct HookServerTests {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Bearer secret", forHTTPHeaderField: "Authorization")
+        request.setValue("codex", forHTTPHeaderField: "X-Islet-Agent")
         request.setValue("devbox", forHTTPHeaderField: "X-Islet-Host")
         request.setValue("ghostty", forHTTPHeaderField: "X-Islet-Terminal")
         request.setValue("/dev/ttys004", forHTTPHeaderField: "X-Islet-TTY")
@@ -586,7 +627,7 @@ struct HookServerTests {
         let (body, response) = try await URLSession.shared.data(for: request)
         #expect((response as? HTTPURLResponse)?.statusCode == 200)
         #expect(body == Data("{}".utf8))
-        #expect(await received.events == [HookEvent(kind: .stop, sessionID: "s", host: "devbox", terminal: TerminalApp(identifier: "com.mitchellh.ghostty"), tty: "/dev/ttys004")])
+        #expect(await received.events == [HookEvent(kind: .stop, sessionID: "s", agent: .codex, host: "devbox", terminal: TerminalApp(identifier: "com.mitchellh.ghostty"), tty: "/dev/ttys004")])
 
         request.setValue("Bearer wrong", forHTTPHeaderField: "Authorization")
         let (_, unauthorized) = try await URLSession.shared.data(for: request)

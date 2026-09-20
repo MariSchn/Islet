@@ -1,12 +1,14 @@
 import Foundation
 
 public struct AgentSession: Identifiable, Sendable, Equatable {
-    public enum Agent: String, Sendable {
-        case claudeCode
+    public enum Agent: String, Sendable, CaseIterable {
+        case claudeCode = "claude-code"
+        case codex
 
         public var displayName: String {
             switch self {
             case .claudeCode: "Claude Code"
+            case .codex: "Codex"
             }
         }
     }

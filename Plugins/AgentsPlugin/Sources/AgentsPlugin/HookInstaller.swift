@@ -1,21 +1,48 @@
 import Foundation
 
 public struct HookInstaller: Sendable {
-    public static let events = ["SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PermissionRequest", "Notification", "Stop"]
     public static let scriptName = "islet-hook.sh"
+    private static let scriptPlaceholder = "__ISLET_SCRIPT__"
 
-    public let claudeDirectory: URL
+    public let agent: AgentSession.Agent
+    public let directory: URL
     public let port: UInt16
     public let token: String
 
-    public init(claudeDirectory: URL, port: UInt16, token: String) {
-        self.claudeDirectory = claudeDirectory
+    public init(agent: AgentSession.Agent = .claudeCode, directory: URL, port: UInt16, token: String) {
+        self.agent = agent
+        self.directory = directory
         self.port = port
         self.token = token
     }
 
-    public var scriptURL: URL { claudeDirectory.appending(path: Self.scriptName) }
-    public var settingsURL: URL { claudeDirectory.appending(path: "settings.json") }
+    public var events: [String] {
+        switch agent {
+        case .claudeCode: ["SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PermissionRequest", "Notification", "Stop"]
+        case .codex: ["SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PermissionRequest", "Stop"]
+        }
+    }
+
+    public var settingsFileName: String {
+        switch agent {
+        case .claudeCode: "settings.json"
+        case .codex: "hooks.json"
+        }
+    }
+
+    public var settingsDescription: String {
+        "~/\(directory.lastPathComponent)/\(settingsFileName)"
+    }
+
+    private var remoteDirectoryExpression: String {
+        switch agent {
+        case .claudeCode: "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+        case .codex: "${CODEX_HOME:-$HOME/.codex}"
+        }
+    }
+
+    public var scriptURL: URL { directory.appending(path: Self.scriptName) }
+    public var settingsURL: URL { directory.appending(path: settingsFileName) }
 
     public var script: String {
         """
@@ -33,6 +60,7 @@ public struct HookInstaller: Sendable {
           -H "Content-Type: application/json" \\
           -H "Expect:" \\
           -H "Authorization: Bearer \(token)" \\
+          -H "X-Islet-Agent: \(agent.rawValue)" \\
           -H "X-Islet-Host: $(hostname -s 2>/dev/null || hostname)" \\
           -H "X-Islet-Terminal: ${__CFBundleIdentifier:-$TERM_PROGRAM}" \\
           -H "X-Islet-TTY: $tty" \\
@@ -50,24 +78,20 @@ public struct HookInstaller: Sendable {
         "RemoteForward \(port) 127.0.0.1:\(port)"
     }
 
-    public var remoteInstallScript: String {
-        let entries = Self.events.reduce(into: [String: Any]()) { $0[$1] = Self.hookEntry(for: $1, script: Self.scriptPlaceholder) }
-        let data = try! JSONSerialization.data(withJSONObject: entries, options: [.sortedKeys, .withoutEscapingSlashes])
-        return """
+    public static func remoteInstallScript(for installers: [HookInstaller]) -> String {
+        var script = """
         #!/bin/sh
         set -e
-        dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
-        script="$dir/\(Self.scriptName)"
-        command -v python3 >/dev/null 2>&1 || { echo "Islet: python3 is required to update $dir/settings.json" >&2; exit 1; }
-        mkdir -p "$dir"
-        cat > "$script" <<'ISLET_HOOK'
-        \(script.trimmingCharacters(in: .newlines))
-        ISLET_HOOK
-        chmod 700 "$script"
-        python3 - "$dir/settings.json" "$script" <<'ISLET_SETTINGS'
+        command -v python3 >/dev/null 2>&1 || { echo "Islet: python3 is required to update hook settings" >&2; exit 1; }
+        install_hooks() {
+          dir="$1"
+          script="$dir/\(scriptName)"
+          mkdir -p "$dir"
+          printf '%s\n' "$3" > "$script"
+          chmod 700 "$script"
+          python3 - "$dir/$2" "$script" "$4" <<'ISLET_SETTINGS'
         import json, os, sys
-        path, script = sys.argv[1], sys.argv[2]
-        entries = json.loads(\(Self.pythonLiteral(String(decoding: data, as: UTF8.self))).replace("\(Self.scriptPlaceholder)", script))
+        path, script, entries = sys.argv[1], sys.argv[2], json.loads(sys.argv[3].replace("\(scriptPlaceholder)", sys.argv[2]))
         settings = {}
         if os.path.exists(path):
             with open(path) as f:
@@ -77,22 +101,34 @@ public struct HookInstaller: Sendable {
             sys.exit(f"Islet: {path} is not a JSON object")
         hooks = settings.setdefault("hooks", {})
         for event, entry in entries.items():
-            groups = [g for g in hooks.get(event, []) if not any("\(Self.scriptName)" in h.get("command", "") for h in g.get("hooks", []))]
+            groups = [g for g in hooks.get(event, []) if not any("\(scriptName)" in h.get("command", "") for h in g.get("hooks", []))]
             groups.append({"hooks": [entry]})
             hooks[event] = groups
         with open(path, "w") as f:
             json.dump(settings, f, indent=2, sort_keys=True)
             f.write("\\n")
         ISLET_SETTINGS
-        echo "Islet hooks installed in $dir. Restart Claude Code sessions on this machine to report them."
+          echo "Islet hooks installed in $dir."
+        }
 
         """
+        for installer in installers {
+            let entries = installer.events.reduce(into: [String: Any]()) { $0[$1] = hookEntry(for: $1, script: scriptPlaceholder) }
+            let data = try! JSONSerialization.data(withJSONObject: entries, options: [.sortedKeys, .withoutEscapingSlashes])
+            let arguments = "\"\(installer.remoteDirectoryExpression)\" \(installer.settingsFileName) \(shellQuoted(installer.script.trimmingCharacters(in: .newlines))) \(shellQuoted(String(decoding: data, as: UTF8.self)))"
+            switch installer.agent {
+            case .claudeCode:
+                script += "install_hooks \(arguments)\n"
+            case .codex:
+                script += "[ -d \"\(installer.remoteDirectoryExpression)\" ] && install_hooks \(arguments)\n"
+            }
+        }
+        script += "echo \"Restart agent sessions on this machine to report them to Islet.\"\n"
+        return script
     }
 
-    private static let scriptPlaceholder = "__ISLET_SCRIPT__"
-
-    private static func pythonLiteral(_ value: String) -> String {
-        "'" + value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "'", with: "\\'") + "'"
+    private static func shellQuoted(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
     public var isInstalled: Bool {
@@ -105,7 +141,9 @@ public struct HookInstaller: Sendable {
 
     private var hasAllHooks: Bool {
         guard let settings = try? readSettings(), let hooks = settings["hooks"] as? [String: Any] else { return false }
-        return Self.events.allSatisfy { Self.containsHook(hooks[$0]) }
+        return events.allSatisfy { event in
+            Self.isletHooks(in: hooks[event]).contains { NSDictionary(dictionary: $0).isEqual(to: Self.hookEntry(for: event, script: scriptURL.path)) }
+        }
     }
 
     private var isScriptCurrent: Bool {
@@ -113,13 +151,13 @@ public struct HookInstaller: Sendable {
     }
 
     public func install() throws {
-        try FileManager.default.createDirectory(at: claudeDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try script.write(to: scriptURL, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: scriptURL.path)
 
         var settings = try readSettings() ?? [:]
         var hooks = settings["hooks"] as? [String: Any] ?? [:]
-        for event in Self.events {
+        for event in events {
             var groups = Self.withoutIsletHooks(hooks[event])
             groups.append(["hooks": [Self.hookEntry(for: event, script: scriptURL.path)]])
             hooks[event] = groups
@@ -141,15 +179,22 @@ public struct HookInstaller: Sendable {
     }
 
     static func hookEntry(for event: String, script: String) -> [String: Any] {
-        let blocking = event == "PermissionRequest"
         let quoted = "'" + script.replacingOccurrences(of: "'", with: "'\\''") + "'"
-        let command = blocking ? "\(quoted) \(Int(HookServer.replyTimeout.components.seconds))" : quoted
-        return ["type": "command", "command": command, "timeout": blocking ? Int(HookServer.replyTimeout.components.seconds) + 5 : 10]
+        switch event {
+        case "PermissionRequest":
+            let seconds = Int(HookServer.replyTimeout.components.seconds)
+            return ["type": "command", "command": "\(quoted) \(seconds)", "timeout": seconds + 5]
+        case "SessionEnd":
+            return ["type": "command", "command": "\(quoted) 2", "timeout": 3]
+        default:
+            return ["type": "command", "command": quoted, "timeout": 10]
+        }
     }
 
-    private static func containsHook(_ groups: Any?) -> Bool {
-        let all = groups as? [[String: Any]] ?? []
-        return withoutIsletHooks(all).count < all.count
+    private static func isletHooks(in groups: Any?) -> [[String: Any]] {
+        (groups as? [[String: Any]] ?? []).flatMap { group in
+            (group["hooks"] as? [[String: Any]] ?? []).filter { ($0["command"] as? String)?.contains(scriptName) == true }
+        }
     }
 
     private static func withoutIsletHooks(_ groups: Any?) -> [[String: Any]] {
@@ -160,14 +205,15 @@ public struct HookInstaller: Sendable {
     }
 
     public struct UnreadableSettings: Error, LocalizedError {
-        public var errorDescription: String? { "~/.claude/settings.json is not a JSON object" }
+        public let path: String
+        public var errorDescription: String? { "\(path) is not a JSON object" }
     }
 
     private func readSettings() throws -> [String: Any]? {
         guard FileManager.default.fileExists(atPath: settingsURL.path) else { return nil }
         let data = try Data(contentsOf: settingsURL)
         if String(decoding: data, as: UTF8.self).allSatisfy(\.isWhitespace) { return [:] }
-        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw UnreadableSettings() }
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw UnreadableSettings(path: settingsDescription) }
         return object
     }
 
