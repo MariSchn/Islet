@@ -35,6 +35,10 @@ public struct NotchView<Content: View>: View {
         isShapeHidden ? hitTestableInvisibleOpacity : 1
     }
 
+    private var hoverFrameSize: CGSize {
+        controller.isExpanded ? controller.geometry.largestExpandedShapeSize : shapeSize
+    }
+
     private func updateShapeVisibility() async {
         let shouldHide = isIdle && !controller.settings.drawsIdleNotchShape
         if shouldHide {
@@ -47,26 +51,29 @@ public struct NotchView<Content: View>: View {
     public var body: some View {
         VStack(spacing: 0) {
             ZStack(alignment: .top) {
-                shape.fill(.black)
-                    .opacity(fillOpacity)
-                    .animation(nil, value: fillOpacity)
-                    .task(id: isIdle || controller.settings.drawsIdleNotchShape) {
-                        await updateShapeVisibility()
+                ZStack(alignment: .top) {
+                    shape.fill(.black)
+                        .opacity(fillOpacity)
+                        .animation(nil, value: fillOpacity)
+                        .task(id: isIdle || controller.settings.drawsIdleNotchShape) {
+                            await updateShapeVisibility()
+                        }
+                    if controller.isExpanded {
+                        content()
+                            .frame(width: shapeSize.width, height: shapeSize.height, alignment: .top)
+                            .transition(.opacity)
+                    } else if let pill = controller.pill {
+                        PillView(pill: pill, geometry: controller.geometry, contentSize: controller.contentSize)
+                            .frame(width: shapeSize.width, height: shapeSize.height)
+                            .transition(.opacity)
                     }
-                if controller.isExpanded {
-                    content()
-                        .frame(width: shapeSize.width, height: shapeSize.height, alignment: .top)
-                        .transition(.opacity)
-                } else if let pill = controller.pill {
-                    PillView(pill: pill, geometry: controller.geometry, contentSize: controller.contentSize)
-                        .frame(width: shapeSize.width, height: shapeSize.height)
-                        .transition(.opacity)
                 }
+                .frame(width: shapeSize.width, height: shapeSize.height)
+                .clipShape(shape)
+                .offset(x: shapeOffset)
             }
-            .frame(width: shapeSize.width, height: shapeSize.height)
-            .clipShape(shape)
-            .contentShape(shape)
-            .offset(x: shapeOffset)
+            .frame(width: hoverFrameSize.width, height: hoverFrameSize.height, alignment: .top)
+            .contentShape(Rectangle())
             .onHover { controller.isHovering = $0 }
             .animation(controller.animation.animation(expanding: controller.isExpanded), value: controller.isExpanded)
             .animation(controller.animation.animation(expanding: controller.pill != nil), value: controller.pill)
