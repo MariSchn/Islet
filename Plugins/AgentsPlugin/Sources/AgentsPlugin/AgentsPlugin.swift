@@ -50,6 +50,7 @@ public final class AgentsPlugin: IsletPlugin {
     }
 
     private static let tokenKey = "hookToken"
+    private static let alertKeys = (attentionSound: "attentionSound", attentionNotification: "attentionNotification", finishedSound: "finishedSound", finishedNotification: "finishedNotification")
 
     private let context: PluginContext
     private let controller: AgentsController
@@ -63,10 +64,22 @@ public final class AgentsPlugin: IsletPlugin {
             token = Self.makeToken()
             context.settings.set(token, forKey: Self.tokenKey)
         }
+        var alerts = AlertSettings()
+        alerts.attentionSound = context.settings.value(forKey: Self.alertKeys.attentionSound) ?? alerts.attentionSound
+        alerts.attentionNotification = context.settings.value(forKey: Self.alertKeys.attentionNotification) ?? alerts.attentionNotification
+        alerts.finishedSound = context.settings.value(forKey: Self.alertKeys.finishedSound) ?? alerts.finishedSound
+        alerts.finishedNotification = context.settings.value(forKey: Self.alertKeys.finishedNotification) ?? alerts.finishedNotification
         controller = AgentsController(
             token: token,
-            claudeDirectory: URL.homeDirectory.appending(path: ".claude", directoryHint: .isDirectory)
+            claudeDirectory: URL.homeDirectory.appending(path: ".claude", directoryHint: .isDirectory),
+            alerts: alerts
         )
+        controller.onAlertSettingsChange = { [context] alerts in
+            context.settings.set(alerts.attentionSound, forKey: Self.alertKeys.attentionSound)
+            context.settings.set(alerts.attentionNotification, forKey: Self.alertKeys.attentionNotification)
+            context.settings.set(alerts.finishedSound, forKey: Self.alertKeys.finishedSound)
+            context.settings.set(alerts.finishedNotification, forKey: Self.alertKeys.finishedNotification)
+        }
         controller.store.onChange = { [context, controller] in
             context.pillStatus = controller.store.pillStatus
             context.contentSize = Self.contentSize(for: controller.store.sessions, expanded: controller.expandedSessionIDs)
@@ -104,10 +117,19 @@ public final class AgentsController {
     public private(set) var isHookInstalled: Bool
     public private(set) var serverError: String?
     public private(set) var expandedSessionIDs: Set<String> = []
+    public var onAlertSettingsChange: ((AlertSettings) -> Void)?
+    public var alerts: AlertSettings {
+        get { alerter.settings }
+        set {
+            alerter.settings = newValue
+            onAlertSettingsChange?(newValue)
+        }
+    }
 
     private let server: HookServer
+    private let alerter: SessionAlerter
 
-    public init(token: String, claudeDirectory: URL, port: UInt16 = HookServer.defaultPort) {
+    public init(token: String, claudeDirectory: URL, port: UInt16 = HookServer.defaultPort, alerts: AlertSettings = AlertSettings()) {
         let store = AgentSessionStore()
         self.store = store
         installer = HookInstaller(claudeDirectory: claudeDirectory, port: port, token: token)
@@ -115,6 +137,9 @@ public final class AgentsController {
         server = HookServer(port: port, token: token, installScript: installer.remoteInstallScript) { event in
             await store.handle(event)
         }
+        let alerter = SessionAlerter(settings: alerts)
+        self.alerter = alerter
+        store.onAlert = { alerter.handle($0) }
     }
 
     public func start() async {

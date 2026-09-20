@@ -8,8 +8,14 @@ public final class AgentSessionStore {
     public static let finishedPillDuration: TimeInterval = 10 * 60
     public static let unreachableTimeout: TimeInterval = 5 * 60
 
+    public enum Alert: Sendable, Equatable {
+        case needsAttention(AgentSession)
+        case finished(AgentSession)
+    }
+
     public private(set) var sessions: [AgentSession] = []
     public var onChange: (() -> Void)?
+    public var onAlert: ((Alert) -> Void)?
 
     private let now: () -> Date
     private let localHost: String
@@ -64,7 +70,8 @@ public final class AgentSessionStore {
             dismissedIDs.remove(event.sessionID)
         }
 
-        var session = sessions.first { $0.id == event.sessionID } ?? AgentSession(
+        let previous = sessions.first { $0.id == event.sessionID }
+        var session = previous ?? AgentSession(
             id: event.sessionID,
             agent: .claudeCode,
             host: event.host,
@@ -142,8 +149,19 @@ public final class AgentSessionStore {
             sessions.insert(session, at: 0)
         }
         onChange?()
+        if let alert = Self.alert(from: previous?.state, to: session.state, in: session) {
+            onAlert?(alert)
+        }
         scheduleFinishedExpiry()
         scheduleUnreachableCheck()
+    }
+
+    private static func alert(from previous: AgentSession.State?, to current: AgentSession.State, in session: AgentSession) -> Alert? {
+        switch current {
+        case .needsAttention where previous?.requiresAttention != true: .needsAttention(session)
+        case .done where previous != .done: .finished(session)
+        default: nil
+        }
     }
 
     public func dismiss(_ id: String) {

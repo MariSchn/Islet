@@ -419,7 +419,7 @@ private struct StateIndicator: View {
 }
 
 struct AgentsSettings: View {
-    let controller: AgentsController
+    @Bindable var controller: AgentsController
     @State private var error: String?
 
     var body: some View {
@@ -453,6 +453,24 @@ struct AgentsSettings: View {
                 }
             } footer: {
                 Text("Installing adds a small script to ~/.claude and registers it in ~/.claude/settings.json (the file is reformatted) so Claude Code reports session activity to Islet. Already running Claude Code sessions need to be restarted. Nothing leaves your Mac.")
+            }
+            Section {
+                LabeledContent("Needs attention") {
+                    VStack(alignment: .leading) {
+                        Toggle("Play a sound", isOn: $controller.alerts.attentionSound)
+                        Toggle("Show a notification", isOn: $controller.alerts.attentionNotification)
+                    }
+                }
+                LabeledContent("Finished") {
+                    VStack(alignment: .leading) {
+                        Toggle("Play a sound", isOn: $controller.alerts.finishedSound)
+                        Toggle("Show a notification", isOn: $controller.alerts.finishedNotification)
+                    }
+                }
+            } header: {
+                Text("Alerts")
+            } footer: {
+                Text("Alerts fire when a session asks for permission, has a question or waits for input, and when it finishes its turn. Notifications need permission from macOS the first time they are enabled.")
             }
             Section {
                 CopyableCommand(title: "SSH config", text: controller.installer.sshConfigSnippet)
