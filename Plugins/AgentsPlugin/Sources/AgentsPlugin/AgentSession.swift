@@ -46,6 +46,10 @@ public struct AgentSession: Identifiable, Sendable, Equatable {
 
     public var pendingRequest: PendingRequest? { pendingRequests.first }
 
+    public var displayName: String {
+        title ?? projectName
+    }
+
     public var projectName: String {
         guard let cwd, !cwd.isEmpty else { return agent.displayName }
         return (cwd as NSString).lastPathComponent

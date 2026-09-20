@@ -21,6 +21,8 @@ public struct HookEvent: Sendable, Equatable, Decodable {
     public var message: String?
     public var notificationType: String?
     public var source: String?
+    public var permissionMode: String?
+    public var agentType: String?
     public var agent: AgentSession.Agent = .claudeCode
     public var host: String?
     public var terminal: TerminalApp?
@@ -37,9 +39,11 @@ public struct HookEvent: Sendable, Equatable, Decodable {
         case message
         case notificationType = "notification_type"
         case source
+        case permissionMode = "permission_mode"
+        case agentType = "agent_type"
     }
 
-    public init(kind: Kind, sessionID: String, cwd: String? = nil, toolName: String? = nil, toolInput: JSONValue? = nil, prompt: String? = nil, message: String? = nil, notificationType: String? = nil, source: String? = nil, agent: AgentSession.Agent = .claudeCode, host: String? = nil, terminal: TerminalApp? = nil, tty: String? = nil, title: String? = nil) {
+    public init(kind: Kind, sessionID: String, cwd: String? = nil, toolName: String? = nil, toolInput: JSONValue? = nil, prompt: String? = nil, message: String? = nil, notificationType: String? = nil, source: String? = nil, permissionMode: String? = nil, agentType: String? = nil, agent: AgentSession.Agent = .claudeCode, host: String? = nil, terminal: TerminalApp? = nil, tty: String? = nil, title: String? = nil) {
         self.kind = kind
         self.sessionID = sessionID
         self.cwd = cwd
@@ -49,6 +53,8 @@ public struct HookEvent: Sendable, Equatable, Decodable {
         self.message = message
         self.notificationType = notificationType
         self.source = source
+        self.permissionMode = permissionMode
+        self.agentType = agentType
         self.agent = agent
         self.host = host
         self.terminal = terminal
@@ -67,6 +73,8 @@ public struct HookEvent: Sendable, Equatable, Decodable {
         message = try container.decodeIfPresent(String.self, forKey: .message)
         notificationType = try container.decodeIfPresent(String.self, forKey: .notificationType)
         source = try container.decodeIfPresent(String.self, forKey: .source)
+        permissionMode = try container.decodeIfPresent(String.self, forKey: .permissionMode)
+        agentType = try container.decodeIfPresent(String.self, forKey: .agentType)
     }
 
     public static func decode(_ data: Data, agent: String? = nil, host: String? = nil, terminal: String? = nil, tty: String? = nil, title: String? = nil) throws -> HookEvent {
@@ -85,7 +93,19 @@ public struct HookEvent: Sendable, Equatable, Decodable {
         !value.isEmpty && value.unicodeScalars.allSatisfy { identifierCharacters.contains($0) }
     }
 
+    public var isInAutoMode: Bool {
+        permissionMode == "auto"
+    }
+
+    public var isTaskNotification: Bool {
+        prompt?.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("<task-notification>") == true
+    }
+
     public var activityDescription: String? {
+        toolDescription.map { description in agentType.map { "\($0): \(description)" } ?? description }
+    }
+
+    private var toolDescription: String? {
         guard let toolName else { return nil }
         let input = toolInput
         func file(_ key: String) -> String? {

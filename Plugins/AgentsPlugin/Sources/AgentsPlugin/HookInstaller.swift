@@ -67,6 +67,7 @@ public struct HookInstaller: Sendable {
           fi
           pid=$1
         done
+        case "$terminal" in vscode) case "$VSCODE_GIT_ASKPASS_MAIN" in *[Cc]ursor*) terminal=cursor ;; esac ;; esac
         body=$(mktemp) || exit 0
         printf '%s' "$payload" > "$body"
         printf 'header = "Authorization: Bearer \(token)"\n' | curl -sf --connect-timeout 1 -m "$timeout" -K - -X POST "http://127.0.0.1:\(port)\(HookServer.hookPath)" \\
@@ -101,7 +102,7 @@ public struct HookInstaller: Sendable {
           dir="$1"
           script="$dir/\(scriptName)"
           mkdir -p "$dir"
-          printf '%s\n' "$3" > "$script"
+          (umask 077 && printf '%s\n' "$3" > "$script")
           chmod 700 "$script"
           python3 - "$dir/$2" "$script" "$4" <<'ISLET_SETTINGS'
         import json, os, sys
@@ -171,8 +172,9 @@ public struct HookInstaller: Sendable {
 
     public func install() throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try script.write(to: scriptURL, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: scriptURL.path)
+        guard FileManager.default.createFile(atPath: scriptURL.path, contents: Data(script.utf8), attributes: [.posixPermissions: 0o700]) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
 
         var settings = try readSettings() ?? [:]
         var hooks = settings["hooks"] as? [String: Any] ?? [:]
