@@ -18,13 +18,13 @@ public final class AgentSessionStore {
     public var onAlert: ((Alert) -> Void)?
 
     private let now: () -> Date
-    private let localHost: String
+    private let localHost: () -> String
     private var dismissedIDs: Set<String> = []
     @ObservationIgnored private var expiryTask: Task<Void, Never>?
     @ObservationIgnored private var unreachableTask: Task<Void, Never>?
     @ObservationIgnored private var decisions: [UUID: CheckedContinuation<PermissionDecision?, Never>] = [:]
 
-    public init(now: @escaping () -> Date = Date.init, localHost: String = AgentSessionStore.localHostName) {
+    public init(now: @escaping () -> Date = Date.init, localHost: @escaping () -> String = { AgentSessionStore.localHostName }) {
         self.now = now
         self.localHost = localHost
     }
@@ -89,7 +89,7 @@ public final class AgentSessionStore {
         if let cwd = event.cwd { session.cwd = cwd }
         if let host = event.host {
             session.host = host
-            session.isRemote = host.caseInsensitiveCompare(localHost) != .orderedSame
+            session.isRemote = host.caseInsensitiveCompare(localHost()) != .orderedSame
         }
         session.isUnreachable = false
         if let terminal = event.terminal { session.terminal = terminal }

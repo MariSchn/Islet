@@ -164,7 +164,7 @@ struct AgentSessionStoreTests {
 
     @Test func remoteSessionsShowTheirHostAndGoUnreachableWithoutUpdates() {
         var clock = Date(timeIntervalSince1970: 1_000_000)
-        let store = AgentSessionStore(now: { clock }, localHost: "MacBook")
+        let store = AgentSessionStore(now: { clock }, localHost: { "MacBook" })
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "local", cwd: "/one", prompt: "x", host: "macbook"))
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "remote", cwd: "/two", prompt: "y", host: "devbox"))
         #expect(store.sessions.map(\.isRemote) == [true, false])
@@ -181,6 +181,20 @@ struct AgentSessionStoreTests {
         clock = clock.addingTimeInterval(AgentSessionStore.unreachableTimeout + 1)
         store.markUnreachableSessions()
         #expect(store.sessions[0].isUnreachable == false)
+    }
+
+    @Test func sessionsStayLocalWhenTheMacIsRenamedByTheNetwork() {
+        var hostName = "MacBook"
+        let store = AgentSessionStore(localHost: { hostName })
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s", cwd: "/p", prompt: "x", host: "macbook"))
+        #expect(store.sessions[0].isRemote == false)
+
+        hostName = "student-net-dock-418"
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "s", toolName: "Read", host: "student-net-dock-418"))
+        #expect(store.sessions[0].isRemote == false)
+
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "s", toolName: "Read", host: "macbook"))
+        #expect(store.sessions[0].isRemote == true)
     }
 
     @Test func alertsOnceWhenASessionNeedsAttentionOrFinishes() async {
