@@ -26,6 +26,8 @@ public struct AgentSession: Identifiable, Sendable, Equatable {
     public let id: String
     public var agent: Agent
     public var host: String?
+    public var isRemote = false
+    public var isUnreachable = false
     public var terminal: TerminalApp?
     public var tty: String?
     public var cwd: String?

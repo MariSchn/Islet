@@ -6,6 +6,7 @@ public actor HookServer {
 
     public static let defaultPort: UInt16 = 7365
     public static let hookPath = "/hook"
+    public static let installPath = "/install"
     public static let maxBodySize = 16 << 20
     public static let requestTimeout: Duration = .seconds(10)
     public static let replyTimeout: Duration = .seconds(600)
@@ -18,14 +19,16 @@ public actor HookServer {
 
     public let port: UInt16
     public let token: String
+    public let installScript: String?
     private let handler: Handler
     private var listener: NWListener?
     private var clients: [ObjectIdentifier: Client] = [:]
     private let queue = DispatchQueue(label: "islet.agents.hook-server")
 
-    public init(port: UInt16 = HookServer.defaultPort, token: String, handler: @escaping Handler) {
+    public init(port: UInt16 = HookServer.defaultPort, token: String, installScript: String? = nil, handler: @escaping Handler) {
         self.port = port
         self.token = token
+        self.installScript = installScript
         self.handler = handler
     }
 
@@ -180,6 +183,8 @@ public actor HookServer {
         let response: HTTPResponse
         if request.bearerToken != token {
             response = .json(401, #"{"error":"unauthorized"}"#)
+        } else if request.method == "GET", request.path == Self.installPath, let installScript {
+            response = .text(installScript)
         } else if request.method != "POST" || request.path != Self.hookPath {
             response = .json(404, #"{"error":"not found"}"#)
         } else if let event = try? HookEvent.decode(request.body, host: request.headers["x-islet-host"], terminal: request.headers["x-islet-terminal"], tty: request.headers["x-islet-tty"]) {

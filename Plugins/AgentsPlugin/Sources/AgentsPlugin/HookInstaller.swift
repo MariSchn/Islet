@@ -26,7 +26,7 @@ public struct HookInstaller: Sendable {
         while [ "$pid" -gt 1 ]; do
           set -- $(ps -o ppid=,tty= -p "$pid" 2>/dev/null)
           [ -n "$1" ] || break
-          case "$2" in ""|"??") ;; *) tty="/dev/$2" ;; esac
+          case "$2" in ""|"?"|"??") ;; *) tty="/dev/$2" ;; esac
           pid=$1
         done
         curl -sf --connect-timeout 1 -m "$timeout" -X POST "http://127.0.0.1:\(port)\(HookServer.hookPath)" \\
@@ -40,6 +40,59 @@ public struct HookInstaller: Sendable {
         exit 0
 
         """
+    }
+
+    public var remoteInstallCommand: String {
+        "curl -sf -H 'Authorization: Bearer \(token)' http://127.0.0.1:\(port)\(HookServer.installPath) | sh"
+    }
+
+    public var sshConfigSnippet: String {
+        "RemoteForward \(port) 127.0.0.1:\(port)"
+    }
+
+    public var remoteInstallScript: String {
+        let entries = Self.events.reduce(into: [String: Any]()) { $0[$1] = Self.hookEntry(for: $1, script: Self.scriptPlaceholder) }
+        let data = try! JSONSerialization.data(withJSONObject: entries, options: [.sortedKeys, .withoutEscapingSlashes])
+        return """
+        #!/bin/sh
+        set -e
+        dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+        script="$dir/\(Self.scriptName)"
+        command -v python3 >/dev/null 2>&1 || { echo "Islet: python3 is required to update $dir/settings.json" >&2; exit 1; }
+        mkdir -p "$dir"
+        cat > "$script" <<'ISLET_HOOK'
+        \(script.trimmingCharacters(in: .newlines))
+        ISLET_HOOK
+        chmod 700 "$script"
+        python3 - "$dir/settings.json" "$script" <<'ISLET_SETTINGS'
+        import json, os, sys
+        path, script = sys.argv[1], sys.argv[2]
+        entries = json.loads(\(Self.pythonLiteral(String(decoding: data, as: UTF8.self))).replace("\(Self.scriptPlaceholder)", script))
+        settings = {}
+        if os.path.exists(path):
+            with open(path) as f:
+                text = f.read()
+            settings = json.loads(text) if text.strip() else {}
+        if not isinstance(settings, dict):
+            sys.exit(f"Islet: {path} is not a JSON object")
+        hooks = settings.setdefault("hooks", {})
+        for event, entry in entries.items():
+            groups = [g for g in hooks.get(event, []) if not any("\(Self.scriptName)" in h.get("command", "") for h in g.get("hooks", []))]
+            groups.append({"hooks": [entry]})
+            hooks[event] = groups
+        with open(path, "w") as f:
+            json.dump(settings, f, indent=2, sort_keys=True)
+            f.write("\\n")
+        ISLET_SETTINGS
+        echo "Islet hooks installed in $dir. Restart Claude Code sessions on this machine to report them."
+
+        """
+    }
+
+    private static let scriptPlaceholder = "__ISLET_SCRIPT__"
+
+    private static func pythonLiteral(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "'", with: "\\'") + "'"
     }
 
     public var isInstalled: Bool {

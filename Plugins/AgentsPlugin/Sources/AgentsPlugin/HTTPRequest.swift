@@ -50,10 +50,15 @@ struct HTTPRequest: Sendable, Equatable {
 
 struct HTTPResponse: Sendable {
     var status: Int
+    var contentType: String
     var body: Data
 
     static func json(_ status: Int = 200, _ body: String = "{}") -> HTTPResponse {
-        HTTPResponse(status: status, body: Data(body.utf8))
+        HTTPResponse(status: status, contentType: "application/json", body: Data(body.utf8))
+    }
+
+    static func text(_ body: String) -> HTTPResponse {
+        HTTPResponse(status: 200, contentType: "text/plain; charset=utf-8", body: Data(body.utf8))
     }
 
     var serialized: Data {
@@ -67,7 +72,7 @@ struct HTTPResponse: Sendable {
         default: reason = "Error"
         }
         var head = "HTTP/1.1 \(status) \(reason)\r\n"
-        head += "Content-Type: application/json\r\n"
+        head += "Content-Type: \(contentType)\r\n"
         head += "Content-Length: \(body.count)\r\n"
         head += "Connection: close\r\n\r\n"
         return Data(head.utf8) + body

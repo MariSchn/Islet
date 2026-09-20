@@ -6,17 +6,27 @@ import Observation
 @Observable
 public final class AgentSessionStore {
     public static let finishedPillDuration: TimeInterval = 10 * 60
+    public static let unreachableTimeout: TimeInterval = 5 * 60
 
     public private(set) var sessions: [AgentSession] = []
     public var onChange: (() -> Void)?
 
     private let now: () -> Date
+    private let localHost: String
     private var dismissedIDs: Set<String> = []
     @ObservationIgnored private var expiryTask: Task<Void, Never>?
+    @ObservationIgnored private var unreachableTask: Task<Void, Never>?
     @ObservationIgnored private var decisions: [UUID: CheckedContinuation<PermissionDecision?, Never>] = [:]
 
-    public init(now: @escaping () -> Date = Date.init) {
+    public init(now: @escaping () -> Date = Date.init, localHost: String = AgentSessionStore.localHostName) {
         self.now = now
+        self.localHost = localHost
+    }
+
+    public static var localHostName: String {
+        var buffer = [CChar](repeating: 0, count: 256)
+        gethostname(&buffer, buffer.count)
+        return String(String(cString: buffer).prefix { $0 != "." })
     }
 
     public var attentionSessions: [AgentSession] {
@@ -24,7 +34,7 @@ public final class AgentSessionStore {
     }
 
     public var workingSessions: [AgentSession] {
-        sessions.filter { $0.state == .working }
+        sessions.filter { $0.state == .working && !$0.isUnreachable }
     }
 
     public func handle(_ event: HookEvent) async -> HookReply {
@@ -69,7 +79,11 @@ public final class AgentSessionStore {
             updatedAt: timestamp
         )
         if let cwd = event.cwd { session.cwd = cwd }
-        if let host = event.host { session.host = host }
+        if let host = event.host {
+            session.host = host
+            session.isRemote = host.caseInsensitiveCompare(localHost) != .orderedSame
+        }
+        session.isUnreachable = false
         if let terminal = event.terminal { session.terminal = terminal }
         if let tty = event.tty { session.tty = tty }
         session.updatedAt = timestamp
@@ -129,6 +143,7 @@ public final class AgentSessionStore {
         }
         onChange?()
         scheduleFinishedExpiry()
+        scheduleUnreachableCheck()
     }
 
     public func dismiss(_ id: String) {
@@ -247,6 +262,32 @@ public final class AgentSessionStore {
             self?.onChange?()
             self?.scheduleFinishedExpiry()
         }
+    }
+
+    private var reachabilityCandidates: [AgentSession] {
+        sessions.filter { $0.isRemote && $0.state == .working && !$0.isUnreachable }
+    }
+
+    private func scheduleUnreachableCheck() {
+        unreachableTask?.cancel()
+        guard let oldest = reachabilityCandidates.map(\.updatedAt).min() else { return }
+        let delay = oldest.addingTimeInterval(Self.unreachableTimeout).timeIntervalSince(now())
+        unreachableTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(max(delay, 0) + 1))
+            guard !Task.isCancelled else { return }
+            self?.markUnreachableSessions()
+        }
+    }
+
+    public func markUnreachableSessions() {
+        let cutoff = now().addingTimeInterval(-Self.unreachableTimeout)
+        var changed = false
+        for index in sessions.indices where sessions[index].isRemote && sessions[index].state == .working && !sessions[index].isUnreachable && sessions[index].updatedAt <= cutoff {
+            sessions[index].isUnreachable = true
+            changed = true
+        }
+        if changed { onChange?() }
+        scheduleUnreachableCheck()
     }
 
     static func summarize(_ prompt: String) -> String {
