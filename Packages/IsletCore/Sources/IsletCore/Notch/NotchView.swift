@@ -15,12 +15,12 @@ public struct NotchView<Content: View>: View {
             return controller.expandedShapeSize
         }
         guard let pill = controller.pill else { return controller.geometry.notchSize }
-        return controller.geometry.pillShapeSize(for: pill)
+        return controller.geometry.pillShapeSize(for: pill, contentSize: controller.contentSize)
     }
 
     private var shapeOffset: CGFloat {
         guard !controller.isExpanded, let pill = controller.pill else { return 0 }
-        return controller.geometry.pillShapeOffset(for: pill)
+        return controller.geometry.pillShapeOffset(for: pill, contentSize: controller.contentSize)
     }
 
     private var shape: NotchShape {
@@ -58,7 +58,7 @@ public struct NotchView<Content: View>: View {
                         .frame(width: shapeSize.width, height: shapeSize.height, alignment: .top)
                         .transition(.opacity)
                 } else if let pill = controller.pill {
-                    PillView(pill: pill, geometry: controller.geometry)
+                    PillView(pill: pill, geometry: controller.geometry, contentSize: controller.contentSize)
                         .frame(width: shapeSize.width, height: shapeSize.height)
                         .transition(.opacity)
                 }
@@ -82,6 +82,7 @@ private let hitTestableInvisibleOpacity = 0.02
 private struct PillView: View {
     let pill: PillStatus
     let geometry: NotchGeometry
+    let contentSize: CGSize?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -100,13 +101,13 @@ private struct PillView: View {
                     .aspectRatio(contentMode: .fill)
                     .frame(width: artworkSide, height: artworkSide)
                     .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-                    .frame(width: geometry.pillTrailingWidth(for: pill))
+                    .frame(width: geometry.pillTrailingWidth(for: pill, contentSize: contentSize))
             } else {
                 Text(pill.text)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .padding(.horizontal, NotchGeometry.pillTextPadding)
-                    .frame(width: geometry.pillTrailingWidth(for: pill), alignment: .leading)
+                    .frame(width: geometry.pillTrailingWidth(for: pill, contentSize: contentSize), alignment: .leading)
             }
         }
         .font(Font(NotchGeometry.pillFont))
