@@ -4,7 +4,6 @@ import HelloPlugin
 import IsletCore
 import MediaPlugin
 import ShelfPlugin
-import SwiftUI
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -14,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
     private(set) lazy var notchController = NotchController(settings: settings)
     private var panel: NotchPanel?
+    private var statusItem: NSStatusItem?
     private lazy var settingsWindow = SettingsWindowController(settings: settings, registry: registry)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         panel.show()
         self.panel = panel
+        statusItem = makeStatusItem()
 
         notchController.attach(registry)
         Task { @MainActor in
@@ -31,6 +32,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func showSettings() {
         settingsWindow.show()
+    }
+
+    private func makeStatusItem() -> NSStatusItem {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        item.button?.image = NSImage(systemSymbolName: "circle.hexagongrid", accessibilityDescription: "Islet")
+        let menu = NSMenu()
+        menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",").target = self
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "Quit Islet", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        item.menu = menu
+        return item
+    }
+
+    @objc private func openSettings() {
+        showSettings()
     }
 
     private func registerBuiltInPlugins() async {
