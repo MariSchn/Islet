@@ -177,6 +177,41 @@ struct AgentSessionStoreTests {
         #expect(store.sessions[0].isUnreachable == false)
     }
 
+    @Test func alertsOnceWhenASessionNeedsAttentionOrFinishes() async {
+        let store = AgentSessionStore()
+        var alerts: [AgentSessionStore.Alert] = []
+        store.onAlert = { alerts.append($0) }
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s", cwd: "/p", prompt: "x"))
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "s", toolName: "Read"))
+        #expect(alerts.isEmpty)
+
+        store.apply(HookEvent(kind: .notification, sessionID: "s", message: "Needs permission", notificationType: "permission_prompt"))
+        store.apply(HookEvent(kind: .notification, sessionID: "s", message: "Waiting", notificationType: "elicitation_dialog"))
+        #expect(alerts.count == 1)
+        if case .needsAttention(let session) = alerts[0] {
+            #expect(session.projectName == "p")
+            #expect(session.state == .needsAttention("Needs permission"))
+        } else {
+            Issue.record("expected an attention alert")
+        }
+
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "s", toolName: "Read"))
+        store.apply(HookEvent(kind: .stop, sessionID: "s"))
+        store.apply(HookEvent(kind: .stop, sessionID: "s"))
+        #expect(alerts.count == 2)
+        if case .finished(let session) = alerts[1] {
+            #expect(session.task == "x")
+        } else {
+            Issue.record("expected a finished alert")
+        }
+
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s", prompt: "y"))
+        store.apply(HookEvent(kind: .permissionRequest, sessionID: "s", toolName: "Bash", toolInput: .object(["command": .string("ls")])))
+        #expect(alerts.count == 3)
+        store.apply(HookEvent(kind: .permissionRequest, sessionID: "s", toolName: "Bash", toolInput: .object(["command": .string("pwd")])))
+        #expect(alerts.count == 3)
+    }
+
     @Test func multipleSessionsAreCountedAndNewestFirst() {
         let store = AgentSessionStore()
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", cwd: "/x/one", prompt: "one"))
