@@ -58,7 +58,7 @@ struct NotchGeometryTests {
         let shortTrailing = geometry.pillTrailingWidth(for: short.text)
         #expect(shortTrailing > 2 * NotchGeometry.pillTextPadding)
         #expect(shortTrailing < 60)
-        #expect(geometry.pillTrailingWidth(for: long.text) == NotchGeometry.pillTrailingMaxWidth)
+        #expect(geometry.pillTrailingWidth(for: long.text) == geometry.navigationSideWidth())
 
         for pill in [short, long] {
             let size = geometry.pillShapeSize(for: pill)
@@ -79,6 +79,21 @@ struct NotchGeometryTests {
 
         #expect(size.width + 2 * abs(offset) <= geometry.panelSize.width)
         #expect(geometry.pillTrailingWidth(for: pill.text) < NotchGeometry.pillTrailingMaxWidth)
+    }
+
+    @Test func pillNeverExtendsBeyondTheExpandedNotchOfTheCurrentPlugin() {
+        let geometry = NotchGeometry(screenFrame: screen, notchSize: CGSize(width: 196, height: 32), hasHardwareNotch: true)
+        let pill = PillStatus(text: String(repeating: "Playing a very long track title ", count: 4))
+        let narrow = CGSize(width: 240, height: 100)
+
+        let size = geometry.pillShapeSize(for: pill, contentSize: narrow)
+        let offset = geometry.pillShapeOffset(for: pill, contentSize: narrow)
+        let expanded = geometry.expandedShapeFrame(for: narrow)
+        let pillFrame = CGRect(x: geometry.panelFrame.midX - size.width / 2 + offset, y: 0, width: size.width, height: size.height)
+        #expect(pillFrame.minX >= expanded.minX)
+        #expect(pillFrame.maxX <= expanded.maxX)
+        #expect(geometry.pillTrailingWidth(for: pill.text, contentSize: narrow) == geometry.navigationSideWidth(for: narrow))
+        #expect(geometry.pillTrailingWidth(for: pill.text, contentSize: CGSize(width: 900, height: 100)) == NotchGeometry.pillTrailingMaxWidth)
     }
 
     @Test func expandedShapeFrameIsCenteredAtTopInScreenCoordinates() {

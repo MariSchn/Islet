@@ -106,25 +106,24 @@ public struct NotchGeometry: Sendable, Equatable {
         expandedShapeSize(for: largestContentSize)
     }
 
-    public func pillTrailingWidth(for text: String) -> CGFloat {
+    public func pillTrailingWidth(for text: String, contentSize: CGSize? = nil) -> CGFloat {
         let textWidth = (text as NSString).size(withAttributes: [.font: Self.pillFont]).width
-        let availableSideWidth = (panelSize.width - notchSize.width) / 2
-        return min(ceil(textWidth) + 2 * Self.pillTextPadding, Self.pillTrailingMaxWidth, availableSideWidth)
+        return min(ceil(textWidth) + 2 * Self.pillTextPadding, Self.pillTrailingMaxWidth, navigationSideWidth(for: contentSize))
     }
 
-    public func pillTrailingWidth(for pill: PillStatus) -> CGFloat {
-        pill.artwork == nil ? pillTrailingWidth(for: pill.text) : Self.pillLeadingWidth
+    public func pillTrailingWidth(for pill: PillStatus, contentSize: CGSize? = nil) -> CGFloat {
+        pill.artwork == nil ? pillTrailingWidth(for: pill.text, contentSize: contentSize) : Self.pillLeadingWidth
     }
 
-    public func pillShapeSize(for pill: PillStatus) -> CGSize {
+    public func pillShapeSize(for pill: PillStatus, contentSize: CGSize? = nil) -> CGSize {
         CGSize(
-            width: notchSize.width + Self.pillLeadingWidth + pillTrailingWidth(for: pill),
+            width: notchSize.width + Self.pillLeadingWidth + pillTrailingWidth(for: pill, contentSize: contentSize),
             height: notchSize.height
         )
     }
 
-    public func pillShapeOffset(for pill: PillStatus) -> CGFloat {
-        (pillTrailingWidth(for: pill) - Self.pillLeadingWidth) / 2
+    public func pillShapeOffset(for pill: PillStatus, contentSize: CGSize? = nil) -> CGFloat {
+        (pillTrailingWidth(for: pill, contentSize: contentSize) - Self.pillLeadingWidth) / 2
     }
 
     public func expandedShapeFrame(for contentSize: CGSize? = nil) -> CGRect {
