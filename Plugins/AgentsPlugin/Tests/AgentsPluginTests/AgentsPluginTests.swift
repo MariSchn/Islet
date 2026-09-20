@@ -127,7 +127,7 @@ struct AgentSessionStoreTests {
         let store = AgentSessionStore()
         let event = HookEvent(kind: .permissionRequest, sessionID: "a", cwd: "/x/one", toolName: "Bash", toolInput: .object(["command": .string("rm -rf build")]))
         async let reply = store.handle(event)
-        try await Task.sleep(for: .milliseconds(20))
+        try await waitForPendingRequest(in: store)
         let request = try #require(store.sessions.first?.pendingRequest)
         #expect(request.kind == .permission(tool: "Bash", detail: "rm -rf build"))
         #expect(store.pillStatus?.text == "one needs you")
@@ -138,7 +138,7 @@ struct AgentSessionStoreTests {
         #expect(store.sessions.first?.state == .working)
 
         async let denied = store.handle(event)
-        try await Task.sleep(for: .milliseconds(20))
+        try await waitForPendingRequest(in: store)
         store.decide(try #require(store.sessions.first?.pendingRequest?.id), .deny)
         #expect(await denied.body.contains(#""behavior":"deny""#))
         #expect(store.sessions.first?.activity == "Denied Bash")
@@ -152,7 +152,7 @@ struct AgentSessionStoreTests {
             ]),
         ])
         async let reply = store.handle(HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "AskUserQuestion", toolInput: input))
-        try await Task.sleep(for: .milliseconds(20))
+        try await waitForPendingRequest(in: store)
         let request = try #require(store.sessions.first?.pendingRequest)
         #expect(request.kind == .question([PendingRequest.Question(text: "Which framework?", header: "Framework", options: [.init(label: "React", description: "Popular"), .init(label: "Vue")])]))
         #expect(store.sessions.first?.state == .needsAttention("Has a question"))
@@ -171,30 +171,82 @@ struct AgentSessionStoreTests {
         let store = AgentSessionStore()
         let event = HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "Bash", toolInput: .object(["command": .string("ls")]))
         async let reply = store.handle(event)
-        try await Task.sleep(for: .milliseconds(20))
+        try await waitForPendingRequest(in: store)
         #expect(store.sessions.first?.pendingRequest != nil)
 
         store.apply(HookEvent(kind: .notification, sessionID: "a", message: "Claude needs your permission", notificationType: "permission_prompt"))
         #expect(store.sessions.first?.pendingRequest != nil)
+        #expect(store.sessions.first?.state == .needsAttention("Wants to $ ls"))
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "a", toolName: "Grep", toolInput: .object(["pattern": .string("x")])))
+        #expect(store.sessions.first?.pendingRequest != nil)
 
-        store.apply(HookEvent(kind: .postToolUse, sessionID: "a", toolName: "Bash", toolInput: .object(["command": .string("ls")])))
+        store.apply(HookEvent(kind: .stop, sessionID: "a"))
         #expect(await reply == .empty)
         #expect(store.sessions.first?.pendingRequest == nil)
+        #expect(store.sessions.first?.state == .done)
 
         async let cancelled = store.handle(event)
-        try await Task.sleep(for: .milliseconds(20))
+        try await waitForPendingRequest(in: store)
         store.dismiss("a")
         #expect(await cancelled == .empty)
 
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "again"))
         let task = Task { await store.handle(event) }
-        try await Task.sleep(for: .milliseconds(20))
+        try await waitForPendingRequest(in: store)
         #expect(store.sessions.first?.pendingRequest != nil)
         task.cancel()
         #expect(await task.value == .empty)
-        try await Task.sleep(for: .milliseconds(20))
-        #expect(store.sessions.first?.pendingRequest == nil)
+        let deadline = ContinuousClock.now + .seconds(2)
+        while store.sessions.first?.pendingRequest != nil {
+            try #require(ContinuousClock.now < deadline)
+            await Task.yield()
+        }
+        #expect(store.sessions.first?.state == .working)
+    }
+
+    func waitForPendingRequest(in store: AgentSessionStore, count: Int = 1) async throws {
+        let deadline = ContinuousClock.now + .seconds(2)
+        while (store.sessions.first?.pendingRequests.count ?? 0) < count {
+            try #require(ContinuousClock.now < deadline)
+            await Task.yield()
+        }
+    }
+
+    @Test func concurrentRequestsAreQueuedAndAnsweredIndividually() async throws {
+        let store = AgentSessionStore()
+        let first = HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "Bash", toolInput: .object(["command": .string("ls")]))
+        let second = HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "Edit", toolInput: .object(["file_path": .string("/x/a.swift")]))
+        async let firstReply = store.handle(first)
+        try await waitForPendingRequest(in: store)
+        async let secondReply = store.handle(second)
+        try await waitForPendingRequest(in: store, count: 2)
+        let requests = try #require(store.sessions.first?.pendingRequests)
+        #expect(requests.map(\.toolName) == ["Bash", "Edit"])
         #expect(store.sessions.first?.state == .needsAttention("Wants to $ ls"))
+
+        store.decide(UUID(), .allow)
+        #expect(store.sessions.first?.pendingRequests.count == 2)
+
+        store.decide(requests[1].id, .deny)
+        #expect(await secondReply.body.contains("deny"))
+        #expect(store.sessions.first?.pendingRequest?.toolName == "Bash")
+        #expect(store.sessions.first?.state == .needsAttention("Wants to $ ls"))
+
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "a", toolName: "Bash", toolInput: .object(["command": .string("ls")])))
+        #expect(await firstReply == .empty)
+        #expect(store.sessions.first?.pendingRequests.isEmpty == true)
+        #expect(store.sessions.first?.state == .working)
+    }
+
+    @Test func unsupportedToolsOnlyRaiseAttention() async throws {
+        let store = AgentSessionStore()
+        let reply = await store.handle(HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "ExitPlanMode", toolInput: .object([:])))
+        #expect(reply == .empty)
+        #expect(store.sessions.first?.pendingRequests.isEmpty == true)
+        #expect(store.sessions.first?.state == .needsAttention("Wants to ExitPlanMode"))
+        let question = await store.handle(HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "AskUserQuestion", toolInput: .object(["questions": .array([])])))
+        #expect(question == .empty)
+        #expect(store.sessions.first?.pendingRequests.isEmpty == true)
     }
 
     @Test func notifiesOnEveryChange() {
@@ -223,15 +275,15 @@ struct AgentsPluginSizingTests {
     @Test func pendingRequestsMakeRowsTaller() {
         var session = AgentSession(id: "a", agent: .claudeCode, host: nil, cwd: nil, task: nil, activity: nil, state: .working, startedAt: .now, turnStartedAt: .now, updatedAt: .now)
         let plain = AgentsPlugin.contentSize(for: [session]).height
-        session.pendingRequest = PendingRequest(toolName: "Bash", toolInput: .object(["command": .string("ls")]))
+        session.pendingRequests = [PendingRequest(toolName: "Bash", toolInput: .object(["command": .string("ls")]))!]
         let permission = AgentsPlugin.contentSize(for: [session]).height
         #expect(permission > plain)
-        session.pendingRequest = PendingRequest(toolName: "AskUserQuestion", toolInput: .object([
+        session.pendingRequests = [PendingRequest(toolName: "AskUserQuestion", toolInput: .object([
             "questions": .array([
                 .object(["question": .string("Which?"), "options": .array([.object(["label": .string("A")]), .object(["label": .string("B")]), .object(["label": .string("C")])])]),
                 .object(["question": .string("Multi?"), "multiSelect": .bool(true), "options": .array([.object(["label": .string("X")])])]),
             ]),
-        ]))
+        ]))!]
         let question = AgentsPlugin.contentSize(for: [session]).height
         #expect(question > permission)
         #expect(question <= AgentsPlugin.maxContentHeight)
@@ -264,7 +316,7 @@ struct HookInstallerTests {
         #expect(preToolUse.count == 2)
         #expect((preToolUse[0]["matcher"] as? String) == "Bash")
         let permissionHook = ((hooks["PermissionRequest"] as! [[String: Any]])[0]["hooks"] as! [[String: Any]])[0]
-        #expect(permissionHook["command"] as? String == installer.scriptURL.path + " 600")
+        #expect(permissionHook["command"] as? String == "'" + installer.scriptURL.path + "' 600")
         #expect(permissionHook["timeout"] as? Int == 605)
         #expect((((preToolUse[1]["hooks"] as! [[String: Any]])[0])["timeout"] as? Int) == 10)
 
@@ -273,7 +325,7 @@ struct HookInstallerTests {
         #expect(script.contains("127.0.0.1:7365/hook"))
         let permissions = try FileManager.default.attributesOfItem(atPath: installer.scriptURL.path)[.posixPermissions] as! Int
         #expect(permissions == 0o700)
-        #expect(try String(contentsOf: installer.settingsURL, encoding: .utf8).contains("\"command\" : \"/"))
+        #expect(try String(contentsOf: installer.settingsURL, encoding: .utf8).contains("\"command\" : \"'/"))
 
         try installer.install()
         #expect((try JSONSerialization.jsonObject(with: Data(contentsOf: installer.settingsURL)) as! [String: Any])["hooks"].map { ($0 as! [String: Any])["PreToolUse"] as! [[String: Any]] }?.count == 2)
@@ -406,15 +458,25 @@ struct HookServerTests {
         request.setValue("Bearer secret", forHTTPHeaderField: "Authorization")
         request.httpBody = Data(#"{"session_id":"s","hook_event_name":"PermissionRequest","tool_name":"Bash"}"#.utf8)
         await #expect(throws: (any Error).self) { try await URLSession.shared.data(for: request) }
-        try await Task.sleep(for: .milliseconds(300))
-        #expect(await gate.cancelled == 1)
+        let deadline = ContinuousClock.now + .seconds(2)
+        while await gate.cancelled == 0 {
+            try #require(ContinuousClock.now < deadline)
+            await Task.yield()
+        }
 
         request.timeoutInterval = 10
-        async let response = URLSession.shared.data(for: request)
+        let final = request
+        async let response = URLSession.shared.data(for: final)
         try await Task.sleep(for: .milliseconds(200))
         await gate.open(with: HookReply(body: #"{"ok":true}"#))
         let (body, _) = try await response
         #expect(body == Data(#"{"ok":true}"#.utf8))
+
+        let dropped = Task { try await URLSession.shared.data(for: final) }
+        try await Task.sleep(for: .milliseconds(200))
+        await server.stop()
+        await #expect(throws: (any Error).self) { try await dropped.value }
+        #expect(await gate.cancelled == 2)
     }
 
     func freePort() throws -> UInt16 {

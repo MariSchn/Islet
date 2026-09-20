@@ -35,15 +35,23 @@ public struct PendingRequest: Sendable, Equatable, Identifiable {
     public let toolInput: JSONValue?
     public let kind: Kind
 
-    public init(id: UUID = UUID(), toolName: String, toolInput: JSONValue?) {
+    public init?(id: UUID = UUID(), toolName: String, toolInput: JSONValue?) {
         self.id = id
         self.toolName = toolName
         self.toolInput = toolInput
-        if toolName == "AskUserQuestion", let questions = Self.questions(from: toolInput), !questions.isEmpty {
+        switch toolName {
+        case "AskUserQuestion":
+            guard let questions = Self.questions(from: toolInput), !questions.isEmpty else { return nil }
             kind = .question(questions)
-        } else {
+        case "ExitPlanMode":
+            return nil
+        default:
             kind = .permission(tool: toolName, detail: Self.permissionDetail(tool: toolName, input: toolInput))
         }
+    }
+
+    public var activityDescription: String? {
+        HookEvent(kind: .permissionRequest, sessionID: "", toolName: toolName, toolInput: toolInput).activityDescription
     }
 
     public var title: String {
@@ -72,8 +80,7 @@ public struct PendingRequest: Sendable, Equatable, Identifiable {
         case "WebFetch": input?["url"]?.stringValue
         case "WebSearch": input?["query"]?.stringValue
         case "Task", "Agent": input?["description"]?.stringValue
-        case "ExitPlanMode": nil
-        default: HookEvent(kind: .permissionRequest, sessionID: "", toolName: tool, toolInput: input).activityDescription
+        default: nil
         }
     }
 }

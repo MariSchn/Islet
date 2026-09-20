@@ -164,7 +164,7 @@ private struct QuestionView: View {
     let submit: ([String: String]) -> Void
     @State private var index = 0
     @State private var answers: [String: String] = [:]
-    @State private var selection: [String] = []
+    @State private var selection: [Int] = []
 
     private var question: PendingRequest.Question { questions[index] }
 
@@ -181,35 +181,36 @@ private struct QuestionView: View {
                     .font(.system(size: 12))
                     .lineLimit(2)
             }
-            .frame(maxWidth: .infinity, minHeight: AgentsPlugin.requestDetailHeight, maxHeight: AgentsPlugin.requestDetailHeight, alignment: .topLeading)
-            ForEach(question.options, id: \.label) { option in
+            .frame(maxWidth: .infinity, minHeight: AgentsPlugin.questionDetailHeight, maxHeight: AgentsPlugin.questionDetailHeight, alignment: .topLeading)
+            ForEach(Array(question.options.enumerated()), id: \.offset) { offset, option in
                 RequestButton(
                     option.label,
-                    systemImage: question.multiSelect ? (selection.contains(option.label) ? "checkmark.square.fill" : "square") : "arrow.turn.down.right",
+                    subtitle: option.description,
+                    systemImage: question.multiSelect ? (selection.contains(offset) ? "checkmark.square.fill" : "square") : "arrow.turn.down.right",
                     tint: .accentColor,
                     fullWidth: true
-                ) { choose(option.label) }
-                .help(option.description ?? "")
+                ) { choose(offset) }
             }
             if question.multiSelect {
                 RequestButton(index + 1 < questions.count ? "Next" : "Submit", systemImage: "checkmark", tint: .green) {
-                    record(selection.joined(separator: ", "))
+                    record(selection.sorted().map { question.options[$0].label }.joined(separator: ", "))
                 }
                 .disabled(selection.isEmpty)
+                .opacity(selection.isEmpty ? 0.4 : 1)
             }
         }
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
-    private func choose(_ label: String) {
+    private func choose(_ offset: Int) {
         if question.multiSelect {
-            if let position = selection.firstIndex(of: label) {
+            if let position = selection.firstIndex(of: offset) {
                 selection.remove(at: position)
             } else {
-                selection.append(label)
+                selection.append(offset)
             }
         } else {
-            record(label)
+            record(question.options[offset].label)
         }
     }
 
@@ -226,13 +227,15 @@ private struct QuestionView: View {
 
 private struct RequestButton: View {
     let title: String
+    let subtitle: String?
     let systemImage: String
     let tint: Color
-    var fullWidth = false
+    let fullWidth: Bool
     let action: () -> Void
 
-    init(_ title: String, systemImage: String, tint: Color, fullWidth: Bool = false, action: @escaping () -> Void) {
+    init(_ title: String, subtitle: String? = nil, systemImage: String, tint: Color, fullWidth: Bool = false, action: @escaping () -> Void) {
         self.title = title
+        self.subtitle = subtitle
         self.systemImage = systemImage
         self.tint = tint
         self.fullWidth = fullWidth
@@ -241,9 +244,18 @@ private struct RequestButton: View {
 
     var body: some View {
         Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .font(.system(size: 11, weight: .medium))
-                .lineLimit(1)
+            HStack(spacing: 6) {
+                Label(title, systemImage: systemImage)
+                    .font(.system(size: 11, weight: .medium))
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
                 .padding(.horizontal, 10)
                 .frame(maxWidth: fullWidth ? .infinity : nil, alignment: .leading)
                 .frame(height: AgentsPlugin.requestButtonHeight)

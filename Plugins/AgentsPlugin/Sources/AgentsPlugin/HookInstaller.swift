@@ -32,10 +32,20 @@ public struct HookInstaller: Sendable {
     }
 
     public var isInstalled: Bool {
+        hasAllHooks && isScriptCurrent
+    }
+
+    public var needsUpgrade: Bool {
+        (hasAllHooks || FileManager.default.fileExists(atPath: scriptURL.path)) && !isInstalled
+    }
+
+    private var hasAllHooks: Bool {
         guard let settings = try? readSettings(), let hooks = settings["hooks"] as? [String: Any] else { return false }
-        let hasAllEvents = Self.events.allSatisfy { Self.containsHook(hooks[$0]) }
-        let script = try? String(contentsOf: scriptURL, encoding: .utf8)
-        return hasAllEvents && script == self.script
+        return Self.events.allSatisfy { Self.containsHook(hooks[$0]) }
+    }
+
+    private var isScriptCurrent: Bool {
+        (try? String(contentsOf: scriptURL, encoding: .utf8)) == script
     }
 
     public func install() throws {
@@ -68,7 +78,8 @@ public struct HookInstaller: Sendable {
 
     static func hookEntry(for event: String, script: String) -> [String: Any] {
         let blocking = event == "PermissionRequest"
-        let command = blocking ? "\(script) \(Int(HookServer.replyTimeout.components.seconds))" : script
+        let quoted = "'" + script.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        let command = blocking ? "\(quoted) \(Int(HookServer.replyTimeout.components.seconds))" : quoted
         return ["type": "command", "command": command, "timeout": blocking ? Int(HookServer.replyTimeout.components.seconds) + 5 : 10]
     }
 
@@ -80,7 +91,7 @@ public struct HookInstaller: Sendable {
     private static func withoutIsletHooks(_ groups: Any?) -> [[String: Any]] {
         (groups as? [[String: Any]] ?? []).filter { group in
             let commands = (group["hooks"] as? [[String: Any]] ?? []).compactMap { $0["command"] as? String }
-            return !commands.contains { $0.hasSuffix(scriptName) || $0.contains(scriptName + " ") }
+            return !commands.contains { $0.contains(scriptName) }
         }
     }
 

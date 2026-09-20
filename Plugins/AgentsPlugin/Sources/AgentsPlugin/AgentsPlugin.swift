@@ -12,6 +12,7 @@ public final class AgentsPlugin: IsletPlugin {
     static let maxVisibleRows = 4
     static let requestPadding: CGFloat = 8
     static let requestDetailHeight: CGFloat = 30
+    static let questionDetailHeight: CGFloat = 46
     static let requestButtonHeight: CGFloat = 24
     static let requestSpacing: CGFloat = 6
     static let maxContentHeight = 2 * contentPadding + CGFloat(maxVisibleRows) * rowHeight + CGFloat(maxVisibleRows - 1) * rowSpacing
@@ -32,7 +33,7 @@ public final class AgentsPlugin: IsletPlugin {
             return 2 * requestPadding + requestDetailHeight + requestSpacing + requestButtonHeight
         case .question(let questions):
             let options = questions.map { CGFloat($0.options.count) * requestButtonHeight + CGFloat($0.options.count - 1) * requestSpacing + ($0.multiSelect ? requestSpacing + requestButtonHeight : 0) }
-            return 2 * requestPadding + requestDetailHeight + requestSpacing + (options.max() ?? 0)
+            return 2 * requestPadding + questionDetailHeight + requestSpacing + (options.max() ?? 0)
         }
     }
 
@@ -109,6 +110,9 @@ public final class AgentsController {
             serverError = nil
         } catch {
             serverError = "Could not listen on 127.0.0.1:\(server.port). Is another app using the port?"
+        }
+        if installer.needsUpgrade {
+            try? installer.install()
         }
         refreshInstallState()
     }
