@@ -26,6 +26,8 @@ public struct AgentSession: Identifiable, Sendable, Equatable {
     public let id: String
     public var agent: Agent
     public var host: String?
+    public var terminal: TerminalApp?
+    public var tty: String?
     public var cwd: String?
     public var task: String?
     public var activity: String?

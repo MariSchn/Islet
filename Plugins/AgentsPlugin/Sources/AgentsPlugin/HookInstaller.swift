@@ -20,11 +20,22 @@ public struct HookInstaller: Sendable {
     public var script: String {
         """
         #!/bin/sh
-        curl -sf --connect-timeout 1 -m "${1:-5}" -X POST "http://127.0.0.1:\(port)\(HookServer.hookPath)" \\
+        timeout="${1:-5}"
+        tty=""
+        pid=$$
+        while [ "$pid" -gt 1 ]; do
+          set -- $(ps -o ppid=,tty= -p "$pid" 2>/dev/null)
+          [ -n "$1" ] || break
+          case "$2" in ""|"??") ;; *) tty="/dev/$2" ;; esac
+          pid=$1
+        done
+        curl -sf --connect-timeout 1 -m "$timeout" -X POST "http://127.0.0.1:\(port)\(HookServer.hookPath)" \\
           -H "Content-Type: application/json" \\
           -H "Expect:" \\
           -H "Authorization: Bearer \(token)" \\
           -H "X-Islet-Host: $(hostname -s 2>/dev/null || hostname)" \\
+          -H "X-Islet-Terminal: ${__CFBundleIdentifier:-$TERM_PROGRAM}" \\
+          -H "X-Islet-TTY: $tty" \\
           --data-binary @- 2>/dev/null
         exit 0
 

@@ -58,6 +58,8 @@ public final class AgentSessionStore {
             id: event.sessionID,
             agent: .claudeCode,
             host: event.host,
+            terminal: event.terminal,
+            tty: event.tty,
             cwd: event.cwd,
             task: nil,
             activity: nil,
@@ -68,6 +70,8 @@ public final class AgentSessionStore {
         )
         if let cwd = event.cwd { session.cwd = cwd }
         if let host = event.host { session.host = host }
+        if let terminal = event.terminal { session.terminal = terminal }
+        if let tty = event.tty { session.tty = tty }
         session.updatedAt = timestamp
         for request in session.pendingRequests where Self.withdraws(request, on: event) {
             resolve(request.id, with: nil)
