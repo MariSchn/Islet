@@ -73,7 +73,7 @@ public final class AgentSessionStore {
         let previous = sessions.first { $0.id == event.sessionID }
         var session = previous ?? AgentSession(
             id: event.sessionID,
-            agent: .claudeCode,
+            agent: event.agent,
             host: event.host,
             terminal: event.terminal,
             tty: event.tty,
@@ -85,6 +85,7 @@ public final class AgentSessionStore {
             turnStartedAt: timestamp,
             updatedAt: timestamp
         )
+        session.agent = event.agent
         if let cwd = event.cwd { session.cwd = cwd }
         if let host = event.host {
             session.host = host
