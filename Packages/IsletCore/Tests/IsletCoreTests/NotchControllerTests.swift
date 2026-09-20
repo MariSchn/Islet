@@ -160,6 +160,59 @@ struct NotchControllerTests {
         #expect(controller.contentSize == nil)
     }
 
+    @Test func keepsPreviousHoverRegionWhenShapeShrinksAwayFromPointer() async throws {
+        let harness = Harness()
+        let registry = harness.makeRegistry()
+        var pointer = CGPoint(x: 10_000, y: 10_000)
+        let controller = NotchController(settings: AppSettings()) { pointer }
+        controller.attach(registry)
+        let stub = try await harness.registerStub(in: registry)
+        let second = try await harness.registerSecond(in: registry)
+        stub.context.contentSize = CGSize(width: 800, height: 400)
+        second.context.contentSize = CGSize(width: 300, height: 100)
+        await Task.yield()
+        let largeSize = controller.geometry.expandedShapeSize(for: CGSize(width: 800, height: 400))
+        let smallSize = controller.geometry.expandedShapeSize(for: CGSize(width: 300, height: 100))
+
+        registry.select("test.second")
+        await Task.yield()
+        #expect(controller.hoverHoldSize == nil)
+        #expect(controller.expandedHoverSize == smallSize)
+
+        registry.select("test.stub")
+        await Task.yield()
+        controller.expand()
+        controller.isHovering = true
+        registry.select("test.second")
+        await Task.yield()
+        #expect(controller.hoverHoldSize == largeSize)
+        #expect(controller.expandedHoverSize == largeSize)
+
+        second.context.contentSize = CGSize(width: 900, height: 100)
+        await Task.yield()
+        #expect(controller.expandedHoverSize == CGSize(width: 900, height: largeSize.height))
+
+        controller.pointerEnteredShape()
+        #expect(controller.hoverHoldSize == nil)
+
+        pointer = CGPoint(x: 0, y: -10)
+        registry.select("test.stub")
+        await Task.yield()
+        second.context.contentSize = CGSize(width: 300, height: 100)
+        registry.select("test.second")
+        await Task.yield()
+        #expect(controller.hoverHoldSize == nil)
+
+        pointer = CGPoint(x: 10_000, y: 10_000)
+        registry.select("test.stub")
+        await Task.yield()
+        registry.select("test.second")
+        await Task.yield()
+        #expect(controller.hoverHoldSize == largeSize)
+        controller.collapse()
+        #expect(controller.hoverHoldSize == nil)
+    }
+
     @Test func navigateOnlySwitchesPluginsWhileExpanded() async throws {
         let harness = Harness()
         let registry = harness.makeRegistry()
