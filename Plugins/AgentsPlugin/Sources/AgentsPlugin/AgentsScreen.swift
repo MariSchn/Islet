@@ -7,6 +7,18 @@ struct AgentsScreen: View {
     @State private var installError: String?
 
     var body: some View {
+        VStack(spacing: AgentsPlugin.rowSpacing) {
+            if controller.showsUsageBar, let usage = controller.usage.usage {
+                UsageBar(usage: usage)
+                    .frame(height: AgentsPlugin.usageBarHeight)
+            }
+            content
+        }
+        .task { controller.usage.refresh() }
+    }
+
+    @ViewBuilder
+    private var content: some View {
         if controller.store.sessions.isEmpty {
             VStack(spacing: 6) {
                 Image(systemName: "terminal")
@@ -17,7 +29,7 @@ struct AgentsScreen: View {
                         .font(.callout)
                         .foregroundStyle(.orange)
                         .multilineTextAlignment(.center)
-                } else if controller.isHookInstalled {
+                } else if controller.isAnyHookInstalled {
                     Text("No agent sessions")
                         .foregroundStyle(.secondary)
                     Text("Sessions started after installing the hooks appear here once you send a prompt.")
@@ -93,18 +105,18 @@ private struct SessionRow: View {
                 .allowsHitTesting(isExpanded)
                 .accessibilityHidden(!isExpanded)
         }
-        .padding(.horizontal, 10)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.white.opacity(isHovering ? 0.1 : 0.06)))
+        .padding(.horizontal, AgentsPlugin.rowPadding)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white.opacity(isHovering ? 0.1 : 0.06)))
         .contentShape(Rectangle())
         .onTapGesture(perform: toggleExpanded)
         .onHover { isHovering = $0 }
     }
 
     private var summary: some View {
-        HStack(alignment: .center, spacing: 10) {
+        HStack(alignment: .center, spacing: 12) {
             StateIndicator(state: session.state, isUnreachable: session.isUnreachable)
                 .frame(width: 22, height: 22)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     SessionTitle(session: session)
                     if let terminal {
@@ -119,14 +131,6 @@ private struct SessionRow: View {
                         .onHover { isHoveringTerminal = $0 }
                         .help("Show in \(terminal.name)")
                     }
-                    if session.agent != .claudeCode {
-                        Text(session.agent.displayName)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(Capsule().fill(.white.opacity(0.12)))
-                    }
                     if session.isRemote, let host = session.host {
                         Label(host, systemImage: session.isUnreachable ? "network.slash" : "network")
                             .font(.system(size: 11))
@@ -135,8 +139,13 @@ private struct SessionRow: View {
                             .help(session.isUnreachable ? "No updates from \(host) for a while. Is the SSH tunnel still up?" : "Running on \(host)")
                     }
                     Spacer(minLength: 0)
-                    ZStack(alignment: .trailing) {
-                        StateLabel(session: session)
+                    AgentBadge(agent: session.agent)
+                    StateLabel(session: session)
+                    ZStack {
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                            .rotationEffect(.degrees(isExpanded ? 180 : 0))
                             .opacity(isHovering ? 0 : 1)
                         Button(action: dismiss) {
                             Image(systemName: "xmark.circle.fill")
@@ -146,23 +155,29 @@ private struct SessionRow: View {
                         .help("Remove from list")
                         .opacity(isHovering ? 1 : 0)
                     }
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
-                        .frame(width: 16, height: 16)
+                    .frame(width: 16, height: 16)
                 }
                 if let task = session.task {
-                    Text(task)
+                    Text("You: \(task)")
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
                 Text(detail)
                     .font(.system(size: 11))
-                    .foregroundStyle(session.state.requiresAttention ? AnyShapeStyle(.orange) : AnyShapeStyle(.tertiary))
+                    .foregroundStyle(detailStyle)
                     .lineLimit(1)
             }
+        }
+    }
+
+    private var detailStyle: AnyShapeStyle {
+        if session.isUnreachable { return AnyShapeStyle(.secondary) }
+        switch session.state {
+        case .starting: return AnyShapeStyle(.tertiary)
+        case .working: return AnyShapeStyle(SessionColors.working)
+        case .needsAttention: return AnyShapeStyle(.orange)
+        case .done: return AnyShapeStyle(.green)
         }
     }
 
@@ -423,6 +438,95 @@ private struct SessionTitle: View {
     }
 }
 
+enum SessionColors {
+    static let working = Color(red: 0.4, green: 0.65, blue: 1)
+}
+
+private struct AgentBadge: View {
+    let agent: AgentSession.Agent
+
+    var body: some View {
+        switch agent {
+        case .claudeCode:
+            ClaudeLogo()
+                .frame(width: 14, height: 14)
+                .help(agent.displayName)
+        case .codex:
+            Chip(agent.displayName)
+        }
+    }
+}
+
+private struct Chip: View {
+    let text: String
+
+    init(_ text: String) {
+        self.text = text
+    }
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(.white.opacity(0.12)))
+            .lineLimit(1)
+    }
+}
+
+private struct UsageBar: View {
+    let usage: ClaudeUsage
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ClaudeLogo()
+                .frame(width: 13, height: 13)
+            if let window = usage.fiveHour {
+                UsageWindowView(label: "5h", window: window)
+            }
+            if usage.fiveHour != nil, usage.sevenDay != nil {
+                Text("|")
+                    .foregroundStyle(.quaternary)
+            }
+            if let window = usage.sevenDay {
+                UsageWindowView(label: "7d", window: window)
+            }
+            Spacer(minLength: 0)
+        }
+        .font(.system(size: 11))
+        .padding(.horizontal, AgentsPlugin.rowPadding)
+        .help("Claude usage limits: share of the 5-hour and 7-day quota used, and time until each resets")
+    }
+}
+
+private struct UsageWindowView: View {
+    let label: String
+    let window: UsageWindow
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(label)
+                .fontWeight(.semibold)
+            Text("\(Int(window.utilization.rounded()))%")
+                .fontWeight(.medium)
+                .foregroundStyle(color)
+            if let resetsAt = window.resetsAt, resetsAt > .now {
+                Text(resetsAt, style: .relative)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    private var color: Color {
+        switch window.utilization {
+        case ..<50: .green
+        case ..<80: .yellow
+        default: .orange
+        }
+    }
+}
+
 private struct StateIndicator: View {
     let state: AgentSession.State
     let isUnreachable: Bool
@@ -491,6 +595,16 @@ struct AgentsSettings: View {
                 Text("Alerts")
             } footer: {
                 Text("Alerts fire when a session asks for permission, has a question or waits for input, and when it finishes its turn. Notifications need permission from macOS the first time they are enabled.")
+            }
+            Section {
+                Toggle("Show Claude usage limits", isOn: $controller.showsUsage)
+                if controller.showsUsage, let error = controller.usage.error {
+                    Text(error).foregroundStyle(.orange)
+                }
+            } header: {
+                Text("Usage")
+            } footer: {
+                Text("Shows how much of the 5-hour and 7-day Claude quota is used above the session list. Islet reads the Claude Code login from the Keychain to ask Anthropic for the numbers; macOS asks for permission the first time.")
             }
             Section {
                 CopyableCommand(title: "SSH config", text: controller.installer.sshConfigSnippet)

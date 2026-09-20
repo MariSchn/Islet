@@ -34,6 +34,8 @@ struct HookEventTests {
         #expect(try HookEvent.decode(payload).terminal == nil)
         #expect(try HookEvent.decode(payload, tty: "/dev/ttys004").tty == "/dev/ttys004")
         #expect(try HookEvent.decode(payload, tty: "").tty == nil)
+        #expect(try HookEvent.decode(payload, tty: "/dev/x\" then do shell script \"id\"").tty == nil)
+        #expect(try HookEvent.decode(payload, terminal: "com.example.app\"").terminal == nil)
         #expect(try HookEvent.decode(payload, title: "islet-main").title == "islet-main")
         #expect(try HookEvent.decode(payload, title: "").title == nil)
         #expect(TerminalApp(identifier: "Apple_Terminal")?.targeting == .terminalTab)
@@ -419,17 +421,21 @@ struct AgentsPluginSizingTests {
         func sessions(_ count: Int) -> [AgentSession] {
             (0..<count).map { AgentSession(id: "\($0)", agent: .claudeCode, host: nil, cwd: nil, task: nil, activity: nil, state: .working, startedAt: .now, turnStartedAt: .now, updatedAt: .now) }
         }
-        #expect(AgentsPlugin.contentSize(for: [], expanded: []) == CGSize(width: 520, height: 130))
-        #expect(AgentsPlugin.contentSize(for: sessions(1), expanded: []) == CGSize(width: 520, height: 78))
-        #expect(AgentsPlugin.contentSize(for: sessions(2), expanded: []) == CGSize(width: 520, height: 136))
-        #expect(AgentsPlugin.contentSize(for: sessions(4), expanded: []) == AgentsPlugin.contentSize(for: sessions(9), expanded: []))
+        #expect(AgentsPlugin.contentSize(for: [], expanded: [], showsUsage: false) == CGSize(width: 520, height: 130))
+        #expect(AgentsPlugin.contentSize(for: sessions(1), expanded: [], showsUsage: false) == CGSize(width: 520, height: 92))
+        #expect(AgentsPlugin.contentSize(for: sessions(2), expanded: [], showsUsage: false) == CGSize(width: 520, height: 166))
+        #expect(AgentsPlugin.contentSize(for: sessions(4), expanded: [], showsUsage: false) == AgentsPlugin.contentSize(for: sessions(9), expanded: [], showsUsage: false))
+        let usage = AgentsPlugin.usageBarHeight + AgentsPlugin.rowSpacing
+        #expect(AgentsPlugin.contentSize(for: [], expanded: [], showsUsage: true).height == 130 + usage)
+        #expect(AgentsPlugin.contentSize(for: sessions(1), expanded: [], showsUsage: true).height == 92 + usage)
+        #expect(AgentsPlugin.contentSize(for: sessions(9), expanded: [], showsUsage: true).height == AgentsPlugin.maxContentHeight + usage)
     }
 
     @Test func pendingRequestsMakeRowsTaller() {
         var session = AgentSession(id: "a", agent: .claudeCode, host: nil, cwd: nil, task: nil, activity: nil, state: .working, startedAt: .now, turnStartedAt: .now, updatedAt: .now)
-        let plain = AgentsPlugin.contentSize(for: [session], expanded: []).height
+        let plain = AgentsPlugin.contentSize(for: [session], expanded: [], showsUsage: false).height
         session.pendingRequests = [PendingRequest(toolName: "Bash", toolInput: .object(["command": .string("ls")]))!]
-        let permission = AgentsPlugin.contentSize(for: [session], expanded: []).height
+        let permission = AgentsPlugin.contentSize(for: [session], expanded: [], showsUsage: false).height
         #expect(permission > plain)
         session.pendingRequests = [PendingRequest(toolName: "AskUserQuestion", toolInput: .object([
             "questions": .array([
@@ -437,21 +443,85 @@ struct AgentsPluginSizingTests {
                 .object(["question": .string("Multi?"), "multiSelect": .bool(true), "options": .array([.object(["label": .string("X")])])]),
             ]),
         ]))!]
-        let question = AgentsPlugin.contentSize(for: [session], expanded: []).height
+        let question = AgentsPlugin.contentSize(for: [session], expanded: [], showsUsage: false).height
         #expect(question > permission)
         #expect(question <= AgentsPlugin.maxContentHeight)
     }
 
     @Test func expandedRowsGrowWithActivityAndPlan() {
         var session = AgentSession(id: "a", agent: .claudeCode, host: nil, cwd: nil, task: nil, activity: nil, state: .working, startedAt: .now, turnStartedAt: .now, updatedAt: .now)
-        let collapsed = AgentsPlugin.contentSize(for: [session], expanded: []).height
-        let empty = AgentsPlugin.contentSize(for: [session], expanded: ["a"]).height
+        let collapsed = AgentsPlugin.contentSize(for: [session], expanded: [], showsUsage: false).height
+        let empty = AgentsPlugin.contentSize(for: [session], expanded: ["a"], showsUsage: false).height
         #expect(empty > collapsed)
         session.activities = (0..<3).map { _ in ActivityEntry(event: HookEvent(kind: .preToolUse, sessionID: "a", toolName: "Read"), at: .now, isComplete: true) }
-        let withActivity = AgentsPlugin.contentSize(for: [session], expanded: ["a"]).height
+        let withActivity = AgentsPlugin.contentSize(for: [session], expanded: ["a"], showsUsage: false).height
         #expect(withActivity == empty + 2 * AgentsPlugin.activityEntryHeight)
         session.plan = "# Plan"
-        #expect(AgentsPlugin.contentSize(for: [session], expanded: ["a"]).height > withActivity)
+        #expect(AgentsPlugin.contentSize(for: [session], expanded: ["a"], showsUsage: false).height > withActivity)
+    }
+}
+
+struct UsageTests {
+    @Test func decodesUsageWindowsAndSkipsMissingOnes() throws {
+        let usage = try ClaudeUsage.decode(Data(#"{"five_hour":{"utilization":11.5,"resets_at":"2026-09-20T18:00:00.5+00:00"},"seven_day":{"utilization":2,"resets_at":"2026-09-27T09:00:00Z"},"seven_day_opus":null}"#.utf8))
+        #expect(usage.fiveHour?.utilization == 11.5)
+        #expect(usage.fiveHour?.resetsAt == Date(timeIntervalSince1970: 1_789_927_200.5))
+        #expect(usage.sevenDay?.utilization == 2)
+        #expect(usage.sevenDay?.resetsAt == Date(timeIntervalSince1970: 1_790_499_600))
+        #expect(try ClaudeUsage.decode(Data("{}".utf8)).isEmpty)
+        #expect(throws: UsageError.unexpectedResponse) { try ClaudeUsage.decode(Data("[]".utf8)) }
+    }
+
+    @Test func readsTheAccessTokenFromTheLoginFile() {
+        #expect(ClaudeCredentials.accessToken(from: Data(#"{"claudeAiOauth":{"accessToken":"token-from-test","expiresAt":1}}"#.utf8)) == "token-from-test")
+        #expect(ClaudeCredentials.accessToken(from: Data("{}".utf8)) == nil)
+    }
+
+    @MainActor
+    @Test func monitorSendsTheBearerTokenAndReportsFailures() async throws {
+        let requests = Requests()
+        let token = Box(value: "token-from-test")
+        let monitor = UsageMonitor(isEnabled: true, accessToken: { token.value }, load: { request in
+            await requests.record(request)
+            return (Data(#"{"five_hour":{"utilization":40,"resets_at":null}}"#.utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        })
+        monitor.refresh(force: true)
+        try await waitUntil { monitor.usage != nil }
+        #expect(monitor.usage == ClaudeUsage(fiveHour: UsageWindow(utilization: 40, resetsAt: nil), sevenDay: nil))
+        let request = await requests.all.first
+        #expect(request?.url == UsageMonitor.endpoint)
+        #expect(request?.value(forHTTPHeaderField: "Authorization") == "Bearer token-from-test")
+        #expect(request?.value(forHTTPHeaderField: "anthropic-beta") == "oauth-2025-04-20")
+
+        monitor.refresh()
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(await requests.all.count == 1)
+
+        token.value = nil
+        monitor.refresh(force: true)
+        try await waitUntil { monitor.usage == nil }
+        #expect(monitor.error == UsageError.notLoggedIn.errorDescription)
+
+        monitor.isEnabled = false
+        #expect(monitor.error == nil)
+    }
+
+    private func waitUntil(_ condition: @MainActor () -> Bool) async throws {
+        for _ in 0..<100 {
+            if await condition() { return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        Issue.record("Timed out")
+    }
+
+    private actor Requests {
+        var all: [URLRequest] = []
+        func record(_ request: URLRequest) { all.append(request) }
+    }
+
+    private final class Box: @unchecked Sendable {
+        var value: String?
+        init(value: String?) { self.value = value }
     }
 }
 
@@ -487,16 +557,20 @@ struct HookInstallerTests {
         """.write(to: transcript, atomically: true, encoding: .utf8)
         let capture = installer.directory.appending(path: "curl-call")
         let fakeCurl = installer.directory.appending(path: "curl")
-        try "#!/bin/sh\nprintf '%s\\n' \"$@\" > '\(capture.path)'\ncat >> '\(capture.path)'\n".write(to: fakeCurl, atomically: true, encoding: .utf8)
+        try "#!/bin/sh\nprintf '%s\\n' \"$@\" > '\(capture.path)'\ncat >> '\(capture.path)'\nfor a in \"$@\"; do case \"$a\" in @*) cat \"${a#@}\" >> '\(capture.path)';; esac; done\n".write(to: fakeCurl, atomically: true, encoding: .utf8)
+        let cwd = installer.directory.appending(path: "project")
+        try FileManager.default.createDirectory(at: cwd.appending(path: "db"), withIntermediateDirectories: true)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeCurl.path)
         let payload = #"{"session_id":"a","hook_event_name":"Stop","transcript_path":"\#(transcript.path)"}"#
 
+        let path = installer.directory.path + ":/usr/bin:/bin"
         for (transcriptExists, expectedTitle) in [(true, "islet main"), (false, "")] {
             if !transcriptExists { try FileManager.default.removeItem(at: transcript) }
             let process = Process()
             process.executableURL = URL(filePath: "/bin/sh")
             process.arguments = [installer.scriptURL.path]
-            process.environment = ["PATH": installer.directory.path + ":/usr/bin:/bin"]
+            process.environment = transcriptExists ? ["PATH": path, "__CFBundleIdentifier": "com.example.terminal", "TERM_PROGRAM": "fallback"] : ["PATH": path, "TERM_PROGRAM": "fallback"]
+            process.currentDirectoryURL = cwd
             let input = Pipe()
             process.standardInput = input
             try process.run()
@@ -506,6 +580,9 @@ struct HookInstallerTests {
             let call = try String(contentsOf: capture, encoding: .utf8).components(separatedBy: "\n")
             #expect(call.contains("X-Islet-Title: \(expectedTitle)"))
             #expect(call.contains("X-Islet-Agent: claude-code"))
+            #expect(call.contains("X-Islet-Terminal: \(transcriptExists ? "com.example.terminal" : "fallback")"))
+            #expect(call.filter { $0.contains("deadbeef") } == ["header = \"Authorization: Bearer deadbeef\""])
+            #expect(call.contains { $0.hasPrefix("X-Islet-TTY: ") && !$0.contains("/dev/db") })
             #expect(call.last == payload)
         }
     }
@@ -539,7 +616,7 @@ struct HookInstallerTests {
         let script = try String(contentsOf: installer.scriptURL, encoding: .utf8)
         #expect(script.contains("Bearer deadbeef"))
         #expect(script.contains("127.0.0.1:7365/hook"))
-        #expect(script.contains(#"-H "X-Islet-Terminal: ${__CFBundleIdentifier:-$TERM_PROGRAM}""#))
+        #expect(script.contains(#"-H "X-Islet-Terminal: $terminal""#))
         #expect(script.contains(#"-H "X-Islet-TTY: $tty""#))
         let permissions = try FileManager.default.attributesOfItem(atPath: installer.scriptURL.path)[.posixPermissions] as! Int
         #expect(permissions == 0o700)

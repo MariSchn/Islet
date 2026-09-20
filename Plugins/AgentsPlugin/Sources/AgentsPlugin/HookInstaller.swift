@@ -52,24 +52,33 @@ public struct HookInstaller: Sendable {
         title=""
         transcript=$(printf '%s' "$payload" | sed -n 's/.*"transcript_path":"\\([^"]*\\)".*/\\1/p')
         [ -f "$transcript" ] && title=$(grep -o '"customTitle":"[^"]*"' "$transcript" 2>/dev/null | tail -n 1 | sed 's/^"customTitle":"//; s/"$//')
+        terminal="${__CFBundleIdentifier:-$TERM_PROGRAM}"
         tty=""
         pid=$$
+        set -f
         while [ "$pid" -gt 1 ]; do
           set -- $(ps -o ppid=,tty= -p "$pid" 2>/dev/null)
           [ -n "$1" ] || break
           case "$2" in ""|"?"|"??") ;; *) tty="/dev/$2" ;; esac
+          if [ -z "$terminal" ] && [ "$(uname)" = Darwin ]; then
+            vars=$(ps -E -o command= -p "$pid" 2>/dev/null | tr ' ' '\n')
+            terminal=$(printf '%s\n' "$vars" | sed -n 's/^__CFBundleIdentifier=//p' | head -n 1)
+            [ -n "$terminal" ] || terminal=$(printf '%s\n' "$vars" | sed -n 's/^TERM_PROGRAM=//p' | head -n 1)
+          fi
           pid=$1
         done
-        printf '%s' "$payload" | curl -sf --connect-timeout 1 -m "$timeout" -X POST "http://127.0.0.1:\(port)\(HookServer.hookPath)" \\
+        body=$(mktemp) || exit 0
+        printf '%s' "$payload" > "$body"
+        printf 'header = "Authorization: Bearer \(token)"\n' | curl -sf --connect-timeout 1 -m "$timeout" -K - -X POST "http://127.0.0.1:\(port)\(HookServer.hookPath)" \\
           -H "Content-Type: application/json" \\
           -H "Expect:" \\
-          -H "Authorization: Bearer \(token)" \\
           -H "X-Islet-Agent: \(agent.rawValue)" \\
           -H "X-Islet-Host: $(hostname -s 2>/dev/null || hostname)" \\
-          -H "X-Islet-Terminal: ${__CFBundleIdentifier:-$TERM_PROGRAM}" \\
+          -H "X-Islet-Terminal: $terminal" \\
           -H "X-Islet-TTY: $tty" \\
           -H "X-Islet-Title: $title" \\
-          --data-binary @- 2>/dev/null
+          --data-binary "@$body" 2>/dev/null
+        rm -f "$body"
         exit 0
 
         """
@@ -110,7 +119,7 @@ public struct HookInstaller: Sendable {
             groups.append({"hooks": [entry]})
             hooks[event] = groups
         with open(path, "w") as f:
-            json.dump(settings, f, indent=2, sort_keys=True)
+            json.dump(settings, f, indent=2, sort_keys=True, ensure_ascii=False)
             f.write("\\n")
         ISLET_SETTINGS
           echo "Islet hooks installed in $dir."
@@ -141,7 +150,12 @@ public struct HookInstaller: Sendable {
     }
 
     public var needsUpgrade: Bool {
-        (hasAllHooks || FileManager.default.fileExists(atPath: scriptURL.path)) && !isInstalled
+        hasAnyHooks && !isInstalled
+    }
+
+    private var hasAnyHooks: Bool {
+        guard let settings = try? readSettings(), let hooks = settings["hooks"] as? [String: Any] else { return false }
+        return events.contains { !Self.isletHooks(in: hooks[$0]).isEmpty }
     }
 
     private var hasAllHooks: Bool {

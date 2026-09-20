@@ -11,7 +11,7 @@ let package = Package(
         .package(path: "../../Packages/IsletCore")
     ],
     targets: [
-        .target(name: "AgentsPlugin", dependencies: ["IsletCore"]),
+        .target(name: "AgentsPlugin", dependencies: ["IsletCore"], resources: [.process("Resources")]),
         .testTarget(name: "AgentsPluginTests", dependencies: ["AgentsPlugin"])
     ]
 )

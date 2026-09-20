@@ -73,10 +73,16 @@ public struct HookEvent: Sendable, Equatable, Decodable {
         var event = try JSONDecoder().decode(HookEvent.self, from: data)
         event.agent = agent.flatMap(AgentSession.Agent.init(rawValue:)) ?? .claudeCode
         event.host = host
-        event.terminal = terminal.flatMap(TerminalApp.init)
-        event.tty = tty.flatMap { $0.hasPrefix("/dev/") ? $0 : nil }
+        event.terminal = terminal.flatMap { Self.isSafeIdentifier($0) ? TerminalApp(identifier: $0) : nil }
+        event.tty = tty.flatMap { $0.hasPrefix("/dev/") && Self.isSafeIdentifier($0) ? $0 : nil }
         event.title = title.flatMap { $0.isEmpty ? nil : $0 }
         return event
+    }
+
+    private static let identifierCharacters = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "._-/"))
+
+    static func isSafeIdentifier(_ value: String) -> Bool {
+        !value.isEmpty && value.unicodeScalars.allSatisfy { identifierCharacters.contains($0) }
     }
 
     public var activityDescription: String? {
