@@ -112,7 +112,7 @@ public final class AgentsController {
         self.store = store
         installer = HookInstaller(claudeDirectory: claudeDirectory, port: port, token: token)
         isHookInstalled = installer.isInstalled
-        server = HookServer(port: port, token: token) { event in
+        server = HookServer(port: port, token: token, installScript: installer.remoteInstallScript) { event in
             await store.handle(event)
         }
     }

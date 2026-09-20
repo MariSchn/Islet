@@ -102,7 +102,7 @@ private struct SessionRow: View {
 
     private var summary: some View {
         HStack(alignment: .center, spacing: 10) {
-            StateIndicator(state: session.state)
+            StateIndicator(state: session.state, isUnreachable: session.isUnreachable)
                 .frame(width: 22, height: 22)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
@@ -110,7 +110,7 @@ private struct SessionRow: View {
                         .font(.system(size: 13, weight: .semibold))
                         .lineLimit(1)
                     if let terminal {
-                        Button { terminal.activate(tty: session.tty, cwd: session.cwd) } label: {
+                        Button { terminal.activate(tty: session.isRemote ? nil : session.tty, cwd: session.isRemote ? nil : session.cwd) } label: {
                             Image(nsImage: terminal.icon)
                                 .resizable()
                                 .frame(width: 16, height: 16)
@@ -121,11 +121,12 @@ private struct SessionRow: View {
                         .onHover { isHoveringTerminal = $0 }
                         .help("Show in \(terminal.name)")
                     }
-                    if let host = session.host {
-                        Text(host)
+                    if session.isRemote, let host = session.host {
+                        Label(host, systemImage: session.isUnreachable ? "network.slash" : "network")
                             .font(.system(size: 11))
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(session.isUnreachable ? AnyShapeStyle(.orange) : AnyShapeStyle(.tertiary))
                             .lineLimit(1)
+                            .help(session.isUnreachable ? "No updates from \(host) for a while. Is the SSH tunnel still up?" : "Running on \(host)")
                     }
                     Spacer(minLength: 0)
                     ZStack(alignment: .trailing) {
@@ -160,11 +161,12 @@ private struct SessionRow: View {
     }
 
     private var detail: String {
+        if session.isUnreachable { return "Unreachable" }
         switch session.state {
-        case .starting: "Starting…"
-        case .working: session.activity ?? "Working…"
-        case .needsAttention(let reason): reason
-        case .done: "Finished"
+        case .starting: return "Starting…"
+        case .working: return session.activity ?? "Working…"
+        case .needsAttention(let reason): return reason
+        case .done: return "Finished"
         }
     }
 }
@@ -393,9 +395,14 @@ private struct StateLabel: View {
 
 private struct StateIndicator: View {
     let state: AgentSession.State
+    let isUnreachable: Bool
 
     var body: some View {
         switch state {
+        case _ where isUnreachable:
+            Image(systemName: "questionmark.circle.fill")
+                .font(.system(size: 16))
+                .foregroundStyle(.secondary)
         case .starting, .working:
             ProgressView()
                 .controlSize(.small)
@@ -447,7 +454,43 @@ struct AgentsSettings: View {
             } footer: {
                 Text("Installing adds a small script to ~/.claude and registers it in ~/.claude/settings.json (the file is reformatted) so Claude Code reports session activity to Islet. Already running Claude Code sessions need to be restarted. Nothing leaves your Mac.")
             }
+            Section {
+                CopyableCommand(title: "SSH config", text: controller.installer.sshConfigSnippet)
+                CopyableCommand(title: "Install on the remote", text: controller.installer.remoteInstallCommand)
+            } header: {
+                Text("Remote machines")
+            } footer: {
+                Text("Add the config line to the machine's Host entry in ~/.ssh/config (or pass -R \(controller.installer.port):127.0.0.1:\(controller.installer.port) to ssh) so the remote can reach Islet through the tunnel, then run the install command once on the remote machine. Sessions there show the host name and are marked unreachable when no updates arrive for \(Int(AgentSessionStore.unreachableTimeout / 60)) minutes.")
+            }
         }
         .onAppear { controller.refreshInstallState() }
+    }
+}
+
+private struct CopyableCommand: View {
+    let title: String
+    let text: String
+    @State private var copied = false
+
+    var body: some View {
+        LabeledContent(title) {
+            HStack {
+                Text(text)
+                    .font(.system(size: 11, design: .monospaced))
+                    .textSelection(.enabled)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .foregroundStyle(.secondary)
+                Button(copied ? "Copied" : "Copy") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(text, forType: .string)
+                    copied = true
+                    Task {
+                        try? await Task.sleep(for: .seconds(1.5))
+                        copied = false
+                    }
+                }
+            }
+        }
     }
 }

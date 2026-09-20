@@ -156,6 +156,27 @@ struct AgentSessionStoreTests {
         #expect(store.sessions.count == 1)
     }
 
+    @Test func remoteSessionsShowTheirHostAndGoUnreachableWithoutUpdates() {
+        var clock = Date(timeIntervalSince1970: 1_000_000)
+        let store = AgentSessionStore(now: { clock }, localHost: "MacBook")
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "local", cwd: "/one", prompt: "x", host: "macbook"))
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "remote", cwd: "/two", prompt: "y", host: "devbox"))
+        #expect(store.sessions.map(\.isRemote) == [true, false])
+        #expect(store.pillStatus?.text == "2 agents working")
+
+        clock = clock.addingTimeInterval(AgentSessionStore.unreachableTimeout + 1)
+        store.markUnreachableSessions()
+        #expect(store.sessions.map(\.isUnreachable) == [true, false])
+        #expect(store.pillStatus?.text == "one")
+
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "remote", toolName: "Read"))
+        #expect(store.sessions[0].isUnreachable == false)
+        store.apply(HookEvent(kind: .stop, sessionID: "remote"))
+        clock = clock.addingTimeInterval(AgentSessionStore.unreachableTimeout + 1)
+        store.markUnreachableSessions()
+        #expect(store.sessions[0].isUnreachable == false)
+    }
+
     @Test func multipleSessionsAreCountedAndNewestFirst() {
         let store = AgentSessionStore()
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", cwd: "/x/one", prompt: "one"))
@@ -433,6 +454,37 @@ struct HookInstallerTests {
         #expect(try String(contentsOf: installer.settingsURL, encoding: .utf8) == "[1, 2]")
     }
 
+    @Test func remoteInstallScriptReproducesTheLocalInstallation() throws {
+        let installer = try makeInstaller()
+        let remote = FileManager.default.temporaryDirectory.appending(path: "AgentsPluginTests.remote." + UUID().uuidString)
+        try FileManager.default.createDirectory(at: remote, withIntermediateDirectories: true)
+        try #"{"model":"opus","hooks":{"Stop":[{"hooks":[{"type":"command","command":"echo done"}]}]}}"#.write(to: remote.appending(path: "settings.json"), atomically: true, encoding: .utf8)
+
+        let process = Process()
+        process.executableURL = URL(filePath: "/bin/sh")
+        process.environment = ["HOME": "/nonexistent", "PATH": "/usr/bin:/bin", "CLAUDE_CONFIG_DIR": remote.path]
+        let input = Pipe()
+        process.standardInput = input
+        process.standardOutput = Pipe()
+        try process.run()
+        input.fileHandleForWriting.write(Data(installer.remoteInstallScript.utf8))
+        try input.fileHandleForWriting.close()
+        process.waitUntilExit()
+        #expect(process.terminationStatus == 0)
+
+        let remoteInstaller = HookInstaller(claudeDirectory: remote, port: 7365, token: "deadbeef")
+        #expect(remoteInstaller.isInstalled)
+        let settings = try JSONSerialization.jsonObject(with: Data(contentsOf: remoteInstaller.settingsURL)) as? [String: Any]
+        #expect(settings?["model"] as? String == "opus")
+        let stop = (settings?["hooks"] as? [String: Any])?["Stop"] as? [[String: Any]]
+        #expect(stop?.count == 2)
+        let command = ((stop?.last?["hooks"] as? [[String: Any]])?.first?["command"] as? String) ?? ""
+        #expect(command == "'\(remoteInstaller.scriptURL.path)'")
+        #expect(installer.remoteInstallCommand.contains("Bearer deadbeef"))
+        #expect(installer.remoteInstallCommand.contains("127.0.0.1:7365/install"))
+        #expect(installer.sshConfigSnippet == "RemoteForward 7365 127.0.0.1:7365")
+    }
+
     @Test func outdatedScriptCountsAsNotInstalled() throws {
         let installer = try makeInstaller()
         try installer.install()
@@ -477,7 +529,7 @@ struct HookServerTests {
     @Test func receivesAuthorizedEventsAndRejectsOthers() async throws {
         let received = Received()
         let port = try freePort()
-        let server = HookServer(port: port, token: "secret") { event in
+        let server = HookServer(port: port, token: "secret", installScript: "#!/bin/sh\necho installed\n") { event in
             await received.add(event)
             return .empty
         }
@@ -504,6 +556,16 @@ struct HookServerTests {
         request.setValue("Bearer wrong", forHTTPHeaderField: "Authorization")
         let (_, unauthorized) = try await URLSession.shared.data(for: request)
         #expect((unauthorized as? HTTPURLResponse)?.statusCode == 401)
+
+        var install = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/install")!)
+        install.setValue("Bearer secret", forHTTPHeaderField: "Authorization")
+        let (script, installResponse) = try await URLSession.shared.data(for: install)
+        #expect((installResponse as? HTTPURLResponse)?.statusCode == 200)
+        #expect((installResponse as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type") == "text/plain; charset=utf-8")
+        #expect(String(decoding: script, as: UTF8.self) == "#!/bin/sh\necho installed\n")
+        install.setValue("Bearer wrong", forHTTPHeaderField: "Authorization")
+        let (_, installDenied) = try await URLSession.shared.data(for: install)
+        #expect((installDenied as? HTTPURLResponse)?.statusCode == 401)
 
         request.setValue("Bearer secret", forHTTPHeaderField: "Authorization")
         request.httpBody = Data("not json".utf8)
