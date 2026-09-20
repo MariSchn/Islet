@@ -33,6 +33,8 @@ public struct AgentSession: Identifiable, Sendable, Equatable {
     public var activity: String?
     public var state: State
     public var pendingRequests: [PendingRequest] = []
+    public var activities: [ActivityEntry] = []
+    public var plan: String?
     public var startedAt: Date
     public var turnStartedAt: Date
     public var updatedAt: Date

@@ -24,6 +24,7 @@ public struct NotchHostView: View {
             PluginCarousel(registry: registry, geometry: controller.geometry, animation: switchAnimation)
         }
         .foregroundStyle(.white)
+        .environment(\.notchAnimation, switchAnimation)
     }
 
     private var switchAnimation: Animation {
