@@ -40,10 +40,8 @@ struct InstalledTerminal {
     }
 
     private func runScript(_ source: String) {
-        Task.detached {
-            var error: NSDictionary?
-            NSAppleScript(source: source)?.executeAndReturnError(&error)
-        }
+        var error: NSDictionary?
+        NSAppleScript(source: source)?.executeAndReturnError(&error)
     }
 
     private static func terminalTabScript(tty: String) -> String {

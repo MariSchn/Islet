@@ -6,8 +6,10 @@ public final class AgentsPlugin: IsletPlugin {
     public static let manifest = PluginManifest(id: "islet.agents", displayName: "Agents", systemImage: "terminal")
     static let contentWidth: CGFloat = 520
     static let emptyContentHeight: CGFloat = 130
-    static let rowHeight: CGFloat = 54
-    static let rowSpacing: CGFloat = 4
+    static let rowHeight: CGFloat = 68
+    static let rowSpacing: CGFloat = 6
+    static let rowPadding: CGFloat = 16
+    static let usageBarHeight: CGFloat = 22
     static let contentPadding: CGFloat = 12
     static let maxVisibleRows = 4
     static let requestPadding: CGFloat = 8
@@ -20,10 +22,11 @@ public final class AgentsPlugin: IsletPlugin {
     static let planHeight: CGFloat = 140
     static let maxContentHeight = 2 * contentPadding + CGFloat(maxVisibleRows) * rowHeight + CGFloat(maxVisibleRows - 1) * rowSpacing
 
-    static func contentSize(for sessions: [AgentSession], expanded: Set<String>) -> CGSize {
-        guard !sessions.isEmpty else { return CGSize(width: contentWidth, height: emptyContentHeight) }
+    static func contentSize(for sessions: [AgentSession], expanded: Set<String>, showsUsage: Bool) -> CGSize {
+        let usage = showsUsage ? usageBarHeight + rowSpacing : 0
+        guard !sessions.isEmpty else { return CGSize(width: contentWidth, height: emptyContentHeight + usage) }
         let rows = sessions.map { rowHeight(for: $0, expanded: expanded.contains($0.id)) }.reduce(0, +) + CGFloat(sessions.count - 1) * rowSpacing
-        return CGSize(width: contentWidth, height: min(2 * contentPadding + rows, maxContentHeight))
+        return CGSize(width: contentWidth, height: min(2 * contentPadding + usage + rows, maxContentHeight + usage))
     }
 
     static func rowHeight(for session: AgentSession, expanded: Bool) -> CGFloat {
@@ -50,6 +53,7 @@ public final class AgentsPlugin: IsletPlugin {
     }
 
     private static let tokenKey = "hookToken"
+    private static let usageKey = "showUsage"
     private static let alertKeys = (attentionSound: "attentionSound", attentionNotification: "attentionNotification", finishedSound: "finishedSound", finishedNotification: "finishedNotification")
 
     private let context: PluginContext
@@ -73,8 +77,10 @@ public final class AgentsPlugin: IsletPlugin {
             token: token,
             claudeDirectory: URL.homeDirectory.appending(path: ".claude", directoryHint: .isDirectory),
             codexDirectory: URL.homeDirectory.appending(path: ".codex", directoryHint: .isDirectory),
-            alerts: alerts
+            alerts: alerts,
+            showsUsage: context.settings.value(forKey: Self.usageKey) ?? false
         )
+        controller.onUsageSettingChange = { [context] in context.settings.set($0, forKey: Self.usageKey) }
         controller.onAlertSettingsChange = { [context] alerts in
             context.settings.set(alerts.attentionSound, forKey: Self.alertKeys.attentionSound)
             context.settings.set(alerts.attentionNotification, forKey: Self.alertKeys.attentionNotification)
@@ -83,12 +89,13 @@ public final class AgentsPlugin: IsletPlugin {
         }
         controller.store.onChange = { [context, controller] in
             context.pillStatus = controller.store.pillStatus
-            context.contentSize = Self.contentSize(for: controller.store.sessions, expanded: controller.expandedSessionIDs)
+            context.contentSize = Self.contentSize(for: controller.store.sessions, expanded: controller.expandedSessionIDs, showsUsage: controller.showsUsageBar)
         }
+        controller.onUsageChange = controller.store.onChange
     }
 
     public func activate() async throws {
-        context.contentSize = Self.contentSize(for: controller.store.sessions, expanded: controller.expandedSessionIDs)
+        controller.store.onChange?()
         await controller.start()
     }
 
@@ -120,21 +127,33 @@ public final class AgentsController {
     public private(set) var isCodexHookInstalled: Bool
     public private(set) var serverError: String?
     public private(set) var expandedSessionIDs: Set<String> = []
+    public let usage: UsageMonitor
     public var onAlertSettingsChange: ((AlertSettings) -> Void)?
-    public var alerts: AlertSettings {
-        get { alerter.settings }
+    public var onUsageSettingChange: ((Bool) -> Void)?
+    public var onUsageChange: (() -> Void)?
+    public var showsUsage: Bool {
+        get { usage.isEnabled }
         set {
-            alerter.settings = newValue
-            onAlertSettingsChange?(newValue)
+            usage.isEnabled = newValue
+            onUsageSettingChange?(newValue)
+            onUsageChange?()
+        }
+    }
+    public var showsUsageBar: Bool { usage.isEnabled && usage.usage?.isEmpty == false }
+    public var alerts: AlertSettings {
+        didSet {
+            alerter.settings = alerts
+            onAlertSettingsChange?(alerts)
         }
     }
 
     private let server: HookServer
     private let alerter: SessionAlerter
 
-    public init(token: String, claudeDirectory: URL, codexDirectory: URL, port: UInt16 = HookServer.defaultPort, alerts: AlertSettings = AlertSettings()) {
+    public init(token: String, claudeDirectory: URL, codexDirectory: URL, port: UInt16 = HookServer.defaultPort, alerts: AlertSettings = AlertSettings(), showsUsage: Bool = false, usage: UsageMonitor? = nil) {
         let store = AgentSessionStore()
         self.store = store
+        self.usage = usage ?? UsageMonitor(isEnabled: showsUsage)
         installer = HookInstaller(agent: .claudeCode, directory: claudeDirectory, port: port, token: token)
         codexInstaller = HookInstaller(agent: .codex, directory: codexDirectory, port: port, token: token)
         isHookInstalled = installer.isInstalled
@@ -144,6 +163,7 @@ public final class AgentsController {
         }
         let alerter = SessionAlerter(settings: alerts)
         self.alerter = alerter
+        self.alerts = alerts
         store.onAlert = { alerter.handle($0) }
     }
 
@@ -158,6 +178,8 @@ public final class AgentsController {
             try? installer.install()
         }
         refreshInstallState()
+        usage.onChange = { [weak self] in self?.onUsageChange?() }
+        usage.start()
     }
 
     public var isCodexAvailable: Bool {
@@ -166,11 +188,21 @@ public final class AgentsController {
 
     public func stop() async {
         await server.stop()
+        usage.stop()
     }
 
     public func refreshInstallState() {
         isHookInstalled = installer.isInstalled
         isCodexHookInstalled = codexInstaller.isInstalled
+        Task { [server] in
+            if await !server.isListening, serverError == nil {
+                serverError = "The hook server stopped listening on 127.0.0.1:\(server.port). Restart Islet."
+            }
+        }
+    }
+
+    public var isAnyHookInstalled: Bool {
+        isHookInstalled || isCodexHookInstalled
     }
 
     public func installHooks(for agent: AgentSession.Agent = .claudeCode) throws {
