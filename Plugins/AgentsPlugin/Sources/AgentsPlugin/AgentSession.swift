@@ -33,6 +33,7 @@ public struct AgentSession: Identifiable, Sendable, Equatable {
     public var terminal: TerminalApp?
     public var tty: String?
     public var cwd: String?
+    public var title: String?
     public var task: String?
     public var activity: String?
     public var state: State

@@ -34,6 +34,8 @@ struct HookEventTests {
         #expect(try HookEvent.decode(payload).terminal == nil)
         #expect(try HookEvent.decode(payload, tty: "/dev/ttys004").tty == "/dev/ttys004")
         #expect(try HookEvent.decode(payload, tty: "").tty == nil)
+        #expect(try HookEvent.decode(payload, title: "islet-main").title == "islet-main")
+        #expect(try HookEvent.decode(payload, title: "").title == nil)
         #expect(TerminalApp(identifier: "Apple_Terminal")?.targeting == .terminalTab)
         #expect(TerminalApp(identifier: "com.todesktop.230313mzl4w4u92")?.targeting == .editorFolder)
         #expect(TerminalApp(identifier: "ghostty")?.targeting == .application)
@@ -181,6 +183,16 @@ struct AgentSessionStoreTests {
         clock = clock.addingTimeInterval(AgentSessionStore.unreachableTimeout + 1)
         store.markUnreachableSessions()
         #expect(store.sessions[0].isUnreachable == false)
+    }
+
+    @Test func sessionsCarryTheirCurrentTitle() {
+        let store = AgentSessionStore(now: { Date(timeIntervalSince1970: 1_000_000) }, localHost: { "MacBook" })
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", cwd: "/one", prompt: "x"))
+        #expect(store.sessions[0].title == nil)
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "a", toolName: "Read", title: "islet-main"))
+        #expect(store.sessions[0].title == "islet-main")
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "a", toolName: "Read", title: "renamed"))
+        #expect(store.sessions[0].title == "renamed")
     }
 
     @Test func sessionsStayLocalWhenTheMacIsRenamedByTheNetwork() {
@@ -463,6 +475,41 @@ struct HookInstallerTests {
         #expect(!installer.isInstalled)
     }
 
+    @Test func scriptForwardsThePayloadWithTheSessionTitleFromItsTranscript() throws {
+        let installer = try makeInstaller()
+        try installer.install()
+        let transcript = installer.directory.appending(path: "transcript.jsonl")
+        try """
+        {"type":"custom-title","customTitle":"first","sessionId":"a"}
+        {"type":"user","message":"hello"}
+        {"type":"custom-title","customTitle":"islet main","sessionId":"a"}
+
+        """.write(to: transcript, atomically: true, encoding: .utf8)
+        let capture = installer.directory.appending(path: "curl-call")
+        let fakeCurl = installer.directory.appending(path: "curl")
+        try "#!/bin/sh\nprintf '%s\\n' \"$@\" > '\(capture.path)'\ncat >> '\(capture.path)'\n".write(to: fakeCurl, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeCurl.path)
+        let payload = #"{"session_id":"a","hook_event_name":"Stop","transcript_path":"\#(transcript.path)"}"#
+
+        for (transcriptExists, expectedTitle) in [(true, "islet main"), (false, "")] {
+            if !transcriptExists { try FileManager.default.removeItem(at: transcript) }
+            let process = Process()
+            process.executableURL = URL(filePath: "/bin/sh")
+            process.arguments = [installer.scriptURL.path]
+            process.environment = ["PATH": installer.directory.path + ":/usr/bin:/bin"]
+            let input = Pipe()
+            process.standardInput = input
+            try process.run()
+            input.fileHandleForWriting.write(Data(payload.utf8))
+            try input.fileHandleForWriting.close()
+            process.waitUntilExit()
+            let call = try String(contentsOf: capture, encoding: .utf8).components(separatedBy: "\n")
+            #expect(call.contains("X-Islet-Title: \(expectedTitle)"))
+            #expect(call.contains("X-Islet-Agent: claude-code"))
+            #expect(call.last == payload)
+        }
+    }
+
     @Test func installsScriptAndMergesHooksWithoutTouchingOtherSettings() throws {
         let installer = try makeInstaller()
         let existing = """
@@ -637,11 +684,12 @@ struct HookServerTests {
         request.setValue("devbox", forHTTPHeaderField: "X-Islet-Host")
         request.setValue("ghostty", forHTTPHeaderField: "X-Islet-Terminal")
         request.setValue("/dev/ttys004", forHTTPHeaderField: "X-Islet-TTY")
+        request.setValue("islet-main", forHTTPHeaderField: "X-Islet-Title")
         request.httpBody = Data(#"{"session_id":"s","hook_event_name":"Stop"}"#.utf8)
         let (body, response) = try await URLSession.shared.data(for: request)
         #expect((response as? HTTPURLResponse)?.statusCode == 200)
         #expect(body == Data("{}".utf8))
-        #expect(await received.events == [HookEvent(kind: .stop, sessionID: "s", agent: .codex, host: "devbox", terminal: TerminalApp(identifier: "com.mitchellh.ghostty"), tty: "/dev/ttys004")])
+        #expect(await received.events == [HookEvent(kind: .stop, sessionID: "s", agent: .codex, host: "devbox", terminal: TerminalApp(identifier: "com.mitchellh.ghostty"), tty: "/dev/ttys004", title: "islet-main")])
 
         request.setValue("Bearer wrong", forHTTPHeaderField: "Authorization")
         let (_, unauthorized) = try await URLSession.shared.data(for: request)
