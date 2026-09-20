@@ -161,15 +161,20 @@ public final class NotchController {
 
     private func holdHoverRegionIfShapeLeftPointer(previousSize: CGSize) {
         guard isExpanded, previousSize != expandedShapeSize else { return }
-        if expandedShapeFrame.contains(pointerLocation()) {
+        if isPointerInsideExpandedShape {
             hoverHoldSize = nil
         } else {
-            hoverHoldSize = Self.union(hoverHoldSize ?? previousSize, previousSize)
+            hoverHoldSize = hoverHoldSize.map { Self.union($0, previousSize) } ?? previousSize
         }
     }
 
     public func pointerEnteredShape() {
+        guard isPointerInsideExpandedShape else { return }
         hoverHoldSize = nil
+    }
+
+    private var isPointerInsideExpandedShape: Bool {
+        expandedShapeFrame.contains(pointerLocation())
     }
 
     private static func union(_ lhs: CGSize, _ rhs: CGSize) -> CGSize {

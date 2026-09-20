@@ -193,9 +193,12 @@ struct NotchControllerTests {
         #expect(controller.expandedHoverSize == CGSize(width: 900, height: largeSize.height))
 
         controller.pointerEnteredShape()
-        #expect(controller.hoverHoldSize == nil)
+        #expect(controller.hoverHoldSize != nil)
 
         pointer = CGPoint(x: 0, y: -10)
+        controller.pointerEnteredShape()
+        #expect(controller.hoverHoldSize == nil)
+
         registry.select("test.stub")
         await Task.yield()
         second.context.contentSize = CGSize(width: 300, height: 100)
