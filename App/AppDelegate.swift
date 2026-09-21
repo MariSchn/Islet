@@ -11,27 +11,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let registry = PluginRegistry(
         storageRoot: URL.applicationSupportDirectory.appending(path: "Islet/Plugins", directoryHint: .isDirectory)
     )
-    private(set) lazy var notchController = NotchController(settings: settings)
-    private var panel: NotchPanel?
+    private(set) lazy var displays = NotchDisplayManager(settings: settings) { [unowned self] display in
+        makePanel(for: display)
+    }
     private var statusItem: NSStatusItem?
     private lazy var settingsWindow = SettingsWindowController(settings: settings, registry: registry)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let panel = NotchPanel(controller: notchController) { [notchController, registry, weak self] in
-            NotchHostView(controller: notchController, registry: registry) { self?.showSettings() }
-        }
-        panel.show()
-        self.panel = panel
-        statusItem = makeStatusItem()
-
-        notchController.attach(registry)
+        displays.start()
+        observeMenuBarIconSetting()
         Task { @MainActor in
             await registerBuiltInPlugins()
         }
     }
 
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showSettings()
+        return false
+    }
+
     func showSettings() {
         settingsWindow.show()
+    }
+
+    private func makePanel(for display: NotchDisplay) -> NotchPanel {
+        let controller = NotchController(settings: settings)
+        controller.attach(registry)
+        return NotchPanel(display: display, controller: controller) { [registry, weak self] in
+            NotchHostView(controller: controller, registry: registry) { self?.showSettings() }
+        }
+    }
+
+    private func observeMenuBarIconSetting() {
+        withObservationTracking {
+            updateStatusItem(visible: settings.showsMenuBarIcon)
+        } onChange: {
+            Task { @MainActor [weak self] in
+                self?.observeMenuBarIconSetting()
+            }
+        }
+    }
+
+    private func updateStatusItem(visible: Bool) {
+        if visible {
+            if statusItem == nil {
+                statusItem = makeStatusItem()
+            }
+        } else if let statusItem {
+            NSStatusBar.system.removeStatusItem(statusItem)
+            self.statusItem = nil
+        }
     }
 
     private func makeStatusItem() -> NSStatusItem {

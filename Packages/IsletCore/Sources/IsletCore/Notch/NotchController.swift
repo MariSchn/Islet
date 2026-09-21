@@ -62,7 +62,10 @@ public struct NotchAnimation: Sendable, Equatable, Codable {
 @MainActor
 @Observable
 public final class NotchController {
-    public private(set) var geometry: NotchGeometry
+    public private(set) var screenGeometry: NotchGeometry
+    public var geometry: NotchGeometry {
+        screenGeometry.scaled(by: settings.notchSize.scale)
+    }
     public private(set) var isExpanded = false {
         didSet {
             if !isExpanded {
@@ -127,12 +130,12 @@ public final class NotchController {
         pointerLocation: @escaping @MainActor () -> CGPoint = { NSEvent.mouseLocation }
     ) {
         self.settings = settings
-        self.geometry = geometry
+        self.screenGeometry = geometry
         self.pointerLocation = pointerLocation
     }
 
     public func update(geometry: NotchGeometry) {
-        self.geometry = geometry
+        screenGeometry = geometry
     }
 
     public func attach(_ registry: PluginRegistry) {

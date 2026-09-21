@@ -3,12 +3,13 @@ import SwiftUI
 
 @MainActor
 public final class NotchPanel: NSPanel {
-    private let controller: NotchController
-    private var pendingRelayout: Task<Void, Never>?
+    public let display: NotchDisplay
+    public let controller: NotchController
     private var swipeRecognizer = HorizontalSwipeRecognizer()
     nonisolated(unsafe) private var scrollMonitor: Any?
 
-    public init<Content: View>(controller: NotchController, @ViewBuilder content: @escaping () -> Content) {
+    public init<Content: View>(display: NotchDisplay, controller: NotchController, @ViewBuilder content: @escaping () -> Content) {
+        self.display = display
         self.controller = controller
         super.init(
             contentRect: controller.geometry.panelFrame,
@@ -31,12 +32,6 @@ public final class NotchPanel: NSPanel {
             rootView: NotchView(controller: controller, content: content)
         )
 
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(screenParametersDidChange),
-            name: NSApplication.didChangeScreenParametersNotification,
-            object: nil
-        )
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
             self?.handleScroll(event)
             return event
@@ -79,15 +74,6 @@ public final class NotchPanel: NSPanel {
         return false
     }
 
-    @objc private func screenParametersDidChange() {
-        pendingRelayout?.cancel()
-        pendingRelayout = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(100))
-            guard !Task.isCancelled else { return }
-            self?.relayout()
-        }
-    }
-
     public override var canBecomeKey: Bool { true }
     public override var canBecomeMain: Bool { false }
 
@@ -97,7 +83,7 @@ public final class NotchPanel: NSPanel {
     }
 
     public func relayout() {
-        guard let screen = NotchGeometry.preferredScreen() else { return }
+        guard let screen = NSScreen.screens.first(where: { NotchDisplay(screen: $0).id == display.id }) else { return }
         let geometry = NotchGeometry(screen: screen)
         controller.update(geometry: geometry)
         setFrame(geometry.panelFrame, display: true)
