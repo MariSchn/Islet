@@ -94,7 +94,7 @@ public final class AgentSessionStore {
         session.isUnreachable = false
         if let terminal = event.terminal { session.terminal = terminal }
         if let tty = event.tty { session.tty = tty }
-        session.title = event.title
+        if let title = event.title { session.title = title }
         session.updatedAt = timestamp
         if event.toolName == "ExitPlanMode", let plan = event.toolInput?["plan"]?.stringValue {
             session.plan = plan
@@ -140,7 +140,7 @@ public final class AgentSessionStore {
                 guard session.pendingRequests.isEmpty else { break }
                 session.state = .needsAttention(event.message ?? "Waiting for your answer")
             case "idle_prompt":
-                guard session.state != .done else { return }
+                guard session.state != .done, session.pendingRequests.isEmpty else { return }
                 session.state = .needsAttention("Waiting for your input")
             default:
                 return
