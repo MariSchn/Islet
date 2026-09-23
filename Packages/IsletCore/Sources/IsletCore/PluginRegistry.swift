@@ -171,9 +171,9 @@ public final class PluginRegistry {
     }
 
     private func transition(_ entry: PluginEntry, toActive: Bool) async {
-        await entry.pendingTransition?.value
-
+        let previous = entry.pendingTransition
         let task = Task { @MainActor in
+            await previous?.value
             if toActive {
                 guard !entry.state.isActive else { return }
                 entry.state = .activating
