@@ -364,7 +364,95 @@ struct AgentSessionStoreTests {
             try #require(ContinuousClock.now < deadline)
             await Task.yield()
         }
-        #expect(store.sessions.first?.state == .working)
+        #expect(store.sessions.first?.state == .interrupted)
+    }
+
+    @Test func interruptedTurnsLeaveTheWorkingStateUntilTheAgentContinues() async throws {
+        let store = AgentSessionStore()
+        var alerts: [AgentSessionStore.Alert] = []
+        store.onAlert = { alerts.append($0) }
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", cwd: "/p", prompt: "x"))
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "a", toolName: "Read"))
+        store.markInterrupted("a")
+        #expect(store.sessions[0].state == .interrupted)
+        #expect(store.sessions[0].activity == nil)
+        #expect(store.pillStatus == nil)
+        #expect(alerts.isEmpty)
+
+        store.apply(HookEvent(kind: .notification, sessionID: "a", notificationType: "idle_prompt"))
+        #expect(store.sessions[0].state == .interrupted)
+        #expect(alerts.isEmpty)
+
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "a", toolName: "Read"))
+        #expect(store.sessions[0].state == .interrupted)
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "a", toolName: "Read"))
+        #expect(store.sessions[0].state == .working)
+
+        let reply = Task { await store.handle(HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "Bash", toolInput: .object(["command": .string("ls")]))) }
+        try await waitForPendingRequest(in: store)
+        store.markInterrupted("a")
+        #expect(await reply.value == .empty)
+        #expect(store.sessions[0].pendingRequests.isEmpty)
+        #expect(store.sessions[0].state == .interrupted)
+
+        store.apply(HookEvent(kind: .stop, sessionID: "a"))
+        store.markInterrupted("a")
+        #expect(store.sessions[0].state == .done)
+        store.markInterrupted("unknown")
+    }
+
+    @Test func requestsThatTimeOutKeepAskingForAttention() async throws {
+        var clock = Date(timeIntervalSince1970: 1_000_000)
+        let store = AgentSessionStore(now: { clock })
+        let task = Task { await store.handle(HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "Bash", toolInput: .object(["command": .string("ls")]))) }
+        try await waitForPendingRequest(in: store)
+        clock += TimeInterval(HookServer.replyTimeout.components.seconds)
+        task.cancel()
+        #expect(await task.value == .empty)
+        let deadline = ContinuousClock.now + .seconds(2)
+        while store.sessions.first?.pendingRequest != nil {
+            try #require(ContinuousClock.now < deadline)
+            await Task.yield()
+        }
+        #expect(store.sessions[0].state == .needsAttention("Waiting for your answer in the terminal"))
+    }
+
+    @Test func toolResultsWithdrawTheExactRequestBeforeASimilarOne() async throws {
+        let store = AgentSessionStore()
+        let whole: JSONValue = .object(["file_path": .string("/a")])
+        let partial: JSONValue = .object(["file_path": .string("/a"), "limit": .number(10)])
+        let first = Task { await store.handle(HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "Read", toolInput: whole)) }
+        try await waitForPendingRequest(in: store)
+        let second = Task { await store.handle(HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "Read", toolInput: partial)) }
+        try await waitForPendingRequest(in: store, count: 2)
+
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "a", toolName: "Read", toolInput: partial))
+        #expect(await second.value == .empty)
+        #expect(store.sessions[0].pendingRequests.map(\.toolInput) == [whole])
+        store.apply(HookEvent(kind: .stop, sessionID: "a"))
+        #expect(await first.value == .empty)
+    }
+
+    @Test func questionsAnsweredInTheTerminalAreWithdrawnWhenTheToolFinishes() async throws {
+        let store = AgentSessionStore()
+        let question: JSONValue = .object(["questions": .array([.object(["question": .string("Color?"), "options": .array([.object(["label": .string("Red")])])])])])
+        let reply = Task { await store.handle(HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "AskUserQuestion", toolInput: question)) }
+        try await waitForPendingRequest(in: store)
+
+        guard case .object(var answered) = question else { return }
+        answered["answers"] = .object(["Color?": .string("Red")])
+        answered["annotations"] = .object([:])
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "a", toolName: "AskUserQuestion", toolInput: .object(answered)))
+        #expect(await reply.value == .empty)
+        #expect(store.sessions[0].pendingRequests.isEmpty)
+        #expect(store.sessions[0].state == .working)
+
+        let bash = Task { await store.handle(HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "Bash", toolInput: .object(["command": .string("ls"), "description": .string("List")]))) }
+        try await waitForPendingRequest(in: store)
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "a", toolName: "Bash", toolInput: .object(["command": .string("ls -la"), "description": .string("List")])))
+        #expect(store.sessions[0].pendingRequests.count == 1)
+        store.apply(HookEvent(kind: .stop, sessionID: "a"))
+        #expect(await bash.value == .empty)
     }
 
     func waitForPendingRequest(in store: AgentSessionStore, count: Int = 1) async throws {
@@ -593,6 +681,99 @@ struct UsageTests {
     private final class Box: @unchecked Sendable {
         var value: String?
         init(value: String?) { self.value = value }
+    }
+}
+
+@MainActor
+struct InterruptionMonitorTests {
+    static let interrupted = #"{"parentUuid":"a","isSidechain":false,"type":"user","message":{"role":"user","content":[{"type":"text","text":"[Request interrupted by user]"}]},"uuid":"b"}"#
+    static let deniedTool = #"{"isSidechain":false,"type":"user","message":{"role":"user","content":[{"type":"text","text":"[Request interrupted by user for tool use]"}]}}"#
+    static let assistantQuote = #"{"isSidechain":false,"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"[Request interrupted by user]"}]}}"#
+    static let promptQuote = #"{"isSidechain":false,"type":"user","message":{"role":"user","content":"Why does [Request interrupted by user] appear?"}}"#
+    static let sidechain = #"{"isSidechain":true,"type":"user","message":{"role":"user","content":[{"type":"text","text":"[Request interrupted by user]"}]}}"#
+    static let progress = #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Working on it"}]}}"#
+
+    @Test func recognizesOnlyTheAgentsOwnInterruptionEntries() {
+        #expect(InterruptionMonitor.containsInterruption(Data((Self.progress + "\n" + Self.interrupted + "\n").utf8)))
+        #expect(InterruptionMonitor.containsInterruption(Data((Self.deniedTool + "\n").utf8)))
+        #expect(!InterruptionMonitor.containsInterruption(Data((Self.assistantQuote + "\n").utf8)))
+        #expect(!InterruptionMonitor.containsInterruption(Data((Self.promptQuote + "\n").utf8)))
+        #expect(!InterruptionMonitor.containsInterruption(Data((Self.sidechain + "\n").utf8)))
+        #expect(!InterruptionMonitor.containsInterruption(Data("[Request interrupted by user] not json\n".utf8)))
+    }
+
+    @Test func reportsInterruptionsAppendedWhileASessionWorks() throws {
+        let transcript = FileManager.default.temporaryDirectory.appending(path: "InterruptionMonitorTests.\(UUID().uuidString).jsonl")
+        try Data((Self.interrupted + "\n").utf8).write(to: transcript)
+        defer { try? FileManager.default.removeItem(at: transcript) }
+        func append(_ text: String) throws {
+            let handle = try FileHandle(forWritingTo: transcript)
+            try handle.seekToEnd()
+            try handle.write(contentsOf: Data(text.utf8))
+            try handle.close()
+        }
+
+        var interrupted: [String] = []
+        let monitor = InterruptionMonitor { interrupted.append($0) }
+        let store = AgentSessionStore()
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "local", transcriptPath: transcript.path, prompt: "x"))
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "remote", transcriptPath: transcript.path, prompt: "x", host: "elsewhere"))
+        store.apply(HookEvent(kind: .stop, sessionID: "finished", transcriptPath: transcript.path))
+        monitor.track(store.sessions)
+
+        monitor.poll()
+        #expect(interrupted.isEmpty)
+
+        try append(Self.progress + "\n")
+        monitor.poll()
+        #expect(interrupted.isEmpty)
+
+        try append(String(Self.interrupted.prefix(40)))
+        monitor.poll()
+        #expect(interrupted.isEmpty)
+
+        try append(String(Self.interrupted.dropFirst(40)) + "\n")
+        monitor.poll()
+        #expect(interrupted == ["local"])
+
+        monitor.poll()
+        #expect(interrupted == ["local"])
+
+        try Data((Self.progress + "\n").utf8).write(to: transcript)
+        monitor.poll()
+        try append(Self.interrupted + "\n")
+        monitor.poll()
+        #expect(interrupted == ["local", "local"])
+
+        store.markInterrupted("local")
+        monitor.track(store.sessions)
+        try append(Self.interrupted + "\n")
+        monitor.poll()
+        #expect(interrupted == ["local", "local"])
+    }
+
+    @Test func anInterruptionBeforeTheNextPromptDoesNotEndTheNewTurn() throws {
+        let transcript = FileManager.default.temporaryDirectory.appending(path: "InterruptionMonitorTests.\(UUID().uuidString).jsonl")
+        try Data((Self.progress + "\n").utf8).write(to: transcript)
+        defer { try? FileManager.default.removeItem(at: transcript) }
+        var clock = Date(timeIntervalSince1970: 1_000_000)
+        var interrupted: [String] = []
+        let monitor = InterruptionMonitor { interrupted.append($0) }
+        let store = AgentSessionStore(now: { clock })
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s", transcriptPath: transcript.path, prompt: "first"))
+        monitor.track(store.sessions)
+
+        let handle = try FileHandle(forWritingTo: transcript)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data((Self.interrupted + "\n").utf8))
+        try handle.close()
+        clock += 1
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s", prompt: "second"))
+        monitor.track(store.sessions)
+        monitor.poll()
+
+        #expect(interrupted.isEmpty)
+        #expect(store.sessions[0].state == .working)
     }
 }
 

@@ -18,6 +18,7 @@ public struct AgentSession: Identifiable, Sendable, Equatable {
         case working
         case needsAttention(String)
         case done
+        case interrupted
 
         public var requiresAttention: Bool {
             if case .needsAttention = self { return true }
@@ -32,6 +33,7 @@ public struct AgentSession: Identifiable, Sendable, Equatable {
     public var isUnreachable = false
     public var terminal: TerminalApp?
     public var tty: String?
+    public var transcriptPath: String?
     public var cwd: String?
     public var title: String?
     public var task: String?

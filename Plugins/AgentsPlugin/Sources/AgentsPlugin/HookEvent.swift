@@ -15,6 +15,7 @@ public struct HookEvent: Sendable, Equatable, Decodable {
     public var kind: Kind
     public var sessionID: String
     public var cwd: String?
+    public var transcriptPath: String?
     public var toolName: String?
     public var toolInput: JSONValue?
     public var prompt: String?
@@ -33,6 +34,7 @@ public struct HookEvent: Sendable, Equatable, Decodable {
         case kind = "hook_event_name"
         case sessionID = "session_id"
         case cwd
+        case transcriptPath = "transcript_path"
         case toolName = "tool_name"
         case toolInput = "tool_input"
         case prompt
@@ -43,10 +45,11 @@ public struct HookEvent: Sendable, Equatable, Decodable {
         case agentType = "agent_type"
     }
 
-    public init(kind: Kind, sessionID: String, cwd: String? = nil, toolName: String? = nil, toolInput: JSONValue? = nil, prompt: String? = nil, message: String? = nil, notificationType: String? = nil, source: String? = nil, permissionMode: String? = nil, agentType: String? = nil, agent: AgentSession.Agent = .claudeCode, host: String? = nil, terminal: TerminalApp? = nil, tty: String? = nil, title: String? = nil) {
+    public init(kind: Kind, sessionID: String, cwd: String? = nil, transcriptPath: String? = nil, toolName: String? = nil, toolInput: JSONValue? = nil, prompt: String? = nil, message: String? = nil, notificationType: String? = nil, source: String? = nil, permissionMode: String? = nil, agentType: String? = nil, agent: AgentSession.Agent = .claudeCode, host: String? = nil, terminal: TerminalApp? = nil, tty: String? = nil, title: String? = nil) {
         self.kind = kind
         self.sessionID = sessionID
         self.cwd = cwd
+        self.transcriptPath = transcriptPath
         self.toolName = toolName
         self.toolInput = toolInput
         self.prompt = prompt
@@ -67,6 +70,7 @@ public struct HookEvent: Sendable, Equatable, Decodable {
         kind = try container.decode(Kind.self, forKey: .kind)
         sessionID = try container.decode(String.self, forKey: .sessionID)
         cwd = try container.decodeIfPresent(String.self, forKey: .cwd)
+        transcriptPath = try container.decodeIfPresent(String.self, forKey: .transcriptPath)
         toolName = try container.decodeIfPresent(String.self, forKey: .toolName)
         toolInput = try container.decodeIfPresent(JSONValue.self, forKey: .toolInput)
         prompt = try container.decodeIfPresent(String.self, forKey: .prompt)
