@@ -45,6 +45,16 @@ struct NotchGeometryTests {
         #expect(laptop.panelSize.width == 904 + 2 * NotchGeometry.overshootMargin)
     }
 
+    @Test func contentScaleEnlargesRequestedSizeButNotTheLimits() {
+        let geometry = NotchGeometry(screenFrame: screen, notchSize: CGSize(width: 196, height: 32), hasHardwareNotch: true, contentScale: 1.4)
+
+        #expect(geometry.contentSize(for: nil) == CGSize(width: 728, height: 308))
+        #expect(geometry.contentSize(for: CGSize(width: 800, height: 400)) == CGSize(width: 960, height: 491))
+        #expect(geometry.contentSize(for: CGSize(width: 10, height: 10)) == CGSize(width: 356, height: NotchGeometry.minContentSize.height))
+        #expect(geometry.largestContentSize == geometry.scaled(by: 1).largestContentSize)
+        #expect(geometry.panelSize == geometry.scaled(by: 1).panelSize)
+    }
+
     @Test func largestContentSizeFallsBackToMaximumWithoutScreen() {
         #expect(NotchGeometry.placeholder.largestContentSize == NotchGeometry.maxContentSize)
     }

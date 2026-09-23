@@ -18,11 +18,17 @@ public struct NotchGeometry: Sendable, Equatable {
     public let screenFrame: CGRect
     public let notchSize: CGSize
     public let hasHardwareNotch: Bool
+    public let contentScale: CGFloat
 
-    public init(screenFrame: CGRect, notchSize: CGSize, hasHardwareNotch: Bool) {
+    public init(screenFrame: CGRect, notchSize: CGSize, hasHardwareNotch: Bool, contentScale: CGFloat = 1) {
         self.screenFrame = screenFrame
         self.notchSize = notchSize
         self.hasHardwareNotch = hasHardwareNotch
+        self.contentScale = contentScale
+    }
+
+    public func scaled(by contentScale: CGFloat) -> NotchGeometry {
+        NotchGeometry(screenFrame: screenFrame, notchSize: notchSize, hasHardwareNotch: hasHardwareNotch, contentScale: contentScale)
     }
 
     public init(
@@ -85,8 +91,8 @@ public struct NotchGeometry: Sendable, Equatable {
         }
         let largest = largestContentSize
         return CGSize(
-            width: min(max(requested.width, minContentWidth), largest.width),
-            height: min(max(requested.height, Self.minContentSize.height), largest.height)
+            width: min(max(requested.width * contentScale, minContentWidth), largest.width),
+            height: min(max(requested.height * contentScale, Self.minContentSize.height), largest.height)
         )
     }
 
@@ -150,9 +156,5 @@ public struct NotchGeometry: Sendable, Equatable {
             width: panelSize.width,
             height: panelSize.height
         )
-    }
-
-    public static func preferredScreen() -> NSScreen? {
-        NSScreen.screens.first { $0.safeAreaInsets.top > 0 } ?? NSScreen.main ?? NSScreen.screens.first
     }
 }

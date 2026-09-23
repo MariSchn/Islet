@@ -1,14 +1,18 @@
+import AppKit
 import SwiftUI
 
 public struct SettingsView: View {
     private enum Pane: Hashable {
         case general
+        case notch
+        case animation
         case plugins
         case plugin(String)
     }
 
     private let settings: AppSettings
     private let registry: PluginRegistry
+    @State private var loginItem = LoginItem()
     @State private var selection: Pane? = .general
 
     public init(settings: AppSettings, registry: PluginRegistry) {
@@ -23,13 +27,17 @@ public struct SettingsView: View {
     public var body: some View {
         NavigationSplitView {
             List(selection: $selection) {
-                SettingsSidebarRow("General", systemImage: "gearshape.fill", tint: .gray).tag(Pane.general)
-                SettingsSidebarRow("Plugins", systemImage: "puzzlepiece.extension.fill", tint: .indigo).tag(Pane.plugins)
+                Section {
+                    SettingsSidebarRow("General", systemImage: "gearshape.fill", tint: .gray).tag(Pane.general)
+                    SettingsSidebarRow("Notch", systemImage: "macbook", tint: .blue).tag(Pane.notch)
+                    SettingsSidebarRow("Animation", systemImage: "waveform.path", tint: .orange).tag(Pane.animation)
+                    SettingsSidebarRow("Plugins", systemImage: "puzzlepiece.extension.fill", tint: .indigo).tag(Pane.plugins)
+                }
                 let entries = pluginsWithSettings
                 if !entries.isEmpty {
                     Section("Plugin Settings") {
                         ForEach(entries) { entry in
-                            SettingsSidebarRow(entry.manifest.displayName, systemImage: entry.manifest.systemImage, tint: .blue)
+                            SettingsSidebarRow(entry.manifest.displayName, systemImage: entry.manifest.systemImage, tint: .teal)
                                 .tag(Pane.plugin(entry.id))
                         }
                     }
@@ -40,8 +48,16 @@ public struct SettingsView: View {
         } detail: {
             switch selection {
             case .general, nil:
-                SettingsPane("General", systemImage: "gearshape.fill", tint: .gray, description: "Appearance, animation and drag & drop behavior of the notch.") {
-                    GeneralSettingsView(settings: settings)
+                SettingsPane("General", systemImage: "gearshape.fill", tint: .gray, description: "Startup, menu bar and drag & drop behavior.") {
+                    GeneralSettingsView(settings: settings, loginItem: loginItem)
+                }
+            case .notch:
+                SettingsPane("Notch", systemImage: "macbook", tint: .blue, description: "Size, appearance and placement of the notch.") {
+                    NotchSettingsView(settings: settings)
+                }
+            case .animation:
+                SettingsPane("Animation", systemImage: "waveform.path", tint: .orange, description: "How the notch expands and collapses.") {
+                    AnimationSettingsView(settings: settings)
                 }
             case .plugins:
                 SettingsPane("Plugins", systemImage: "puzzlepiece.extension.fill", tint: .indigo, description: "Choose which plugins run and appear in the notch.") {
@@ -49,7 +65,7 @@ public struct SettingsView: View {
                 }
             case .plugin(let id):
                 if let entry = pluginsWithSettings.first(where: { $0.id == id }), let view = entry.settingsView {
-                    SettingsPane(entry.manifest.displayName, systemImage: entry.manifest.systemImage, tint: .blue, description: "Settings for the \(entry.manifest.displayName) plugin.") {
+                    SettingsPane(entry.manifest.displayName, systemImage: entry.manifest.systemImage, tint: .teal, description: "Settings for the \(entry.manifest.displayName) plugin.") {
                         view
                     }
                     .id(id)
@@ -142,6 +158,118 @@ private struct SettingsPane<Content: View>: View {
 
 struct GeneralSettingsView: View {
     @Bindable var settings: AppSettings
+    let loginItem: LoginItem
+    @State private var confirmsReset = false
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Open at login", isOn: Binding(
+                    get: { loginItem.isEnabled },
+                    set: { loginItem.setEnabled($0) }
+                ))
+                if let error = loginItem.error {
+                    Text(error).foregroundStyle(.red)
+                }
+            } header: {
+                Text("Startup")
+            } footer: {
+                Text("Starts Islet automatically when you log in. You can also change this under System Settings › General › Login Items.")
+            }
+            Section {
+                Toggle("Show icon in the menu bar", isOn: $settings.showsMenuBarIcon)
+            } header: {
+                Text("Menu Bar")
+            } footer: {
+                Text("Without the icon, open the settings from the gear in the expanded notch or by opening Islet again from Finder or Spotlight.")
+            }
+            Section {
+                Toggle("Switch to a plugin that accepts files", isOn: $settings.switchesToDropTargetOnDrag)
+            } header: {
+                Text("Drag & Drop")
+            } footer: {
+                Text("When you drag files over the notch, the plugin that can take them is shown automatically.")
+            }
+            Section {
+                LabeledContent("All settings") {
+                    Button("Reset…") { confirmsReset = true }
+                }
+            } footer: {
+                Text("Restores every setting in the General, Notch and Animation tabs to its default. Plugin settings are not affected.")
+            }
+        }
+        .onAppear { loginItem.refresh() }
+        .confirmationDialog("Reset all settings?", isPresented: $confirmsReset) {
+            Button("Reset", role: .destructive) { settings.resetAll() }
+        } message: {
+            Text("This restores the General, Notch and Animation settings to their defaults.")
+        }
+    }
+}
+
+struct NotchSettingsView: View {
+    @Bindable var settings: AppSettings
+    @State private var displays = NotchDisplay.connected()
+
+    private var placementOptions: [NotchDisplayPlacement] {
+        var options: [NotchDisplayPlacement] = [.builtIn, .primary, .all]
+        options += displays.map { .named($0.name) }
+        if case .named(let name) = settings.displayPlacement, !displays.contains(where: { $0.name == name }) {
+            options.append(.named(name))
+        }
+        return options
+    }
+
+    private var placementSummary: String {
+        let shown = settings.displayPlacement.displays(among: displays)
+        switch shown.count {
+        case 0: return "No display is connected."
+        case 1: return "The notch is currently shown on \(shown[0].name)."
+        default: return "The notch is currently shown on \(shown.count) displays."
+        }
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                Picker("Size", selection: $settings.notchSize) {
+                    ForEach(NotchSize.allCases) { size in
+                        Text(size.displayName).tag(size)
+                    }
+                }
+                .pickerStyle(.segmented)
+            } header: {
+                Text("Size")
+            } footer: {
+                Text("How large the notch grows when it expands. Larger sizes also enlarge the plugin content.")
+            }
+            Section {
+                Toggle("Always draw the notch shape", isOn: $settings.drawsIdleNotchShape)
+            } header: {
+                Text("Appearance")
+            } footer: {
+                Text("Keeps a black notch visible even while nothing is shown. When off, the shape can briefly flash while switching Spaces.")
+            }
+            Section {
+                Picker("Show on", selection: $settings.displayPlacement) {
+                    ForEach(placementOptions, id: \.self) { placement in
+                        Text(placement.displayName).tag(placement)
+                    }
+                }
+            } header: {
+                Text("Displays")
+            } footer: {
+                Text("\(placementSummary) Choosing a display by name falls back to the built-in display while it is disconnected.")
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)) { _ in
+            displays = NotchDisplay.connected()
+        }
+    }
+}
+
+struct AnimationSettingsView: View {
+    @Bindable var settings: AppSettings
     @State private var lastDamping = 0.7
 
     private var isSpring: Binding<Bool> {
@@ -164,13 +292,6 @@ struct GeneralSettingsView: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Draw the notch shape when idle", isOn: $settings.drawsIdleNotchShape)
-            } header: {
-                Text("Appearance")
-            } footer: {
-                Text("Keeps a black notch shape visible at all times. Turning it off hides the shape, but it can briefly flash while switching Spaces.")
-            }
-            Section("Animation") {
                 Picker("Curve", selection: isSpring) {
                     Text("Ease out").tag(false)
                     Text("Spring").tag(true)
@@ -178,16 +299,27 @@ struct GeneralSettingsView: View {
                 if isSpring.wrappedValue {
                     LabeledSlider("Bounciness", value: damping, in: 0.3...1, format: .number.precision(.fractionLength(2)))
                 }
-                LabeledSlider("Expand duration", value: $settings.animation.expandDuration, in: 0.1...1.2, format: .number.precision(.fractionLength(2)), unit: "s")
-                LabeledSlider("Collapse duration", value: $settings.animation.collapseDuration, in: 0.1...1.2, format: .number.precision(.fractionLength(2)), unit: "s")
-                LabeledSlider("Expand delay", value: milliseconds($settings.animation.expandDelay), in: 0...500, format: .number.precision(.fractionLength(0)), unit: "ms")
-                LabeledSlider("Collapse delay", value: milliseconds($settings.animation.collapseDelay), in: 0...1000, format: .number.precision(.fractionLength(0)), unit: "ms")
-                LabeledContent("Defaults") {
+            } header: {
+                Text("Curve")
+            } footer: {
+                Text("Spring animations overshoot slightly; lower bounciness makes them wobble more.")
+            }
+            Section("Duration") {
+                LabeledSlider("Expand", value: $settings.animation.expandDuration, in: 0.1...1.2, format: .number.precision(.fractionLength(2)), unit: "s")
+                LabeledSlider("Collapse", value: $settings.animation.collapseDuration, in: 0.1...1.2, format: .number.precision(.fractionLength(2)), unit: "s")
+            }
+            Section {
+                LabeledSlider("Expand", value: milliseconds($settings.animation.expandDelay), in: 0...500, format: .number.precision(.fractionLength(0)), unit: "ms")
+                LabeledSlider("Collapse", value: milliseconds($settings.animation.collapseDelay), in: 0...1000, format: .number.precision(.fractionLength(0)), unit: "ms")
+            } header: {
+                Text("Delay")
+            } footer: {
+                Text("How long the pointer has to rest on or leave the notch before it reacts.")
+            }
+            Section {
+                LabeledContent("Animation") {
                     Button("Reset") { settings.resetAnimation() }
                 }
-            }
-            Section("Drag & Drop") {
-                Toggle("Switch to a plugin that accepts files when dragging over the notch", isOn: $settings.switchesToDropTargetOnDrag)
             }
         }
     }
@@ -243,12 +375,12 @@ struct PluginsSettingsView: View {
                         Label {
                             Text(entry.manifest.displayName)
                         } icon: {
-                            SettingsIcon(systemImage: entry.manifest.systemImage, tint: .blue, size: 24)
+                            SettingsIcon(systemImage: entry.manifest.systemImage, tint: .teal, size: 24)
                         }
                     }
                 }
             } footer: {
-                Text("Disabled plugins are removed from the notch and stop running.")
+                Text("Disabled plugins are removed from the notch and stop running. Plugins with their own settings get a tab in the sidebar while enabled.")
             }
         }
     }

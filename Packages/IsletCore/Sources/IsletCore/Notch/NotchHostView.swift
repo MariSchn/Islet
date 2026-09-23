@@ -66,10 +66,13 @@ private struct PluginCarousel: View {
             ForEach(placements, id: \.id) { placement in
                 if let entry = registry.entry(for: placement.id) {
                     let isSelected = placement.id == registry.selectedID
+                    let scale = geometry.contentScale
                     PluginScreen(entry: entry)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                         .padding(12)
-                        .frame(width: placement.size.width, height: placement.size.height)
+                        .frame(width: placement.size.width / scale, height: placement.size.height / scale)
+                        .scaleEffect(scale, anchor: .top)
+                        .frame(width: placement.size.width, height: placement.size.height, alignment: .top)
                         .opacity(isSelected ? 1 : 0)
                         .allowsHitTesting(isSelected)
                         .accessibilityHidden(!isSelected)
