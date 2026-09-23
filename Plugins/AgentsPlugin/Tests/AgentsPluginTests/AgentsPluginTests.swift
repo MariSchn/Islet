@@ -552,9 +552,10 @@ struct UsageTests {
     @Test func monitorSendsTheBearerTokenAndReportsFailures() async throws {
         let requests = Requests()
         let token = Box(value: "token-from-test")
+        let status = StatusBox()
         let monitor = UsageMonitor(isEnabled: true, accessToken: { token.value }, load: { request in
             await requests.record(request)
-            return (Data(#"{"five_hour":{"utilization":40,"resets_at":null}}"#.utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+            return (Data(#"{"five_hour":{"utilization":40,"resets_at":null}}"#.utf8), HTTPURLResponse(url: request.url!, statusCode: status.value, httpVersion: nil, headerFields: nil)!)
         })
         monitor.refresh(force: true)
         try await waitUntil { monitor.usage != nil }
@@ -567,6 +568,16 @@ struct UsageTests {
         monitor.refresh()
         try await Task.sleep(for: .milliseconds(50))
         #expect(await requests.all.count == 1)
+
+        status.value = 503
+        monitor.refresh(force: true)
+        try await waitUntil { monitor.error != nil }
+        #expect(monitor.error == UsageError.status(503).errorDescription)
+        #expect(monitor.usage != nil)
+
+        status.value = 200
+        monitor.refresh(force: true)
+        try await waitUntil { monitor.error == nil }
 
         token.value = nil
         monitor.refresh(force: true)
@@ -593,6 +604,10 @@ struct UsageTests {
     private final class Box: @unchecked Sendable {
         var value: String?
         init(value: String?) { self.value = value }
+    }
+
+    private final class StatusBox: @unchecked Sendable {
+        var value = 200
     }
 }
 

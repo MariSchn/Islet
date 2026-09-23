@@ -85,6 +85,7 @@ public final class UsageMonitor {
     public static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
     public static let refreshInterval: TimeInterval = 5 * 60
     public static let minimumInterval: TimeInterval = 30
+    public static let maximumStaleness: TimeInterval = 30 * 60
 
     public private(set) var usage: ClaudeUsage? {
         didSet { if usage != oldValue { onChange?() } }
@@ -101,6 +102,7 @@ public final class UsageMonitor {
     private let accessToken: @Sendable () -> String?
     private let load: @Sendable (URLRequest) async throws -> (Data, URLResponse)
     private var lastFetch: Date?
+    private var lastSuccess: Date?
     private var task: Task<Void, Never>?
     private var timer: Task<Void, Never>?
     private var isActive = false
@@ -145,6 +147,14 @@ public final class UsageMonitor {
         usage = nil
         error = nil
         lastFetch = nil
+        lastSuccess = nil
+    }
+
+    private static func invalidatesUsage(_ error: any Error) -> Bool {
+        switch error as? UsageError {
+        case .notLoggedIn, .status(401), .status(403): true
+        default: false
+        }
     }
 
     public func refresh(force: Bool = false) {
@@ -171,8 +181,11 @@ public final class UsageMonitor {
             case .success(let usage):
                 self.usage = usage
                 error = nil
+                lastSuccess = Date()
             case .failure(let failure):
-                usage = nil
+                if Self.invalidatesUsage(failure) || lastSuccess.map({ Date().timeIntervalSince($0) > Self.maximumStaleness }) != false {
+                    usage = nil
+                }
                 error = failure.localizedDescription
             }
         }
