@@ -69,8 +69,10 @@ public struct HookInstaller: Sendable {
         done
         case "$terminal" in vscode) case "$VSCODE_GIT_ASKPASS_MAIN" in *[Cc]ursor*) terminal=cursor ;; esac ;; esac
         body=$(mktemp) || exit 0
+        request=""
+        trap '[ -n "$request" ] && kill "$request" 2>/dev/null; rm -f "$body"; exit 0' HUP INT TERM
         printf '%s' "$payload" > "$body"
-        printf 'header = "Authorization: Bearer \(token)"\n' | curl -sf --connect-timeout 1 -m "$timeout" -K - -X POST "http://127.0.0.1:\(port)\(HookServer.hookPath)" \\
+        curl -sf --connect-timeout 1 -m "$timeout" -K - -X POST "http://127.0.0.1:\(port)\(HookServer.hookPath)" \\
           -H "Content-Type: application/json" \\
           -H "Expect:" \\
           -H "X-Islet-Agent: \(agent.rawValue)" \\
@@ -78,7 +80,12 @@ public struct HookInstaller: Sendable {
           -H "X-Islet-Terminal: $terminal" \\
           -H "X-Islet-TTY: $tty" \\
           -H "X-Islet-Title: $title" \\
-          --data-binary "@$body" 2>/dev/null
+          --data-binary "@$body" 2>/dev/null <<'ISLET_CONFIG' &
+        header = "Authorization: Bearer \(token)"
+        ISLET_CONFIG
+        request=$!
+        wait "$request"
+        request=""
         rm -f "$body"
         exit 0
 

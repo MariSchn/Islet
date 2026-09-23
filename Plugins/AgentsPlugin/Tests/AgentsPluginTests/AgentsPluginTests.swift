@@ -209,6 +209,16 @@ struct AgentSessionStoreTests {
         #expect(store.sessions[0].title == "islet-main")
         store.apply(HookEvent(kind: .preToolUse, sessionID: "a", toolName: "Read", title: "renamed"))
         #expect(store.sessions[0].title == "renamed")
+        store.apply(HookEvent(kind: .stop, sessionID: "a"))
+        #expect(store.sessions[0].title == "renamed")
+    }
+
+    @Test func idlePromptsDoNotHidePendingRequests() {
+        let store = AgentSessionStore()
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s", cwd: "/p", prompt: "x"))
+        store.apply(HookEvent(kind: .permissionRequest, sessionID: "s", toolName: "Bash", toolInput: .object(["command": .string("ls")])))
+        store.apply(HookEvent(kind: .notification, sessionID: "s", notificationType: "idle_prompt"))
+        #expect(store.sessions[0].state == .needsAttention("Wants to $ ls"))
     }
 
     @Test func sessionsStayLocalWhenTheMacIsRenamedByTheNetwork() {
@@ -652,6 +662,43 @@ struct HookInstallerTests {
             #expect(call.contains { $0.hasPrefix("X-Islet-TTY: ") && !$0.contains("/dev/db") })
             #expect(call.last == payload)
         }
+    }
+
+    @Test func killingTheScriptAbortsTheRequestAndCleansUp() throws {
+        let installer = try makeInstaller()
+        try installer.install()
+        let capture = installer.directory.appending(path: "curl-call")
+        let fakeCurl = installer.directory.appending(path: "curl")
+        try "#!/bin/sh\nfor a in \"$@\"; do case \"$a\" in @*) body=\"${a#@}\";; esac; done\nprintf '%s\\n%s\\n' \"$$\" \"$body\" > '\(capture.path)'\nexec sleep 30\n".write(to: fakeCurl, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeCurl.path)
+
+        let process = Process()
+        process.executableURL = URL(filePath: "/bin/sh")
+        process.arguments = [installer.scriptURL.path, "600"]
+        process.environment = ["PATH": installer.directory.path + ":/usr/bin:/bin"]
+        let input = Pipe()
+        process.standardInput = input
+        try process.run()
+        input.fileHandleForWriting.write(Data(#"{"session_id":"a","hook_event_name":"PermissionRequest"}"#.utf8))
+        try input.fileHandleForWriting.close()
+
+        let deadline = Date().addingTimeInterval(10)
+        var call: [String] = []
+        while call.count < 2, Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.05)
+            call = ((try? String(contentsOf: capture, encoding: .utf8)) ?? "").split(separator: "\n").map(String.init)
+        }
+        let request = try #require(Int32(call.first ?? ""))
+        #expect(FileManager.default.fileExists(atPath: call[1]))
+
+        kill(process.processIdentifier, SIGTERM)
+        process.waitUntilExit()
+        let exitDeadline = Date().addingTimeInterval(5)
+        while kill(request, 0) == 0, Date() < exitDeadline {
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        #expect(kill(request, 0) != 0)
+        #expect(!FileManager.default.fileExists(atPath: call[1]))
     }
 
     @Test func installsScriptAndMergesHooksWithoutTouchingOtherSettings() throws {
