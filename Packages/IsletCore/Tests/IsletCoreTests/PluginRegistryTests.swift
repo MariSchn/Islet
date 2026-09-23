@@ -328,6 +328,35 @@ struct PluginRegistryTests {
         #expect(stub.context.pillStatus?.text == "connected")
     }
 
+    @Test func rapidTogglesDuringATransitionRunInOrderAndEndDisabled() async throws {
+        let registry = harness.makeRegistry()
+        let stub = try await harness.registerStub(in: registry) {
+            $0.deactivationDelay = .milliseconds(100)
+        }
+        stub.activationDelay = .milliseconds(50)
+        stub.pillAfterActivation = PillStatus(text: "connected")
+        let disabling = Task { @MainActor in
+            await registry.setEnabled(false, for: "test.stub")
+        }
+        try await Task.sleep(for: .milliseconds(20))
+        let enabling = Task { @MainActor in
+            await registry.setEnabled(true, for: "test.stub")
+        }
+        let disablingAgain = Task { @MainActor in
+            await registry.setEnabled(false, for: "test.stub")
+        }
+        await disabling.value
+        await enabling.value
+        await disablingAgain.value
+        let entry = try #require(registry.entry(for: "test.stub"))
+
+        #expect(!registry.isEnabled("test.stub"))
+        #expect(!entry.state.isActive)
+        #expect(stub.activations == 2)
+        #expect(stub.deactivations == 2)
+        #expect(stub.context.pillStatus == nil)
+    }
+
     @Test func settingsViewDefaultsToNilAndIsCached() async throws {
         let registry = harness.makeRegistry()
         try await harness.registerStub(in: registry)
