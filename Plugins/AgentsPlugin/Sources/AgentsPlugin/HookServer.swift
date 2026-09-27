@@ -187,7 +187,7 @@ public actor HookServer {
             response = .text(installScript)
         } else if request.method != "POST" || request.path != Self.hookPath {
             response = .json(404, #"{"error":"not found"}"#)
-        } else if let event = try? HookEvent.decode(request.body, agent: request.headers["x-islet-agent"], host: request.headers["x-islet-host"], terminal: request.headers["x-islet-terminal"], tty: request.headers["x-islet-tty"], title: request.headers["x-islet-title"]) {
+        } else if let event = try? HookEvent.decode(request.body, agent: request.headers["x-islet-agent"], host: request.headers["x-islet-host"], terminal: request.headers["x-islet-terminal"], tty: request.headers["x-islet-tty"], pid: request.headers["x-islet-pid"], title: request.headers["x-islet-title"]) {
             let reply = await handler(event)
             guard !Task.isCancelled else { return }
             response = .json(200, reply.body)

@@ -149,6 +149,7 @@ public final class AgentsController {
     }
 
     let interruptions: InterruptionMonitor
+    private let processes: ProcessMonitor
     private let server: HookServer
     private let alerter: SessionAlerter
 
@@ -168,6 +169,7 @@ public final class AgentsController {
         self.alerts = alerts
         store.onAlert = { alerter.handle($0) }
         interruptions = InterruptionMonitor { store.markInterrupted($0) }
+        processes = ProcessMonitor { store.removeExitedSessions(isRunning: ProcessMonitor.isRunning) }
     }
 
     public func start() async {
@@ -184,6 +186,7 @@ public final class AgentsController {
         usage.onChange = { [weak self] in self?.onUsageChange?() }
         usage.start()
         interruptions.start()
+        processes.start()
     }
 
     public var isCodexAvailable: Bool {
@@ -194,6 +197,7 @@ public final class AgentsController {
         await server.stop()
         usage.stop()
         interruptions.stop()
+        processes.stop()
     }
 
     public func refreshInstallState() {

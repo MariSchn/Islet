@@ -57,6 +57,14 @@ struct HookEventTests {
         #expect(ActivityEntry.detail(for: "Bash", input: .object(["command": .string("ls")])) == nil)
     }
 
+    @Test func acceptsOnlyPlausibleProcessIDs() throws {
+        let payload = Data(#"{"session_id":"a","hook_event_name":"Stop"}"#.utf8)
+        #expect(try HookEvent.decode(payload, pid: "4242").pid == 4242)
+        #expect(try HookEvent.decode(payload, pid: "1").pid == nil)
+        #expect(try HookEvent.decode(payload, pid: "").pid == nil)
+        #expect(try HookEvent.decode(payload, pid: "12; rm").pid == nil)
+    }
+
     @Test func rejectsUnknownEvents() {
         #expect(throws: (any Error).self) {
             try HookEvent.decode(Data(#"{"session_id":"a","hook_event_name":"Nope"}"#.utf8))
@@ -190,6 +198,74 @@ struct AgentSessionStoreTests {
         clock = clock.addingTimeInterval(AgentSessionStore.unreachableTimeout + 1)
         store.markUnreachableSessions()
         #expect(store.sessions[0].isUnreachable == false)
+    }
+
+    @Test func sessionsWithoutAPromptShowNoRunningTurn() {
+        let store = AgentSessionStore()
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "s", cwd: "/p"))
+        #expect(store.sessions[0].hasNoPrompt)
+        #expect(store.workingSessions.isEmpty)
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s", prompt: "go"))
+        #expect(!store.sessions[0].hasNoPrompt)
+    }
+
+    @Test func emptySessionsAreReplacedByTheNextSessionOfTheSameProcess() {
+        let store = AgentSessionStore(localHost: { "mac" })
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "startup", cwd: "/p", host: "mac", pid: 42))
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "other-host", cwd: "/p", host: "devbox", pid: 42))
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "resumed", cwd: "/p", host: "mac", pid: 42))
+        #expect(store.sessions.map(\.id) == ["resumed", "other-host"])
+
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "resumed", prompt: "go", host: "mac", pid: 42))
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "cleared", cwd: "/p", host: "mac", pid: 42))
+        #expect(store.sessions.map(\.id) == ["cleared", "resumed", "other-host"])
+
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "second-terminal", cwd: "/p", host: "mac", pid: 43))
+        #expect(store.sessions.count == 4)
+    }
+
+    @Test func localSessionsDisappearOnceTheirAgentProcessExits() async throws {
+        let store = AgentSessionStore(localHost: { "mac" })
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "alive", prompt: "a", host: "mac", pid: 10))
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "remote", prompt: "b", host: "devbox", pid: 11))
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "unknown", prompt: "c", host: "mac"))
+        let reply = Task { await store.handle(HookEvent(kind: .permissionRequest, sessionID: "exited", toolName: "Bash", toolInput: .object(["command": .string("ls")]), host: "mac", pid: 12)) }
+        try await waitUntil { store.sessions.first?.pendingRequests.isEmpty == false }
+
+        store.removeExitedSessions { $0 == 10 }
+        #expect(await reply.value == .empty)
+        #expect(Set(store.sessions.map(\.id)) == ["alive", "remote", "unknown"])
+        #expect(ProcessMonitor.isRunning(getpid()))
+    }
+
+    @Test func questionsAreWithdrawnWhenTheMainAgentMovesOn() async throws {
+        let store = AgentSessionStore()
+        let question: JSONValue = .object(["questions": .array([.object(["question": .string("Color?"), "options": .array([.object(["label": .string("Red")])])])])])
+        let first = Task { await store.handle(HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "AskUserQuestion", toolInput: question)) }
+        try await waitUntil { store.sessions.first?.pendingRequests.count == 1 }
+
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "a", toolName: "Read", agentType: "Explore"))
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "a", toolName: "AskUserQuestion", toolInput: question))
+        #expect(store.sessions[0].pendingRequests.count == 1)
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "a", toolName: "Bash"))
+        #expect(await first.value == .empty)
+        #expect(store.sessions[0].pendingRequests.isEmpty)
+        #expect(store.sessions[0].state == .working)
+
+        let second = Task { await store.handle(HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "AskUserQuestion", toolInput: question)) }
+        try await waitUntil { store.sessions.first?.pendingRequests.count == 1 }
+        let reformatted: JSONValue = .object(["questions": .array([.object(["question": .string("Color?"), "multiSelect": .bool(false), "options": .array([.object(["label": .string("Red")])])])]), "answers": .object(["Color?": .string("Red")])])
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "a", toolName: "AskUserQuestion", toolInput: reformatted))
+        #expect(await second.value == .empty)
+        #expect(store.sessions[0].pendingRequests.isEmpty)
+    }
+
+    func waitUntil(_ condition: () -> Bool) async throws {
+        let deadline = ContinuousClock.now + .seconds(2)
+        while !condition() {
+            try #require(ContinuousClock.now < deadline)
+            await Task.yield()
+        }
     }
 
     @Test func thePillNamesSessionsByTitleWhenTheyHaveOne() {
@@ -820,6 +896,7 @@ struct HookInstallerTests {
         {"type":"custom-title","customTitle":"first","sessionId":"a"}
         {"type":"user","message":"hello"}
         {"type":"custom-title","customTitle":"islet main","sessionId":"a"}
+        {"type":"ai-title","aiTitle":"generated later","sessionId":"a"}
 
         """.write(to: transcript, atomically: true, encoding: .utf8)
         let capture = installer.directory.appending(path: "curl-call")
@@ -858,6 +935,37 @@ struct HookInstallerTests {
             #expect(call.contains { $0.hasPrefix("X-Islet-TTY: ") && !$0.contains("/dev/db") })
             #expect(call.last == payload)
         }
+    }
+
+    @Test func scriptFallsBackToTheGeneratedTitleAndReportsTheAgentProcess() throws {
+        let installer = try makeInstaller()
+        try installer.install()
+        let transcript = installer.directory.appending(path: "transcript.jsonl")
+        try """
+        {"type":"ai-title","aiTitle":"first guess","sessionId":"a"}
+        {"type":"user","message":"hello"}
+        {"type":"ai-title","aiTitle":"fix hook titles","sessionId":"a"}
+
+        """.write(to: transcript, atomically: true, encoding: .utf8)
+        let capture = installer.directory.appending(path: "curl-call")
+        let fakeCurl = installer.directory.appending(path: "curl")
+        try "#!/bin/sh\nprintf '%s\\n' \"$@\" > '\(capture.path)'\n".write(to: fakeCurl, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeCurl.path)
+        let payload = #"{"session_id":"a","hook_event_name":"Stop","transcript_path":"\#(transcript.path)"}"#
+
+        let process = Process()
+        process.executableURL = URL(filePath: "/bin/sh")
+        process.arguments = ["-c", "sh \"$0\"; true", installer.scriptURL.path]
+        process.environment = ["PATH": installer.directory.path + ":/usr/bin:/bin"]
+        let input = Pipe()
+        process.standardInput = input
+        try process.run()
+        input.fileHandleForWriting.write(Data(payload.utf8))
+        try input.fileHandleForWriting.close()
+        process.waitUntilExit()
+        let call = try String(contentsOf: capture, encoding: .utf8).components(separatedBy: "\n")
+        #expect(call.contains("X-Islet-Title: fix hook titles"))
+        #expect(call.contains("X-Islet-PID: \(getpid())"))
     }
 
     @Test func killingTheScriptAbortsTheRequestAndCleansUp() throws {

@@ -28,6 +28,7 @@ public struct HookEvent: Sendable, Equatable, Decodable {
     public var host: String?
     public var terminal: TerminalApp?
     public var tty: String?
+    public var pid: Int32?
     public var title: String?
 
     private enum CodingKeys: String, CodingKey {
@@ -45,7 +46,7 @@ public struct HookEvent: Sendable, Equatable, Decodable {
         case agentType = "agent_type"
     }
 
-    public init(kind: Kind, sessionID: String, cwd: String? = nil, transcriptPath: String? = nil, toolName: String? = nil, toolInput: JSONValue? = nil, prompt: String? = nil, message: String? = nil, notificationType: String? = nil, source: String? = nil, permissionMode: String? = nil, agentType: String? = nil, agent: AgentSession.Agent = .claudeCode, host: String? = nil, terminal: TerminalApp? = nil, tty: String? = nil, title: String? = nil) {
+    public init(kind: Kind, sessionID: String, cwd: String? = nil, transcriptPath: String? = nil, toolName: String? = nil, toolInput: JSONValue? = nil, prompt: String? = nil, message: String? = nil, notificationType: String? = nil, source: String? = nil, permissionMode: String? = nil, agentType: String? = nil, agent: AgentSession.Agent = .claudeCode, host: String? = nil, terminal: TerminalApp? = nil, tty: String? = nil, pid: Int32? = nil, title: String? = nil) {
         self.kind = kind
         self.sessionID = sessionID
         self.cwd = cwd
@@ -62,6 +63,7 @@ public struct HookEvent: Sendable, Equatable, Decodable {
         self.host = host
         self.terminal = terminal
         self.tty = tty
+        self.pid = pid
         self.title = title
     }
 
@@ -81,12 +83,13 @@ public struct HookEvent: Sendable, Equatable, Decodable {
         agentType = try container.decodeIfPresent(String.self, forKey: .agentType)
     }
 
-    public static func decode(_ data: Data, agent: String? = nil, host: String? = nil, terminal: String? = nil, tty: String? = nil, title: String? = nil) throws -> HookEvent {
+    public static func decode(_ data: Data, agent: String? = nil, host: String? = nil, terminal: String? = nil, tty: String? = nil, pid: String? = nil, title: String? = nil) throws -> HookEvent {
         var event = try JSONDecoder().decode(HookEvent.self, from: data)
         event.agent = agent.flatMap(AgentSession.Agent.init(rawValue:)) ?? .claudeCode
         event.host = host
         event.terminal = terminal.flatMap { Self.isSafeIdentifier($0) ? TerminalApp(identifier: $0) : nil }
         event.tty = tty.flatMap { $0.hasPrefix("/dev/") && Self.isSafeIdentifier($0) ? $0 : nil }
+        event.pid = pid.flatMap { Int32($0) }.flatMap { $0 > 1 ? $0 : nil }
         event.title = title.flatMap { $0.isEmpty ? nil : $0 }
         return event
     }

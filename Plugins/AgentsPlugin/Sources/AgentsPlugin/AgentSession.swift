@@ -33,6 +33,7 @@ public struct AgentSession: Identifiable, Sendable, Equatable {
     public var isUnreachable = false
     public var terminal: TerminalApp?
     public var tty: String?
+    public var pid: Int32?
     public var transcriptPath: String?
     public var cwd: String?
     public var title: String?
@@ -47,6 +48,10 @@ public struct AgentSession: Identifiable, Sendable, Equatable {
     public var updatedAt: Date
 
     public var pendingRequest: PendingRequest? { pendingRequests.first }
+
+    public var hasNoPrompt: Bool {
+        task == nil && state == .starting
+    }
 
     public var displayName: String {
         title ?? projectName

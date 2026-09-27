@@ -33,12 +33,14 @@ public struct PendingRequest: Sendable, Equatable, Identifiable {
     public let id: UUID
     public let toolName: String
     public let toolInput: JSONValue?
+    public let agentType: String?
     public let kind: Kind
 
-    public init?(id: UUID = UUID(), toolName: String, toolInput: JSONValue?) {
+    public init?(id: UUID = UUID(), toolName: String, toolInput: JSONValue?, agentType: String? = nil) {
         self.id = id
         self.toolName = toolName
         self.toolInput = toolInput
+        self.agentType = agentType
         switch toolName {
         case "AskUserQuestion":
             guard let questions = Self.questions(from: toolInput), !questions.isEmpty else { return nil }
@@ -48,6 +50,11 @@ public struct PendingRequest: Sendable, Equatable, Identifiable {
         default:
             kind = .permission(tool: toolName, detail: Self.permissionDetail(tool: toolName, input: toolInput))
         }
+    }
+
+    public var isQuestion: Bool {
+        if case .question = kind { return true }
+        return false
     }
 
     public var activityDescription: String? {

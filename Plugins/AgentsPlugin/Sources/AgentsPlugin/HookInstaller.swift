@@ -51,15 +51,23 @@ public struct HookInstaller: Sendable {
         payload=$(cat)
         title=""
         transcript=$(printf '%s' "$payload" | sed -n 's/.*"transcript_path":"\\([^"]*\\)".*/\\1/p')
-        [ -f "$transcript" ] && title=$(grep -o '"customTitle":"[^"]*"' "$transcript" 2>/dev/null | tail -n 1 | sed 's/^"customTitle":"//; s/"$//')
+        if [ -f "$transcript" ]; then
+          titles=$(grep -oE '"(customTitle|aiTitle)":"[^"]*"' "$transcript" 2>/dev/null)
+          title=$(printf '%s\\n' "$titles" | grep '^"customTitle"' | tail -n 1 | sed 's/^"customTitle":"//; s/"$//')
+          [ -n "$title" ] || title=$(printf '%s\\n' "$titles" | grep '^"aiTitle"' | tail -n 1 | sed 's/^"aiTitle":"//; s/"$//')
+        fi
         terminal="${__CFBundleIdentifier:-$TERM_PROGRAM}"
         tty=""
+        agent_pid=""
         pid=$$
         set -f
         while [ "$pid" -gt 1 ]; do
-          set -- $(ps -o ppid=,tty= -p "$pid" 2>/dev/null)
+          set -- $(ps -o ppid=,tty=,comm= -p "$pid" 2>/dev/null)
           [ -n "$1" ] || break
           case "$2" in ""|"?"|"??") ;; *) tty="/dev/$2" ;; esac
+          if [ -z "$agent_pid" ] && [ "$pid" != $$ ]; then
+            case "${3##*/}" in sh|bash|dash|zsh|-sh|-bash|-dash|-zsh) ;; *) agent_pid=$pid ;; esac
+          fi
           if [ -z "$terminal" ] && [ "$(uname)" = Darwin ]; then
             vars=$(ps -E -o command= -p "$pid" 2>/dev/null | tr ' ' '\n')
             terminal=$(printf '%s\n' "$vars" | sed -n 's/^__CFBundleIdentifier=//p' | head -n 1)
@@ -79,6 +87,7 @@ public struct HookInstaller: Sendable {
           -H "X-Islet-Host: $(hostname -s 2>/dev/null || hostname)" \\
           -H "X-Islet-Terminal: $terminal" \\
           -H "X-Islet-TTY: $tty" \\
+          -H "X-Islet-PID: $agent_pid" \\
           -H "X-Islet-Title: $title" \\
           --data-binary "@$body" 2>/dev/null <<'ISLET_CONFIG' &
         header = "Authorization: Bearer \(token)"
