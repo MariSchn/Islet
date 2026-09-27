@@ -20,14 +20,20 @@ public final class AgentSessionStore {
 
     private let now: () -> Date
     private let localHost: () -> String
+    private let lastPrompt: @Sendable (String) -> String?
     private var dismissedIDs: Set<String> = []
     @ObservationIgnored private var expiryTask: Task<Void, Never>?
     @ObservationIgnored private var unreachableTask: Task<Void, Never>?
     @ObservationIgnored private var decisions: [UUID: CheckedContinuation<PermissionDecision?, Never>] = [:]
 
-    public init(now: @escaping () -> Date = Date.init, localHost: @escaping () -> String = { AgentSessionStore.localHostName }) {
+    public convenience init(now: @escaping () -> Date = Date.init, localHost: @escaping () -> String = { AgentSessionStore.localHostName }) {
+        self.init(now: now, localHost: localHost, lastPrompt: TranscriptReader.lastPrompt(at:))
+    }
+
+    init(now: @escaping () -> Date = Date.init, localHost: @escaping () -> String = { AgentSessionStore.localHostName }, lastPrompt: @escaping @Sendable (String) -> String?) {
         self.now = now
         self.localHost = localHost
+        self.lastPrompt = lastPrompt
     }
 
     public static var localHostName: String {
@@ -96,6 +102,7 @@ public final class AgentSessionStore {
         session.isUnreachable = false
         if let terminal = event.terminal { session.terminal = terminal }
         if let tty = event.tty { session.tty = tty }
+        if let pid = event.pid { session.pid = pid }
         if let transcriptPath = event.transcriptPath { session.transcriptPath = transcriptPath }
         if let title = event.title { session.title = title }
         session.updatedAt = timestamp
@@ -111,6 +118,9 @@ public final class AgentSessionStore {
         case .sessionStart:
             session.state = .starting
             session.activity = nil
+            if session.task == nil, !session.isRemote, event.source == "fork" || event.source == "resume", let path = session.transcriptPath {
+                loadLastPrompt(from: path, for: session.id)
+            }
         case .userPromptSubmit:
             if !event.isTaskNotification {
                 session.task = event.prompt.map(Self.summarize)
@@ -126,7 +136,7 @@ public final class AgentSessionStore {
             }
             Self.record(event, in: &session, at: timestamp)
         case .permissionRequest:
-            let request = event.toolName.flatMap { PendingRequest(toolName: $0, toolInput: event.toolInput) }
+            let request = event.toolName.flatMap { PendingRequest(toolName: $0, toolInput: event.toolInput, agentType: event.agentType) }
             if let request, event.isInAutoMode, case .permission = request.kind {
                 session.activity = event.activityDescription
                 session.state = .working
@@ -157,6 +167,17 @@ public final class AgentSessionStore {
             return
         }
 
+        if session.agent == .claudeCode, let pid = session.pid {
+            let replacesAll = event.kind == .sessionStart
+            let replaced = sessions.filter { other in
+                other.id != session.id && other.agent == .claudeCode && other.pid == pid && other.host == session.host
+                    && (replacesAll || (other.task == nil && other.state == .starting))
+            }
+            for other in replaced {
+                withdrawPendingRequest(for: other.id)
+            }
+            sessions.removeAll { other in replaced.contains { $0.id == other.id } }
+        }
         if let index = sessions.firstIndex(where: { $0.id == session.id }) {
             sessions[index] = session
         } else {
@@ -249,6 +270,29 @@ public final class AgentSessionStore {
         onChange?()
     }
 
+    private func loadLastPrompt(from path: String, for sessionID: String) {
+        let lastPrompt = lastPrompt
+        Task {
+            let prompt = await Task.detached(priority: .utility) { lastPrompt(path) }.value
+            guard let prompt, let index = sessions.firstIndex(where: { $0.id == sessionID }), sessions[index].task == nil else { return }
+            sessions[index].task = Self.summarize(prompt)
+            onChange?()
+        }
+    }
+
+    func removeExitedSessions(isRunning: (Int32) -> Bool) {
+        let exited = sessions.filter { session in
+            guard !session.isRemote, let pid = session.pid else { return false }
+            return !isRunning(pid)
+        }
+        guard !exited.isEmpty else { return }
+        for session in exited {
+            withdrawPendingRequest(for: session.id)
+        }
+        sessions.removeAll { session in exited.contains { $0.id == session.id } }
+        onChange?()
+    }
+
     private static func input(_ requested: JSONValue?, isContainedIn actual: JSONValue?) -> Bool {
         guard case .object(let requestedFields)? = requested, case .object(let actualFields)? = actual else {
             return requested == actual
@@ -281,9 +325,14 @@ public final class AgentSessionStore {
             return event.isTaskNotification ? [] : requests
         case .postToolUse:
             let sameTool = requests.filter { $0.toolName == event.toolName }
-            let match = sameTool.first { $0.toolInput == event.toolInput } ?? sameTool.first { input($0.toolInput, isContainedIn: event.toolInput) }
+            let match = sameTool.first { $0.toolInput == event.toolInput }
+                ?? sameTool.first { input($0.toolInput, isContainedIn: event.toolInput) }
+                ?? sameTool.first { $0.isQuestion && $0.agentType == event.agentType }
             return match.map { [$0] } ?? []
-        case .preToolUse, .permissionRequest, .notification:
+        case .preToolUse:
+            guard event.agentType == nil, let toolName = event.toolName, toolName != "AskUserQuestion" else { return [] }
+            return requests.filter { $0.isQuestion && $0.agentType == nil }
+        case .permissionRequest, .notification:
             return []
         }
     }

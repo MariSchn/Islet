@@ -185,7 +185,7 @@ private struct SessionRow: View {
     private var detail: String {
         if session.isUnreachable { return "Unreachable" }
         switch session.state {
-        case .starting: return "Starting…"
+        case .starting: return "Ready"
         case .working: return session.activity ?? "Working…"
         case .needsAttention(let reason): return reason
         case .done: return "Finished"
@@ -400,15 +400,17 @@ private struct StateLabel: View {
 
     var body: some View {
         switch session.state {
-        case .working, .starting:
+        case .working where !session.isUnreachable:
             Text(session.turnStartedAt, style: .timer)
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(.secondary)
+        case .starting:
+            EmptyView()
         case .needsAttention:
             Text("Needs you")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.orange)
-        case .done, .interrupted:
+        case .working, .done, .interrupted:
             Text(Self.duration(session.updatedAt.timeIntervalSince(session.turnStartedAt)))
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(.tertiary)
@@ -545,7 +547,11 @@ private struct StateIndicator: View {
             Image(systemName: "questionmark.circle.fill")
                 .font(.system(size: 16))
                 .foregroundStyle(.secondary)
-        case .starting, .working:
+        case .starting:
+            Image(systemName: "circle.dashed")
+                .font(.system(size: 16))
+                .foregroundStyle(.tertiary)
+        case .working:
             ProgressView()
                 .controlSize(.small)
         case .needsAttention:

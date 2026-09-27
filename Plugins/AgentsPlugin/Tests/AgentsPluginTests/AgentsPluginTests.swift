@@ -57,6 +57,14 @@ struct HookEventTests {
         #expect(ActivityEntry.detail(for: "Bash", input: .object(["command": .string("ls")])) == nil)
     }
 
+    @Test func acceptsOnlyPlausibleProcessIDs() throws {
+        let payload = Data(#"{"session_id":"a","hook_event_name":"Stop"}"#.utf8)
+        #expect(try HookEvent.decode(payload, pid: "4242").pid == 4242)
+        #expect(try HookEvent.decode(payload, pid: "1").pid == nil)
+        #expect(try HookEvent.decode(payload, pid: "").pid == nil)
+        #expect(try HookEvent.decode(payload, pid: "12; rm").pid == nil)
+    }
+
     @Test func rejectsUnknownEvents() {
         #expect(throws: (any Error).self) {
             try HookEvent.decode(Data(#"{"session_id":"a","hook_event_name":"Nope"}"#.utf8))
@@ -190,6 +198,122 @@ struct AgentSessionStoreTests {
         clock = clock.addingTimeInterval(AgentSessionStore.unreachableTimeout + 1)
         store.markUnreachableSessions()
         #expect(store.sessions[0].isUnreachable == false)
+    }
+
+    @Test func sessionsWithoutAPromptShowNoRunningTurn() {
+        let store = AgentSessionStore()
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "s", cwd: "/p"))
+        #expect(store.sessions[0].state == .starting)
+        #expect(store.sessions[0].task == nil)
+        #expect(store.workingSessions.isEmpty)
+        #expect(store.pillStatus == nil)
+    }
+
+    @Test func aClaudeProcessOnlyKeepsItsLatestSession() {
+        let store = AgentSessionStore(localHost: { "mac" })
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "startup", cwd: "/p", host: "mac", pid: 42))
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "other-host", cwd: "/p", host: "devbox", pid: 42))
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "resumed", cwd: "/p", host: "mac", pid: 42))
+        #expect(store.sessions.map(\.id) == ["resumed", "other-host"])
+
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "resumed", prompt: "go", host: "mac", pid: 42))
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "resumed", toolName: "WebSearch", host: "mac", pid: 42))
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "after-backgrounding", cwd: "/p", host: "mac", pid: 42))
+        #expect(store.sessions.map(\.id) == ["after-backgrounding", "other-host"])
+
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "fork-spare", cwd: "/p", host: "mac", pid: 50))
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "fork", cwd: "/p", source: "fork", host: "mac", pid: 50))
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "late-spare", cwd: "/p", host: "mac", pid: 50))
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "fork", toolName: "Read", host: "mac", pid: 50))
+        #expect(store.sessions.map(\.id) == ["fork", "after-backgrounding", "other-host"])
+
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "busy", prompt: "x", host: "mac", pid: 60))
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "sibling", toolName: "Read", host: "mac", pid: 60))
+        #expect(store.sessions.contains { $0.id == "busy" })
+
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "codex-a", cwd: "/p", agent: .codex, host: "mac", pid: 70))
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "codex-b", cwd: "/p", agent: .codex, host: "mac", pid: 70))
+        #expect(store.sessions.contains { $0.id == "codex-a" } && store.sessions.contains { $0.id == "codex-b" })
+    }
+
+    @Test func forkedAndResumedSessionsShowTheirLastPrompt() async throws {
+        let store = AgentSessionStore(localHost: { "mac" }, lastPrompt: { $0 == "/t/bg.jsonl" ? "Research something on the web\nand ask me" : "unexpected read" })
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "bg", cwd: "/p", transcriptPath: "/t/bg.jsonl", source: "fork", host: "mac", pid: 7))
+        try await waitUntil { store.sessions.first { $0.id == "bg" }?.task != nil }
+        #expect(store.sessions.first { $0.id == "bg" }?.task == "Research something on the web")
+
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "fresh", cwd: "/p", transcriptPath: "/t/fresh.jsonl", source: "startup", host: "mac", pid: 8))
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "remote", cwd: "/p", transcriptPath: "/t/remote.jsonl", source: "resume", host: "devbox", pid: 9))
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "prompted", cwd: "/p", transcriptPath: "/t/prompted.jsonl", source: "resume", host: "mac", pid: 10))
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "prompted", prompt: "newer prompt", host: "mac", pid: 10))
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(store.sessions.first { $0.id == "fresh" }?.task == nil)
+        #expect(store.sessions.first { $0.id == "remote" }?.task == nil)
+        #expect(store.sessions.first { $0.id == "prompted" }?.task == "newer prompt")
+    }
+
+    @Test func readsTheLastRealPromptFromATranscript() throws {
+        let url = FileManager.default.temporaryDirectory.appending(path: "transcript-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try """
+        {"type":"user","message":{"role":"user","content":"first prompt"}}
+        {"type":"user","message":{"role":"user","content":[{"type":"text","text":"Research something on the web"}]}}
+        {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"ok"}]}}
+        {"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"42"}]}}
+        {"type":"user","isMeta":true,"message":{"role":"user","content":"Caveat"}}
+        {"type":"user","isSidechain":true,"message":{"role":"user","content":"subagent prompt"}}
+        {"type":"user","message":{"role":"user","content":"<command-name>/model</command-name>"}}
+        {"type":"user","message":{"role":"user","content":"[Request interrupted by user]"}}
+        {"type":"user","isCompactSummary":true,"isVisibleInTranscriptOnly":true,"message":{"role":"user","content":"This session is being continued from a previous conversation"}}
+        {"type":"ai-title","aiTitle":"Web research question"}
+
+        """.write(to: url, atomically: true, encoding: .utf8)
+        #expect(TranscriptReader.lastPrompt(at: url.path) == "Research something on the web")
+        #expect(TranscriptReader.lastPrompt(at: "/nonexistent/transcript.jsonl") == nil)
+    }
+
+    @Test func localSessionsDisappearOnceTheirAgentProcessExits() async throws {
+        let store = AgentSessionStore(localHost: { "mac" })
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "alive", prompt: "a", host: "mac", pid: 10))
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "remote", prompt: "b", host: "devbox", pid: 11))
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "unknown", prompt: "c", host: "mac"))
+        let reply = Task { await store.handle(HookEvent(kind: .permissionRequest, sessionID: "exited", toolName: "Bash", toolInput: .object(["command": .string("ls")]), host: "mac", pid: 12)) }
+        try await waitUntil { store.sessions.first?.pendingRequests.isEmpty == false }
+
+        store.removeExitedSessions { $0 == 10 }
+        #expect(await reply.value == .empty)
+        #expect(Set(store.sessions.map(\.id)) == ["alive", "remote", "unknown"])
+        #expect(ProcessMonitor.isRunning(getpid()))
+    }
+
+    @Test func questionsAreWithdrawnWhenTheMainAgentMovesOn() async throws {
+        let store = AgentSessionStore()
+        let question: JSONValue = .object(["questions": .array([.object(["question": .string("Color?"), "options": .array([.object(["label": .string("Red")])])])])])
+        let first = Task { await store.handle(HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "AskUserQuestion", toolInput: question)) }
+        try await waitUntil { store.sessions.first?.pendingRequests.count == 1 }
+
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "a", toolName: "Read", agentType: "Explore"))
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "a", toolName: "AskUserQuestion", toolInput: question))
+        #expect(store.sessions[0].pendingRequests.count == 1)
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "a", toolName: "Bash"))
+        #expect(await first.value == .empty)
+        #expect(store.sessions[0].pendingRequests.isEmpty)
+        #expect(store.sessions[0].state == .working)
+
+        let second = Task { await store.handle(HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "AskUserQuestion", toolInput: question)) }
+        try await waitUntil { store.sessions.first?.pendingRequests.count == 1 }
+        let reformatted: JSONValue = .object(["questions": .array([.object(["question": .string("Color?"), "multiSelect": .bool(false), "options": .array([.object(["label": .string("Red")])])])]), "answers": .object(["Color?": .string("Red")])])
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "a", toolName: "AskUserQuestion", toolInput: reformatted))
+        #expect(await second.value == .empty)
+        #expect(store.sessions[0].pendingRequests.isEmpty)
+    }
+
+    func waitUntil(_ condition: () -> Bool) async throws {
+        let deadline = ContinuousClock.now + .seconds(2)
+        while !condition() {
+            try #require(ContinuousClock.now < deadline)
+            await Task.yield()
+        }
     }
 
     @Test func thePillNamesSessionsByTitleWhenTheyHaveOne() {
@@ -820,6 +944,8 @@ struct HookInstallerTests {
         {"type":"custom-title","customTitle":"first","sessionId":"a"}
         {"type":"user","message":"hello"}
         {"type":"custom-title","customTitle":"islet main","sessionId":"a"}
+        {"type":"ai-title","aiTitle":"generated later","sessionId":"a"}
+        {"type":"ai-title","aiTitle":"quoted \\"ai\\" title","sessionId":"a"}
 
         """.write(to: transcript, atomically: true, encoding: .utf8)
         let capture = installer.directory.appending(path: "curl-call")
@@ -858,6 +984,39 @@ struct HookInstallerTests {
             #expect(call.contains { $0.hasPrefix("X-Islet-TTY: ") && !$0.contains("/dev/db") })
             #expect(call.last == payload)
         }
+    }
+
+    @Test func scriptFallsBackToTheGeneratedTitleAndReportsTheAgentProcess() throws {
+        let installer = try makeInstaller()
+        try installer.install()
+        let transcript = installer.directory.appending(path: "transcript.jsonl")
+        try """
+        {"type":"ai-title","aiTitle":"first guess","sessionId":"a"}
+        {"type":"user","message":"hello"}
+        {"type":"ai-title","aiTitle":"fix \\"hook\\" titles \\\\ now","sessionId":"a"}
+
+        """.write(to: transcript, atomically: true, encoding: .utf8)
+        let capture = installer.directory.appending(path: "curl-call")
+        let fakeCurl = installer.directory.appending(path: "curl")
+        try "#!/bin/sh\nprintf '%s\\n' \"$@\" > '\(capture.path)'\n".write(to: fakeCurl, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeCurl.path)
+        let payload = #"{"session_id":"a","hook_event_name":"Stop","transcript_path":"\#(transcript.path)"}"#
+
+        let agent = installer.directory.appending(path: "claude")
+        try FileManager.default.createSymbolicLink(at: agent, withDestinationURL: URL(filePath: "/bin/bash"))
+        let process = Process()
+        process.executableURL = agent
+        process.arguments = ["-c", "/usr/bin/time sh \"$0\" 2>/dev/null; true", installer.scriptURL.path]
+        process.environment = ["PATH": installer.directory.path + ":/usr/bin:/bin"]
+        let input = Pipe()
+        process.standardInput = input
+        try process.run()
+        input.fileHandleForWriting.write(Data(payload.utf8))
+        try input.fileHandleForWriting.close()
+        process.waitUntilExit()
+        let call = try String(contentsOf: capture, encoding: .utf8).components(separatedBy: "\n")
+        #expect(call.contains(#"X-Islet-Title: fix "hook" titles \ now"#))
+        #expect(call.contains("X-Islet-PID: \(process.processIdentifier)"))
     }
 
     @Test func killingTheScriptAbortsTheRequestAndCleansUp() throws {

@@ -33,6 +33,7 @@ public struct AgentSession: Identifiable, Sendable, Equatable {
     public var isUnreachable = false
     public var terminal: TerminalApp?
     public var tty: String?
+    public var pid: Int32?
     public var transcriptPath: String?
     public var cwd: String?
     public var title: String?
