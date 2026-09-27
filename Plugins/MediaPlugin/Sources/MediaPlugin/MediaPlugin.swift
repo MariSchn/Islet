@@ -4,9 +4,9 @@ import SwiftUI
 @MainActor
 public final class MediaPlugin: IsletPlugin {
     public static let manifest = PluginManifest(id: "islet.media", displayName: "Media", systemImage: "music.note")
-    static let contentWidth: CGFloat = 520
+    static let contentWidth: CGFloat = 420
     static let contentPadding: CGFloat = 12
-    static let nowPlayingHeight: CGFloat = 196
+    static let nowPlayingHeight: CGFloat = 136
     static let browserSpacing: CGFloat = 10
     static let browserHeaderHeight: CGFloat = 20
     static let playlistRowHeight: CGFloat = 28

@@ -445,7 +445,7 @@ struct MediaLayoutTests {
         let three = MediaPlugin.contentSize(isBrowsing: true, playlistCount: 3)
         let many = MediaPlugin.contentSize(isBrowsing: true, playlistCount: 50)
 
-        #expect(collapsed == CGSize(width: 520, height: 220))
+        #expect(collapsed == CGSize(width: 420, height: 160))
         #expect(empty == one)
         #expect(one.height == collapsed.height + MediaPlugin.browserSpacing + MediaPlugin.browserHeaderHeight + MediaPlugin.playlistRowHeight)
         #expect(three.height - one.height == 2 * MediaPlugin.playlistRowHeight)

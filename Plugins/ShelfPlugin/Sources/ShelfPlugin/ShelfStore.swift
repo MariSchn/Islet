@@ -4,7 +4,10 @@ import Observation
 @MainActor
 @Observable
 public final class ShelfStore {
-    public private(set) var items: [ShelfItem] = []
+    public private(set) var items: [ShelfItem] = [] {
+        didSet { onItemsChange?(items.count) }
+    }
+    @ObservationIgnored var onItemsChange: ((Int) -> Void)?
 
     private let fileURL: URL
 
