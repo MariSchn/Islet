@@ -179,7 +179,7 @@ private struct PillView: View {
     }
 
     private var artworkSide: CGFloat {
-        geometry.notchSize.height - 8
+        geometry.notchSize.height - 12
     }
 
     private var color: Color {

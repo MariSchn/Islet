@@ -4,6 +4,18 @@ struct MediaScreen: View {
     let controller: MediaController
 
     var body: some View {
+        VStack(spacing: MediaPlugin.browserSpacing) {
+            content
+                .frame(height: MediaPlugin.nowPlayingHeight)
+            if controller.isBrowsingPlaylists {
+                PlaylistBrowser(controller: controller)
+                    .frame(height: MediaPlugin.browserHeight(playlistCount: controller.playlists.count), alignment: .top)
+                    .transition(.opacity)
+            }
+        }
+    }
+
+    @ViewBuilder private var content: some View {
         if let nowPlaying = controller.nowPlaying {
             NowPlayingView(nowPlaying: nowPlaying, controller: controller)
         } else {
@@ -24,6 +36,10 @@ struct MediaScreen: View {
                 } else {
                     Text("Nothing playing")
                         .foregroundStyle(.secondary)
+                    if controller.capabilities.canBrowsePlaylists, !controller.isBrowsingPlaylists {
+                        Button("Browse Playlists") { Task { await controller.showPlaylists() } }
+                            .buttonStyle(.bordered)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -39,24 +55,52 @@ private struct NowPlayingView: View {
         controller.tint.map(Color.init) ?? .white
     }
 
+    private var capabilities: MediaCapabilities {
+        controller.capabilities
+    }
+
     var body: some View {
         GeometryReader { proxy in
             HStack(spacing: 14) {
                 ArtworkView(image: controller.artwork)
                     .frame(width: proxy.size.height, height: proxy.size.height)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(nowPlaying.title)
-                        .font(.system(size: 15, weight: .semibold))
-                        .lineLimit(1)
-                    Text(nowPlaying.artist)
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    HStack(alignment: .top, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(nowPlaying.title)
+                                .font(.system(size: 15, weight: .semibold))
+                                .lineLimit(1)
+                            Text(nowPlaying.artist)
+                                .font(.system(size: 13))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        Spacer(minLength: 0)
+                        if capabilities.canBrowsePlaylists {
+                            ToggleButton(systemImage: "music.note.list", isOn: controller.isBrowsingPlaylists, tint: tint, help: "Playlists") {
+                                await controller.togglePlaylists()
+                            }
+                        }
+                    }
                     Spacer(minLength: 4)
-                    HStack(spacing: 32) {
-                        TransportButton(systemImage: "backward.fill", size: 17) { await controller.previousTrack() }
-                        TransportButton(systemImage: nowPlaying.isPlaying ? "pause.fill" : "play.fill", size: 24) { await controller.playPause() }
-                        TransportButton(systemImage: "forward.fill", size: 17) { await controller.nextTrack() }
+                    HStack(spacing: 0) {
+                        if capabilities.canShuffle {
+                            ToggleButton(systemImage: "shuffle", isOn: nowPlaying.isShuffling, tint: tint, help: "Shuffle") {
+                                await controller.toggleShuffle()
+                            }
+                        }
+                        Spacer(minLength: 0)
+                        HStack(spacing: 32) {
+                            TransportButton(systemImage: "backward.fill", size: 17) { await controller.previousTrack() }
+                            TransportButton(systemImage: nowPlaying.isPlaying ? "pause.fill" : "play.fill", size: 24) { await controller.playPause() }
+                            TransportButton(systemImage: "forward.fill", size: 17) { await controller.nextTrack() }
+                        }
+                        Spacer(minLength: 0)
+                        if capabilities.canRepeat {
+                            ToggleButton(systemImage: nowPlaying.repeatMode == .one ? "repeat.1" : "repeat", isOn: nowPlaying.repeatMode != .off, tint: tint, help: "Repeat") {
+                                await controller.cycleRepeatMode()
+                            }
+                        }
                     }
                     .frame(maxWidth: .infinity)
                     Spacer(minLength: 4)
@@ -180,5 +224,117 @@ private struct TransportButton: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct ToggleButton: View {
+    let systemImage: String
+    let isOn: Bool
+    let tint: Color
+    let help: String
+    let action: () async -> Void
+
+    var body: some View {
+        Button {
+            Task { await action() }
+        } label: {
+            Image(systemName: systemImage)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(isOn ? tint : .white.opacity(0.45))
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
+        .accessibilityLabel(help)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+}
+
+private struct PlaylistBrowser: View {
+    let controller: MediaController
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Playlists")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button {
+                    controller.hidePlaylists()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: MediaPlugin.browserHeaderHeight, height: MediaPlugin.browserHeaderHeight)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close Playlists")
+            }
+            .frame(height: MediaPlugin.browserHeaderHeight)
+            if controller.isLoadingPlaylists {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: MediaPlugin.playlistRowHeight)
+            } else if let error = controller.playlistError {
+                message(error, color: .orange)
+            } else if controller.playlists.isEmpty {
+                message("No playlists", color: .secondary)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(controller.playlists) { playlist in
+                            PlaylistRow(playlist: playlist) { await controller.play(playlist) }
+                        }
+                    }
+                }
+                .scrollIndicators(.never)
+            }
+        }
+    }
+
+    private func message(_ text: String, color: some ShapeStyle) -> some View {
+        Text(text)
+            .font(.callout)
+            .foregroundStyle(color)
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: MediaPlugin.playlistRowHeight)
+    }
+}
+
+private struct PlaylistRow: View {
+    let playlist: MediaPlaylist
+    let action: () async -> Void
+    @State private var isHovering = false
+
+    var body: some View {
+        Button {
+            Task { await action() }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "music.note.list")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 18)
+                Text(playlist.name)
+                    .font(.system(size: 13))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Image(systemName: "play.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .opacity(isHovering ? 1 : 0)
+            }
+            .padding(.horizontal, 8)
+            .frame(height: MediaPlugin.playlistRowHeight)
+            .background(.white.opacity(isHovering ? 0.08 : 0), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
     }
 }
