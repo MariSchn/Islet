@@ -157,7 +157,7 @@ struct NotchControllerTests {
         #expect(controller.pill?.text == "working")
     }
 
-    @Test func fallbackPillStaysUntilItEndsOrTheNotchIsOpenedAgain() async throws {
+    @Test func fallbackPillStaysAndExpandingOpensItsPlugin() async throws {
         let harness = Harness()
         let registry = harness.makeRegistry()
         let controller = makeController()
@@ -174,14 +174,47 @@ struct NotchControllerTests {
         #expect(controller.pill?.text == "song")
 
         controller.expand()
+        #expect(registry.selectedID == "test.stub")
         await Task.yield()
         controller.collapse()
         await Task.yield()
-        #expect(controller.pill?.text == "working")
+        #expect(controller.pill?.text == "song")
 
-        stub.context.pillStatus = PillStatus(text: "next song", priority: .ambient)
+        stub.context.pillStatus = nil
         await Task.yield()
         #expect(controller.pill?.text == "working")
+        controller.expand()
+        #expect(registry.selectedID == "test.second")
+    }
+
+    @Test func expandingWithoutAPillKeepsTheSelection() async throws {
+        let harness = Harness()
+        let registry = harness.makeRegistry()
+        let controller = makeController()
+        controller.attach(registry)
+        try await harness.registerStub(in: registry)
+        try await harness.registerSecond(in: registry)
+        registry.select("test.second")
+        await Task.yield()
+
+        controller.expand()
+        #expect(registry.selectedID == "test.second")
+    }
+
+    @Test func attentionPillOpensItsPluginOnExpand() async throws {
+        let harness = Harness()
+        let registry = harness.makeRegistry()
+        let controller = makeController()
+        controller.attach(registry)
+        let stub = try await harness.registerStub(in: registry)
+        let second = try await harness.registerSecond(in: registry)
+        stub.context.pillStatus = PillStatus(text: "song", priority: .ambient)
+        second.context.pillStatus = PillStatus(text: "approve?", priority: .attention)
+        await Task.yield()
+        #expect(controller.pill?.text == "approve?")
+
+        controller.expand()
+        #expect(registry.selectedID == "test.second")
     }
 
     @Test func showsNewAnnouncementsBrieflyWhileCollapsed() async throws {
@@ -365,10 +398,18 @@ struct NotchControllerTests {
         let registry = harness.makeRegistry()
         let controller = makeController()
         controller.attach(registry)
-        try await harness.registerStub(in: registry)
+        let stub = try await harness.registerStub(in: registry)
         try await harness.registerSecond(in: registry) { $0.acceptsFileDrops = true }
         #expect(registry.selectedID == "test.stub")
 
+        controller.isDragTargeted = true
+        #expect(registry.selectedID == "test.second")
+
+        controller.isDragTargeted = false
+        controller.collapse()
+        registry.select("test.stub")
+        stub.context.pillStatus = PillStatus(text: "song", priority: .ambient)
+        await Task.yield()
         controller.isDragTargeted = true
         #expect(registry.selectedID == "test.second")
 

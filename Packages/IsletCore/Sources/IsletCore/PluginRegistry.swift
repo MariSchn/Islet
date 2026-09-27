@@ -84,12 +84,14 @@ public final class PluginRegistry {
     }
 
     public func activePill(_ selection: PillSelection, keeping heldID: String? = nil) -> PillStatus? {
-        let candidates = pillCandidates
-        if let urgent = candidates.max(by: { $0.pill.priority < $1.pill.priority }), urgent.pill.priority >= .attention {
-            return urgent.pill
+        pillOwner(selection, keeping: heldID).flatMap { entry(for: $0)?.context.pillStatus }
+    }
+
+    public func pillOwner(_ selection: PillSelection, keeping heldID: String? = nil) -> String? {
+        if let urgent = pillCandidates.max(by: { $0.pill.priority < $1.pill.priority }), urgent.pill.priority >= .attention {
+            return urgent.id
         }
-        let holder = pillHolder(selection, keeping: heldID)
-        return candidates.first { $0.id == holder }?.pill
+        return pillHolder(selection, keeping: heldID)
     }
 
     public func pillHolder(_ selection: PillSelection, keeping heldID: String? = nil) -> String? {

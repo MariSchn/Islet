@@ -72,6 +72,9 @@ public final class NotchController {
                 hoverHoldSize = nil
             } else {
                 dismissAnnouncement()
+                if !oldValue, let pillOwnerID {
+                    registry?.select(pillOwnerID)
+                }
             }
         }
     }
@@ -83,10 +86,10 @@ public final class NotchController {
     }
     public var isDragTargeted = false {
         didSet {
+            scheduleHoverUpdate()
             if isDragTargeted, !oldValue {
                 switchToDropTargetIfWanted()
             }
-            scheduleHoverUpdate()
         }
     }
 
@@ -128,6 +131,7 @@ public final class NotchController {
     @ObservationIgnored private var seenAnnouncementIDs: Set<UUID> = []
     @ObservationIgnored private var registry: PluginRegistry?
     @ObservationIgnored private var pillHolderID: String?
+    @ObservationIgnored private var pillOwnerID: String?
     @ObservationIgnored private var trackedExpandedShapeSize: CGSize = .zero
     @ObservationIgnored private let pointerLocation: @MainActor () -> CGPoint
 
@@ -162,6 +166,7 @@ public final class NotchController {
             let heldID = isExpanded ? nil : pillHolderID
             pill = registry.activePill(settings.pillSelection, keeping: heldID)
             pillHolderID = registry.pillHolder(settings.pillSelection, keeping: heldID)
+            pillOwnerID = isExpanded ? nil : registry.pillOwner(settings.pillSelection, keeping: heldID)
             trackedExpandedShapeSize = expandedShapeSize
             announcements = registry.announcements
         } onChange: {

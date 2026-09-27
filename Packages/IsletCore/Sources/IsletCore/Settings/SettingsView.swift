@@ -259,7 +259,7 @@ struct NotchSettingsView: View {
             } header: {
                 Text("Collapsed Pill")
             } footer: {
-                Text("\(settings.pillSelection.summary) Anything that needs you, like a permission request, is always shown.")
+                Text("\(settings.pillSelection.summary) Anything that needs you, like a permission request, is always shown. Opening the notch shows the plugin from the pill.")
             }
             Section {
                 Picker("Show on", selection: $settings.displayPlacement) {
