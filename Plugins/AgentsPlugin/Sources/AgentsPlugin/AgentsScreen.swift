@@ -619,7 +619,7 @@ struct AgentsSettings: View {
             } header: {
                 Text("Alerts")
             } footer: {
-                Text("Alerts fire when a session asks for permission, has a question or waits for input, and when it finishes its turn. The notch also shows when a turn is interrupted. Notifications need permission from macOS the first time they are enabled.")
+                Text("Alerts fire when a session asks for permission, has a question or waits for input, and when it finishes its turn. Notifications need permission from macOS the first time they are enabled.")
             }
             Section {
                 Toggle("Show Claude usage limits", isOn: $controller.showsUsage)

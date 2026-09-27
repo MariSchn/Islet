@@ -34,6 +34,16 @@ public struct NotchView<Content: View>: View {
         controller.isExpanded || controller.announcement != nil ? 0 : pillOffset
     }
 
+    private var pillRowSize: CGSize {
+        guard let pill = controller.pill else { return controller.geometry.notchSize }
+        return controller.geometry.pillShapeSize(for: pill, contentSize: controller.contentSize)
+    }
+
+    private var hitShape: CollapsedHitShape {
+        let restricted = !controller.isExpanded && controller.announcement != nil
+        return CollapsedHitShape(shape: shape, topRegion: restricted ? pillRowSize : nil, xOffset: pillOffset - shapeOffset)
+    }
+
     private var shape: NotchShape {
         NotchShape(bottomRadius: controller.isExpanded ? 24 : controller.announcement == nil ? 12 : 18)
     }
@@ -68,30 +78,29 @@ public struct NotchView<Content: View>: View {
                     content()
                         .frame(width: shapeSize.width, height: shapeSize.height, alignment: .top)
                         .transition(.opacity)
-                } else if let announcement = controller.announcement {
+                } else if controller.pill != nil || controller.announcement != nil {
                     VStack(spacing: 0) {
                         if let pill = controller.pill {
                             PillView(pill: pill, geometry: controller.geometry, contentSize: controller.contentSize)
-                                .frame(width: controller.geometry.pillShapeSize(for: pill, contentSize: controller.contentSize).width)
-                                .offset(x: pillOffset)
-                                .frame(width: shapeSize.width, height: controller.geometry.notchSize.height)
+                                .frame(width: pillRowSize.width)
+                                .offset(x: pillOffset - shapeOffset)
+                                .frame(width: shapeSize.width, height: pillRowSize.height)
                         } else {
-                            Color.clear.frame(height: controller.geometry.notchSize.height)
+                            Color.clear.frame(height: pillRowSize.height)
                         }
-                        AnnouncementView(announcement: announcement)
-                            .frame(width: shapeSize.width, height: NotchGeometry.announcementHeight, alignment: .top)
+                        if let announcement = controller.announcement {
+                            AnnouncementView(announcement: announcement)
+                                .frame(width: shapeSize.width, height: NotchGeometry.announcementHeight, alignment: .top)
+                                .transition(.opacity)
+                        }
                     }
                     .frame(width: shapeSize.width, height: shapeSize.height, alignment: .top)
                     .transition(.opacity)
-                } else if let pill = controller.pill {
-                    PillView(pill: pill, geometry: controller.geometry, contentSize: controller.contentSize)
-                        .frame(width: shapeSize.width, height: shapeSize.height)
-                        .transition(.opacity)
                 }
             }
             .frame(width: shapeSize.width, height: shapeSize.height)
             .clipShape(shape)
-            .contentShape(shape)
+            .contentShape(hitShape)
             .onHover { isInside in
                 if isInside {
                     controller.pointerEnteredShape()
@@ -102,7 +111,7 @@ public struct NotchView<Content: View>: View {
                 shape.fill(.black)
                     .opacity(controller.hoverHoldSize == nil ? 0 : hitTestableInvisibleOpacity)
             )
-            .contentShape(shape)
+            .contentShape(hitShape)
             .offset(x: shapeOffset)
             .onHover { controller.isHovering = $0 }
             .animation(controller.animation.animation(expanding: controller.isExpanded), value: controller.isExpanded)
@@ -116,6 +125,17 @@ public struct NotchView<Content: View>: View {
 }
 
 private let hitTestableInvisibleOpacity = 0.02
+
+private struct CollapsedHitShape: Shape {
+    let shape: NotchShape
+    let topRegion: CGSize?
+    let xOffset: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        guard let topRegion else { return shape.path(in: rect) }
+        return Path(CGRect(x: rect.midX - topRegion.width / 2 + xOffset, y: rect.minY, width: topRegion.width, height: topRegion.height))
+    }
+}
 
 private struct PillView: View {
     let pill: PillStatus
@@ -154,6 +174,8 @@ private struct PillView: View {
         }
         .font(Font(NotchGeometry.pillFont))
         .foregroundStyle(color)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(pill.text)
     }
 
     private var artworkSide: CGFloat {

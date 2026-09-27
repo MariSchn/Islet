@@ -1,36 +1,35 @@
 import IsletCore
 
 struct StatusAnnouncer {
-    private var states: [String: AgentSession.State] = [:]
+    private enum Category {
+        case attention, finished, other
+    }
+
+    private var categories: [String: Category] = [:]
 
     mutating func announcement(for sessions: [AgentSession]) -> PillAnnouncement? {
-        let changed = sessions.filter { states[$0.id] != $0.state }
-        states = Dictionary(sessions.map { ($0.id, $0.state) }, uniquingKeysWith: { first, _ in first })
-        return changed
-            .compactMap { session in Self.announcement(for: session).map { (rank: Self.rank(of: session.state), announcement: $0) } }
-            .max { $0.rank < $1.rank }?
-            .announcement
+        let changed = sessions.filter { categories[$0.id] != Self.category(of: $0.state) }
+        categories = Dictionary(sessions.map { ($0.id, Self.category(of: $0.state)) }, uniquingKeysWith: { first, _ in first })
+        let announcements = changed.compactMap(Self.announcement(for:))
+        return announcements.first { $0.priority == .attention } ?? announcements.first
     }
 
     static func announcement(for session: AgentSession) -> PillAnnouncement? {
         switch session.state {
         case .needsAttention(let reason):
-            PillAnnouncement(text: "\(session.displayName) · \(reason)", systemImage: "exclamationmark.circle.fill", tint: SessionColors.attentionTint)
+            PillAnnouncement(text: "\(session.displayName) · \(reason)", systemImage: "exclamationmark.circle.fill", tint: SessionColors.attentionTint, priority: .attention)
         case .done:
             PillAnnouncement(text: "\(session.displayName) finished", systemImage: "checkmark.circle.fill", tint: SessionColors.finishedTint)
-        case .interrupted:
-            PillAnnouncement(text: "\(session.displayName) interrupted", systemImage: "stop.circle.fill", tint: SessionColors.idleTint)
-        case .starting, .working:
+        case .starting, .working, .interrupted:
             nil
         }
     }
 
-    private static func rank(of state: AgentSession.State) -> Int {
+    private static func category(of state: AgentSession.State) -> Category {
         switch state {
-        case .needsAttention: 3
-        case .done: 2
-        case .interrupted: 1
-        case .starting, .working: 0
+        case .needsAttention: .attention
+        case .done: .finished
+        case .starting, .working, .interrupted: .other
         }
     }
 }

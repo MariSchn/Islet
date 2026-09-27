@@ -145,6 +145,7 @@ public final class PluginRegistry {
         }
         userDefaults.set(Array(disabledIDs).sorted(), forKey: disabledKey)
 
+        entry.context.clearAnnouncement()
         await transition(entry, toActive: enabled)
         if !isEnabled(id) {
             entry.context.pillStatus = nil

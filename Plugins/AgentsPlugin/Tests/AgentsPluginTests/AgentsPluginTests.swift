@@ -352,8 +352,31 @@ struct AgentSessionStoreTests {
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "again"))
         _ = announcer.announcement(for: store.sessions)
         store.markInterrupted("a")
+        #expect(announcer.announcement(for: store.sessions) == nil)
+
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "third"))
+        store.apply(HookEvent(kind: .stop, sessionID: "a"))
         store.apply(HookEvent(kind: .notification, sessionID: "b", message: "Pick one", notificationType: "elicitation_dialog"))
-        #expect(announcer.announcement(for: store.sessions)?.text == "beta · Pick one")
+        let announcement = announcer.announcement(for: store.sessions)
+        #expect(announcement?.text == "beta · Pick one")
+        #expect(announcement?.priority == .attention)
+
+        store.apply(HookEvent(kind: .notification, sessionID: "b", notificationType: "idle_prompt"))
+        #expect(store.sessions.first { $0.id == "b" }?.state == .needsAttention("Waiting for your input"))
+        #expect(announcer.announcement(for: store.sessions) == nil)
+    }
+
+    @Test func theRingShowsOldFinishedSessionsAsIdle() {
+        var clock = Date(timeIntervalSince1970: 1_000_000)
+        let store = AgentSessionStore(now: { clock })
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "old", prompt: "a"))
+        store.apply(HookEvent(kind: .stop, sessionID: "old"))
+        clock = clock.addingTimeInterval(AgentSessionStore.finishedPillDuration + 1)
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "new", prompt: "b"))
+        #expect(store.statusRing.segments == [
+            .init(value: 1, tint: SessionColors.workingTint),
+            .init(value: 1, tint: SessionColors.idleTint),
+        ])
     }
 
     @Test func thePillNamesSessionsByTitleWhenTheyHaveOne() {

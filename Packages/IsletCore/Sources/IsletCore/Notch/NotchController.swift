@@ -156,10 +156,11 @@ public final class NotchController {
 
     private func observeRegistry() {
         guard let registry else { return }
+        var announcements: [PillAnnouncement] = []
         withObservationTracking {
             pill = registry.activePill
             trackedExpandedShapeSize = expandedShapeSize
-            receive(registry.announcements)
+            announcements = registry.announcements
         } onChange: {
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -167,12 +168,14 @@ public final class NotchController {
                 self.observeRegistry()
             }
         }
+        receive(announcements)
     }
 
     private func receive(_ announcements: [PillAnnouncement]) {
         let fresh = announcements.filter { !seenAnnouncementIDs.contains($0.id) }
         seenAnnouncementIDs = Set(announcements.map(\.id))
-        guard let latest = fresh.last, !isExpanded else { return }
+        guard let latest = fresh.max(by: { $0.priority < $1.priority }), !isExpanded else { return }
+        if let current = announcement, current.priority > latest.priority { return }
         announcement = latest
         announcementTask?.cancel()
         let duration = announcementDuration

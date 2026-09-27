@@ -167,6 +167,43 @@ struct NotchControllerTests {
         #expect(controller.announcement == nil)
     }
 
+    @Test func lessImportantAnnouncementsWaitForMoreImportantOnes() async throws {
+        let harness = Harness()
+        let registry = harness.makeRegistry()
+        let controller = makeController()
+        controller.announcementDuration = .milliseconds(150)
+        controller.attach(registry)
+        let stub = try await harness.registerStub(in: registry)
+
+        let urgent = PillAnnouncement(text: "Needs you", priority: .attention)
+        stub.context.announce(urgent)
+        await Task.yield()
+        stub.context.announce(PillAnnouncement(text: "Finished"))
+        await Task.yield()
+        #expect(controller.announcement == urgent)
+
+        try await Task.sleep(for: settle)
+        let later = PillAnnouncement(text: "Finished later")
+        stub.context.announce(later)
+        await Task.yield()
+        #expect(controller.announcement == later)
+    }
+
+    @Test func announcementsFromDisabledPluginsAreDropped() async throws {
+        let harness = Harness()
+        let registry = harness.makeRegistry()
+        let controller = makeController()
+        controller.attach(registry)
+        let stub = try await harness.registerStub(in: registry)
+
+        await registry.setEnabled(false, for: "test.stub")
+        stub.context.announce(PillAnnouncement(text: "While disabled"))
+        await registry.setEnabled(true, for: "test.stub")
+        await Task.yield()
+        #expect(controller.announcement == nil)
+        #expect(registry.announcements.isEmpty)
+    }
+
     @Test func mirrorsSelectedPluginContentSize() async throws {
         let harness = Harness()
         let registry = harness.makeRegistry()

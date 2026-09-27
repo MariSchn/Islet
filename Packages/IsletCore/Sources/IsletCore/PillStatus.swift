@@ -53,11 +53,13 @@ public struct PillAnnouncement: Sendable, Equatable, Identifiable {
     public var text: String
     public var systemImage: String?
     public var tint: Color.Resolved?
+    public var priority: PillStatus.Priority
 
-    public init(id: UUID = UUID(), text: String, systemImage: String? = nil, tint: Color.Resolved? = nil) {
+    public init(id: UUID = UUID(), text: String, systemImage: String? = nil, tint: Color.Resolved? = nil, priority: PillStatus.Priority = .info) {
         self.id = id
         self.text = text
         self.systemImage = systemImage
         self.tint = tint
+        self.priority = priority
     }
 }

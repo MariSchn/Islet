@@ -366,13 +366,14 @@ public final class AgentSessionStore {
     }
 
     public var statusRing: PillStatus.Ring {
+        let finishedCutoff = now().addingTimeInterval(-Self.finishedPillDuration)
         var counts = (attention: 0, working: 0, finished: 0, idle: 0)
         for session in sessions {
             switch session.state {
             case .needsAttention: counts.attention += 1
             case .working where !session.isUnreachable: counts.working += 1
-            case .done: counts.finished += 1
-            case .starting, .working, .interrupted: counts.idle += 1
+            case .done where session.updatedAt > finishedCutoff: counts.finished += 1
+            case .starting, .working, .done, .interrupted: counts.idle += 1
             }
         }
         return PillStatus.Ring(segments: [
