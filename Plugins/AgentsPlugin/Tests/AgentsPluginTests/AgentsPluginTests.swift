@@ -203,13 +203,13 @@ struct AgentSessionStoreTests {
     @Test func sessionsWithoutAPromptShowNoRunningTurn() {
         let store = AgentSessionStore()
         store.apply(HookEvent(kind: .sessionStart, sessionID: "s", cwd: "/p"))
-        #expect(store.sessions[0].hasNoPrompt)
+        #expect(store.sessions[0].state == .starting)
+        #expect(store.sessions[0].task == nil)
         #expect(store.workingSessions.isEmpty)
-        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s", prompt: "go"))
-        #expect(!store.sessions[0].hasNoPrompt)
+        #expect(store.pillStatus == nil)
     }
 
-    @Test func emptySessionsAreReplacedByTheNextSessionOfTheSameProcess() {
+    @Test func aProcessOnlyKeepsItsLatestSession() {
         let store = AgentSessionStore(localHost: { "mac" })
         store.apply(HookEvent(kind: .sessionStart, sessionID: "startup", cwd: "/p", host: "mac", pid: 42))
         store.apply(HookEvent(kind: .sessionStart, sessionID: "other-host", cwd: "/p", host: "devbox", pid: 42))
@@ -217,11 +217,44 @@ struct AgentSessionStoreTests {
         #expect(store.sessions.map(\.id) == ["resumed", "other-host"])
 
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "resumed", prompt: "go", host: "mac", pid: 42))
-        store.apply(HookEvent(kind: .sessionStart, sessionID: "cleared", cwd: "/p", host: "mac", pid: 42))
-        #expect(store.sessions.map(\.id) == ["cleared", "resumed", "other-host"])
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "resumed", toolName: "WebSearch", host: "mac", pid: 42))
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "after-backgrounding", cwd: "/p", host: "mac", pid: 42))
+        #expect(store.sessions.map(\.id) == ["after-backgrounding", "other-host"])
 
         store.apply(HookEvent(kind: .sessionStart, sessionID: "second-terminal", cwd: "/p", host: "mac", pid: 43))
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "unknown-process", prompt: "x", host: "mac"))
         #expect(store.sessions.count == 4)
+    }
+
+    @Test func forkedAndResumedSessionsShowTheirLastPrompt() {
+        var reads: [String] = []
+        let store = AgentSessionStore(localHost: { "mac" }, lastPrompt: { reads.append($0); return "Research something on the web\nand ask me" })
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "bg", cwd: "/p", transcriptPath: "/t/bg.jsonl", source: "fork", host: "mac", pid: 7))
+        #expect(store.sessions[0].task == "Research something on the web")
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "fresh", cwd: "/p", transcriptPath: "/t/fresh.jsonl", source: "startup", host: "mac", pid: 8))
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "remote", cwd: "/p", transcriptPath: "/t/remote.jsonl", source: "resume", host: "devbox", pid: 9))
+        #expect(store.sessions.first { $0.id == "fresh" }?.task == nil)
+        #expect(store.sessions.first { $0.id == "remote" }?.task == nil)
+        #expect(reads == ["/t/bg.jsonl"])
+    }
+
+    @Test func readsTheLastRealPromptFromATranscript() throws {
+        let url = FileManager.default.temporaryDirectory.appending(path: "transcript-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try """
+        {"type":"user","message":{"role":"user","content":"first prompt"}}
+        {"type":"user","message":{"role":"user","content":[{"type":"text","text":"Research something on the web"}]}}
+        {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"ok"}]}}
+        {"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"42"}]}}
+        {"type":"user","isMeta":true,"message":{"role":"user","content":"Caveat"}}
+        {"type":"user","isSidechain":true,"message":{"role":"user","content":"subagent prompt"}}
+        {"type":"user","message":{"role":"user","content":"<command-name>/model</command-name>"}}
+        {"type":"user","message":{"role":"user","content":"[Request interrupted by user]"}}
+        {"type":"ai-title","aiTitle":"Web research question"}
+
+        """.write(to: url, atomically: true, encoding: .utf8)
+        #expect(TranscriptReader.lastPrompt(at: url.path) == "Research something on the web")
+        #expect(TranscriptReader.lastPrompt(at: "/nonexistent/transcript.jsonl") == nil)
     }
 
     @Test func localSessionsDisappearOnceTheirAgentProcessExits() async throws {

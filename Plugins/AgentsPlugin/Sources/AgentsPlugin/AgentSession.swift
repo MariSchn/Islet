@@ -49,10 +49,6 @@ public struct AgentSession: Identifiable, Sendable, Equatable {
 
     public var pendingRequest: PendingRequest? { pendingRequests.first }
 
-    public var hasNoPrompt: Bool {
-        task == nil && state == .starting
-    }
-
     public var displayName: String {
         title ?? projectName
     }

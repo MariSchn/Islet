@@ -20,14 +20,20 @@ public final class AgentSessionStore {
 
     private let now: () -> Date
     private let localHost: () -> String
+    private let lastPrompt: (String) -> String?
     private var dismissedIDs: Set<String> = []
     @ObservationIgnored private var expiryTask: Task<Void, Never>?
     @ObservationIgnored private var unreachableTask: Task<Void, Never>?
     @ObservationIgnored private var decisions: [UUID: CheckedContinuation<PermissionDecision?, Never>] = [:]
 
-    public init(now: @escaping () -> Date = Date.init, localHost: @escaping () -> String = { AgentSessionStore.localHostName }) {
+    public convenience init(now: @escaping () -> Date = Date.init, localHost: @escaping () -> String = { AgentSessionStore.localHostName }) {
+        self.init(now: now, localHost: localHost, lastPrompt: TranscriptReader.lastPrompt(at:))
+    }
+
+    init(now: @escaping () -> Date = Date.init, localHost: @escaping () -> String = { AgentSessionStore.localHostName }, lastPrompt: @escaping (String) -> String?) {
         self.now = now
         self.localHost = localHost
+        self.lastPrompt = lastPrompt
     }
 
     public static var localHostName: String {
@@ -112,6 +118,9 @@ public final class AgentSessionStore {
         case .sessionStart:
             session.state = .starting
             session.activity = nil
+            if session.task == nil, !session.isRemote, event.source == "fork" || event.source == "resume", let path = session.transcriptPath {
+                session.task = lastPrompt(path).map(Self.summarize)
+            }
         case .userPromptSubmit:
             if !event.isTaskNotification {
                 session.task = event.prompt.map(Self.summarize)
@@ -159,7 +168,11 @@ public final class AgentSessionStore {
         }
 
         if let pid = session.pid {
-            sessions.removeAll { $0.id != session.id && $0.pid == pid && $0.host == session.host && $0.hasNoPrompt }
+            let replaced = sessions.filter { $0.id != session.id && $0.pid == pid && $0.host == session.host }
+            for other in replaced {
+                withdrawPendingRequest(for: other.id)
+            }
+            sessions.removeAll { other in replaced.contains { $0.id == other.id } }
         }
         if let index = sessions.firstIndex(where: { $0.id == session.id }) {
             sessions[index] = session
