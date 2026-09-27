@@ -6,6 +6,7 @@ public struct AlertSettings: Sendable, Equatable {
     public var attentionNotification = false
     public var finishedSound = true
     public var finishedNotification = false
+    public var announcesInNotch = true
 
     public init() {}
 

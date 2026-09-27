@@ -316,6 +316,46 @@ struct AgentSessionStoreTests {
         }
     }
 
+    @Test func thePillRingCountsSessionsByState() {
+        let store = AgentSessionStore()
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "working", prompt: "a"))
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "done", prompt: "b"))
+        store.apply(HookEvent(kind: .stop, sessionID: "done"))
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "second-done", prompt: "c"))
+        store.apply(HookEvent(kind: .stop, sessionID: "second-done"))
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "ready"))
+        #expect(store.pillStatus?.ring?.segments == [
+            .init(value: 1, tint: SessionColors.workingTint),
+            .init(value: 2, tint: SessionColors.finishedTint),
+            .init(value: 1, tint: SessionColors.idleTint),
+        ])
+
+        store.apply(HookEvent(kind: .notification, sessionID: "working", message: "Pick one", notificationType: "elicitation_dialog"))
+        #expect(store.pillStatus?.priority == .attention)
+        #expect(store.pillStatus?.ring?.segments.first == .init(value: 1, tint: SessionColors.attentionTint))
+    }
+
+    @Test func statusChangesAreAnnouncedOncePreferringAttention() {
+        var announcer = StatusAnnouncer()
+        let store = AgentSessionStore()
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", cwd: "/p/alpha", prompt: "go"))
+        #expect(announcer.announcement(for: store.sessions) == nil)
+
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "a", toolName: "Read"))
+        #expect(announcer.announcement(for: store.sessions) == nil)
+
+        store.apply(HookEvent(kind: .stop, sessionID: "a"))
+        #expect(announcer.announcement(for: store.sessions)?.text == "alpha finished")
+        #expect(announcer.announcement(for: store.sessions) == nil)
+
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "b", cwd: "/p/beta", prompt: "go"))
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "again"))
+        _ = announcer.announcement(for: store.sessions)
+        store.markInterrupted("a")
+        store.apply(HookEvent(kind: .notification, sessionID: "b", message: "Pick one", notificationType: "elicitation_dialog"))
+        #expect(announcer.announcement(for: store.sessions)?.text == "beta · Pick one")
+    }
+
     @Test func thePillNamesSessionsByTitleWhenTheyHaveOne() {
         let store = AgentSessionStore()
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", cwd: "/p/proj", prompt: "hi"))

@@ -54,7 +54,7 @@ public final class AgentsPlugin: IsletPlugin {
 
     private static let tokenKey = "hookToken"
     private static let usageKey = "showUsage"
-    private static let alertKeys = (attentionSound: "attentionSound", attentionNotification: "attentionNotification", finishedSound: "finishedSound", finishedNotification: "finishedNotification")
+    private static let alertKeys = (attentionSound: "attentionSound", attentionNotification: "attentionNotification", finishedSound: "finishedSound", finishedNotification: "finishedNotification", announcesInNotch: "announcesInNotch")
 
     private let context: PluginContext
     private let controller: AgentsController
@@ -73,6 +73,7 @@ public final class AgentsPlugin: IsletPlugin {
         alerts.attentionNotification = context.settings.value(forKey: Self.alertKeys.attentionNotification) ?? alerts.attentionNotification
         alerts.finishedSound = context.settings.value(forKey: Self.alertKeys.finishedSound) ?? alerts.finishedSound
         alerts.finishedNotification = context.settings.value(forKey: Self.alertKeys.finishedNotification) ?? alerts.finishedNotification
+        alerts.announcesInNotch = context.settings.value(forKey: Self.alertKeys.announcesInNotch) ?? alerts.announcesInNotch
         controller = AgentsController(
             token: token,
             claudeDirectory: URL.homeDirectory.appending(path: ".claude", directoryHint: .isDirectory),
@@ -86,9 +87,14 @@ public final class AgentsPlugin: IsletPlugin {
             context.settings.set(alerts.attentionNotification, forKey: Self.alertKeys.attentionNotification)
             context.settings.set(alerts.finishedSound, forKey: Self.alertKeys.finishedSound)
             context.settings.set(alerts.finishedNotification, forKey: Self.alertKeys.finishedNotification)
+            context.settings.set(alerts.announcesInNotch, forKey: Self.alertKeys.announcesInNotch)
         }
+        var announcer = StatusAnnouncer()
         controller.store.onChange = { [context, controller] in
             context.pillStatus = controller.store.pillStatus
+            if let announcement = announcer.announcement(for: controller.store.sessions), controller.alerts.announcesInNotch {
+                context.announce(announcement)
+            }
             context.contentSize = Self.contentSize(for: controller.store.sessions, expanded: controller.expandedSessionIDs, showsUsage: controller.showsUsageBar)
             controller.interruptions.track(controller.store.sessions)
         }

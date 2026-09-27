@@ -132,6 +132,41 @@ struct NotchControllerTests {
         #expect(controller.pill == nil)
     }
 
+    @Test func showsNewAnnouncementsBrieflyWhileCollapsed() async throws {
+        let harness = Harness()
+        let registry = harness.makeRegistry()
+        let controller = makeController()
+        controller.announcementDuration = .milliseconds(150)
+        controller.attach(registry)
+        let stub = try await harness.registerStub(in: registry)
+
+        let first = PillAnnouncement(text: "Build finished")
+        stub.context.announce(first)
+        await Task.yield()
+        #expect(controller.announcement == first)
+
+        try await Task.sleep(for: settle)
+        #expect(controller.announcement == nil)
+
+        stub.context.pillStatus = PillStatus(text: "unrelated change")
+        await Task.yield()
+        #expect(controller.announcement == nil)
+
+        let second = PillAnnouncement(text: "Needs you")
+        stub.context.announce(second)
+        await Task.yield()
+        #expect(controller.announcement == second)
+        controller.expand()
+        #expect(controller.announcement == nil)
+
+        stub.context.announce(PillAnnouncement(text: "While open"))
+        await Task.yield()
+        #expect(controller.announcement == nil)
+        controller.collapse()
+        await Task.yield()
+        #expect(controller.announcement == nil)
+    }
+
     @Test func mirrorsSelectedPluginContentSize() async throws {
         let harness = Harness()
         let registry = harness.makeRegistry()

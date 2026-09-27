@@ -169,6 +169,35 @@ struct NotchGeometryTests {
         #expect(geometry.notchSize.height == NotchGeometry.fallbackMenuBarHeight)
     }
 
+    @Test func ringPillUsesSymmetricSlots() {
+        let geometry = NotchGeometry.placeholder
+        let ring = PillStatus.Ring(segments: [.init(value: 1, tint: .init(red: 1, green: 0, blue: 0))])
+        let pill = PillStatus(text: String(repeating: "wide ", count: 20), ring: ring)
+
+        #expect(geometry.pillTrailingWidth(for: pill) == NotchGeometry.pillLeadingWidth)
+        #expect(geometry.pillShapeOffset(for: pill) == 0)
+    }
+
+    @Test func announcementsGrowBelowThePillToFitTheirText() {
+        let geometry = NotchGeometry(screenFrame: screen, notchSize: CGSize(width: 180, height: 32), hasHardwareNotch: true)
+        let pill = PillStatus(text: "x", ring: PillStatus.Ring(segments: []))
+        let pillWidth = geometry.pillShapeSize(for: pill).width
+
+        let short = geometry.announcementShapeSize(for: PillAnnouncement(text: "Done"), pill: pill)
+        #expect(short == CGSize(width: pillWidth, height: 32 + NotchGeometry.announcementHeight))
+
+        let long = geometry.announcementShapeSize(for: PillAnnouncement(text: String(repeating: "much longer text ", count: 3), systemImage: "checkmark"), pill: pill)
+        #expect(long.width > pillWidth)
+        #expect(long.width <= geometry.largestExpandedShapeSize.width)
+
+        let huge = geometry.announcementShapeSize(for: PillAnnouncement(text: String(repeating: "x", count: 2000)), pill: nil)
+        #expect(huge.width == max(geometry.notchSize.width, geometry.largestExpandedShapeSize.width))
+
+        let asymmetric = PillStatus(text: "a fairly long status text")
+        let offset = geometry.pillShapeOffset(for: asymmetric)
+        #expect(geometry.announcementShapeSize(for: PillAnnouncement(text: "a"), pill: asymmetric).width == geometry.pillShapeSize(for: asymmetric).width + 2 * offset)
+    }
+
     @Test func artworkPillUsesSymmetricSlots() {
         let geometry = NotchGeometry.placeholder
         let artwork = CGContext(data: nil, width: 4, height: 4, bitsPerComponent: 8, bytesPerRow: 16, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!.makeImage()!

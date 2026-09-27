@@ -449,7 +449,11 @@ private struct SessionTitle: View {
 }
 
 enum SessionColors {
-    static let working = Color(red: 0.4, green: 0.65, blue: 1)
+    static let workingTint = Color.Resolved(red: 0.4, green: 0.65, blue: 1)
+    static let attentionTint = Color.Resolved(red: 1, green: 0.62, blue: 0.04)
+    static let finishedTint = Color.Resolved(red: 0.2, green: 0.78, blue: 0.35)
+    static let idleTint = Color.Resolved(red: 0.56, green: 0.56, blue: 0.58)
+    static let working = Color(workingTint)
 }
 
 private struct AgentBadge: View {
@@ -609,10 +613,13 @@ struct AgentsSettings: View {
                         Toggle("Show a notification", isOn: $controller.alerts.finishedNotification)
                     }
                 }
+                LabeledContent("Status changes") {
+                    Toggle("Show briefly in the notch", isOn: $controller.alerts.announcesInNotch)
+                }
             } header: {
                 Text("Alerts")
             } footer: {
-                Text("Alerts fire when a session asks for permission, has a question or waits for input, and when it finishes its turn. Notifications need permission from macOS the first time they are enabled.")
+                Text("Alerts fire when a session asks for permission, has a question or waits for input, and when it finishes its turn. The notch also shows when a turn is interrupted. Notifications need permission from macOS the first time they are enabled.")
             }
             Section {
                 Toggle("Show Claude usage limits", isOn: $controller.showsUsage)
