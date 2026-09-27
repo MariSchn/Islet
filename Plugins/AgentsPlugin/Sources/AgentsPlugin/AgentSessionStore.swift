@@ -22,6 +22,7 @@ public final class AgentSessionStore {
     private let localHost: () -> String
     private let lastPrompt: @Sendable (String) -> String?
     private var dismissedIDs: Set<String> = []
+    @ObservationIgnored private var hiddenSessions: [String: AgentSession] = [:]
     @ObservationIgnored private var expiryTask: Task<Void, Never>?
     @ObservationIgnored private var unreachableTask: Task<Void, Never>?
     @ObservationIgnored private var decisions: [UUID: CheckedContinuation<PermissionDecision?, Never>] = [:]
@@ -65,6 +66,7 @@ public final class AgentSessionStore {
         let timestamp = now()
         if event.kind == .sessionEnd {
             dismissedIDs.remove(event.sessionID)
+            hiddenSessions[event.sessionID] = nil
             withdrawPendingRequest(for: event.sessionID)
             sessions.removeAll { $0.id == event.sessionID }
             onChange?()
@@ -79,7 +81,7 @@ public final class AgentSessionStore {
         }
 
         let previous = sessions.first { $0.id == event.sessionID }
-        var session = previous ?? AgentSession(
+        var session = previous ?? hiddenSessions[event.sessionID] ?? AgentSession(
             id: event.sessionID,
             agent: event.agent,
             host: event.host,
@@ -167,21 +169,30 @@ public final class AgentSessionStore {
             return
         }
 
+        var replacedVisibleSession = false
         if session.agent == .claudeCode, let pid = session.pid {
             let replacesAll = event.kind == .sessionStart
-            let replaced = sessions.filter { other in
+            let isReplaced = { (other: AgentSession) in
                 other.id != session.id && other.agent == .claudeCode && other.pid == pid && other.host == session.host
                     && (replacesAll || (other.task == nil && other.state == .starting))
             }
+            let replaced = sessions.filter(isReplaced)
             for other in replaced {
                 withdrawPendingRequest(for: other.id)
             }
             sessions.removeAll { other in replaced.contains { $0.id == other.id } }
+            hiddenSessions = hiddenSessions.filter { !isReplaced($0.value) }
+            replacedVisibleSession = !replaced.isEmpty
         }
         if let index = sessions.firstIndex(where: { $0.id == session.id }) {
             sessions[index] = session
-        } else {
+        } else if Self.isActivity(event) {
+            hiddenSessions[session.id] = nil
             sessions.insert(session, at: 0)
+        } else {
+            hiddenSessions[session.id] = session
+            if replacedVisibleSession { onChange?() }
+            return
         }
         onChange?()
         if let alert = Self.alert(from: previous?.state, to: session.state, in: session) {
@@ -189,6 +200,15 @@ public final class AgentSessionStore {
         }
         scheduleFinishedExpiry()
         scheduleUnreachableCheck()
+    }
+
+    private static func isActivity(_ event: HookEvent) -> Bool {
+        switch event.kind {
+        case .userPromptSubmit: !event.isTaskNotification
+        case .preToolUse, .postToolUse, .permissionRequest, .stop: true
+        case .notification: event.notificationType == "permission_prompt" || event.notificationType == "elicitation_dialog"
+        case .sessionStart, .sessionEnd: false
+        }
     }
 
     private static func alert(from previous: AgentSession.State?, to current: AgentSession.State, in session: AgentSession) -> Alert? {
@@ -274,13 +294,22 @@ public final class AgentSessionStore {
         let lastPrompt = lastPrompt
         Task {
             let prompt = await Task.detached(priority: .utility) { lastPrompt(path) }.value
-            guard let prompt, let index = sessions.firstIndex(where: { $0.id == sessionID }), sessions[index].task == nil else { return }
-            sessions[index].task = Self.summarize(prompt)
-            onChange?()
+            guard let prompt else { return }
+            if let index = sessions.firstIndex(where: { $0.id == sessionID }) {
+                guard sessions[index].task == nil else { return }
+                sessions[index].task = Self.summarize(prompt)
+                onChange?()
+            } else if hiddenSessions[sessionID]?.task == nil {
+                hiddenSessions[sessionID]?.task = Self.summarize(prompt)
+            }
         }
     }
 
     func removeExitedSessions(isRunning: (Int32) -> Bool) {
+        hiddenSessions = hiddenSessions.filter { _, session in
+            guard !session.isRemote, let pid = session.pid else { return true }
+            return isRunning(pid)
+        }
         let exited = sessions.filter { session in
             guard !session.isRemote, let pid = session.pid else { return false }
             return !isRunning(pid)

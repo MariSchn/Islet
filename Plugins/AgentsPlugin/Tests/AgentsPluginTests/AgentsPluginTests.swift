@@ -104,12 +104,12 @@ struct AgentSessionStoreTests {
     @Test func walksThroughSessionLifecycle() {
         let store = AgentSessionStore()
         store.apply(HookEvent(kind: .sessionStart, sessionID: "s1", cwd: "/tmp/proj"))
-        #expect(store.sessions.count == 1)
-        #expect(store.sessions[0].state == .starting)
-        #expect(store.sessions[0].projectName == "proj")
+        #expect(store.sessions.isEmpty)
         #expect(store.pillStatus == nil)
 
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s1", prompt: "fix the auth bug\nmore details"))
+        #expect(store.sessions.count == 1)
+        #expect(store.sessions[0].projectName == "proj")
         #expect(store.sessions[0].task == "fix the auth bug")
         #expect(store.sessions[0].state == .working)
         #expect(store.pillStatus?.text == "proj")
@@ -200,32 +200,62 @@ struct AgentSessionStoreTests {
         #expect(store.sessions[0].isUnreachable == false)
     }
 
-    @Test func sessionsWithoutAPromptShowNoRunningTurn() {
-        let store = AgentSessionStore()
-        store.apply(HookEvent(kind: .sessionStart, sessionID: "s", cwd: "/p"))
-        #expect(store.sessions[0].state == .starting)
-        #expect(store.sessions[0].task == nil)
-        #expect(store.workingSessions.isEmpty)
+    @Test func sessionsStayHiddenUntilTheirFirstActivity() {
+        var clock = Date(timeIntervalSince1970: 1_000_000)
+        let started = clock
+        let store = AgentSessionStore(now: { clock })
+        var changes = 0
+        store.onChange = { changes += 1 }
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "s", cwd: "/p/proj", title: "Spare"))
+        store.apply(HookEvent(kind: .notification, sessionID: "s", notificationType: "idle_prompt"))
+        store.apply(HookEvent(kind: .notification, sessionID: "s", message: "Authentication successful", notificationType: "auth_success"))
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s", prompt: "<task-notification>done</task-notification>"))
+        #expect(store.sessions.isEmpty)
         #expect(store.pillStatus == nil)
+        #expect(changes == 0)
+
+        clock = clock.addingTimeInterval(30)
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "s", toolName: "Read"))
+        #expect(store.sessions.map(\.id) == ["s"])
+        #expect(store.sessions[0].startedAt == started)
+        #expect(store.sessions[0].displayName == "Spare")
+        #expect(store.sessions[0].projectName == "proj")
+        #expect(changes == 1)
+
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "ended", cwd: "/p"))
+        store.apply(HookEvent(kind: .sessionEnd, sessionID: "ended"))
+        store.apply(HookEvent(kind: .notification, sessionID: "ended", message: "Pick one", notificationType: "elicitation_dialog"))
+        #expect(store.sessions.first { $0.id == "ended" }?.cwd == nil)
+    }
+
+    @Test func hiddenSessionsOfExitedProcessesAreForgotten() {
+        let store = AgentSessionStore(localHost: { "mac" })
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "spare", cwd: "/p/spare", host: "mac", pid: 90))
+        store.removeExitedSessions { _ in false }
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "spare", prompt: "late", host: "mac"))
+        #expect(store.sessions.first?.cwd == nil)
     }
 
     @Test func aClaudeProcessOnlyKeepsItsLatestSession() {
         let store = AgentSessionStore(localHost: { "mac" })
-        store.apply(HookEvent(kind: .sessionStart, sessionID: "startup", cwd: "/p", host: "mac", pid: 42))
-        store.apply(HookEvent(kind: .sessionStart, sessionID: "other-host", cwd: "/p", host: "devbox", pid: 42))
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "startup", cwd: "/p", prompt: "a", host: "mac", pid: 42))
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "other-host", cwd: "/p", prompt: "b", host: "devbox", pid: 42))
         store.apply(HookEvent(kind: .sessionStart, sessionID: "resumed", cwd: "/p", host: "mac", pid: 42))
-        #expect(store.sessions.map(\.id) == ["resumed", "other-host"])
+        #expect(store.sessions.map(\.id) == ["other-host"])
 
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "resumed", prompt: "go", host: "mac", pid: 42))
         store.apply(HookEvent(kind: .preToolUse, sessionID: "resumed", toolName: "WebSearch", host: "mac", pid: 42))
+        #expect(store.sessions.map(\.id) == ["resumed", "other-host"])
         store.apply(HookEvent(kind: .sessionStart, sessionID: "after-backgrounding", cwd: "/p", host: "mac", pid: 42))
-        #expect(store.sessions.map(\.id) == ["after-backgrounding", "other-host"])
+        #expect(store.sessions.map(\.id) == ["other-host"])
 
         store.apply(HookEvent(kind: .sessionStart, sessionID: "fork-spare", cwd: "/p", host: "mac", pid: 50))
         store.apply(HookEvent(kind: .sessionStart, sessionID: "fork", cwd: "/p", source: "fork", host: "mac", pid: 50))
         store.apply(HookEvent(kind: .sessionStart, sessionID: "late-spare", cwd: "/p", host: "mac", pid: 50))
         store.apply(HookEvent(kind: .preToolUse, sessionID: "fork", toolName: "Read", host: "mac", pid: 50))
-        #expect(store.sessions.map(\.id) == ["fork", "after-backgrounding", "other-host"])
+        #expect(store.sessions.map(\.id) == ["fork", "other-host"])
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "late-spare", prompt: "revived", host: "mac", pid: 51))
+        #expect(store.sessions.first { $0.id == "late-spare" }?.cwd == nil)
 
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "busy", prompt: "x", host: "mac", pid: 60))
         store.apply(HookEvent(kind: .preToolUse, sessionID: "sibling", toolName: "Read", host: "mac", pid: 60))
@@ -233,20 +263,30 @@ struct AgentSessionStoreTests {
 
         store.apply(HookEvent(kind: .sessionStart, sessionID: "codex-a", cwd: "/p", agent: .codex, host: "mac", pid: 70))
         store.apply(HookEvent(kind: .sessionStart, sessionID: "codex-b", cwd: "/p", agent: .codex, host: "mac", pid: 70))
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "codex-a", prompt: "x", agent: .codex, host: "mac", pid: 70))
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "codex-b", prompt: "y", agent: .codex, host: "mac", pid: 70))
         #expect(store.sessions.contains { $0.id == "codex-a" } && store.sessions.contains { $0.id == "codex-b" })
     }
 
     @Test func forkedAndResumedSessionsShowTheirLastPrompt() async throws {
         let store = AgentSessionStore(localHost: { "mac" }, lastPrompt: { $0 == "/t/bg.jsonl" ? "Research something on the web\nand ask me" : "unexpected read" })
         store.apply(HookEvent(kind: .sessionStart, sessionID: "bg", cwd: "/p", transcriptPath: "/t/bg.jsonl", source: "fork", host: "mac", pid: 7))
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "bg", toolName: "Read", host: "mac", pid: 7))
         try await waitUntil { store.sessions.first { $0.id == "bg" }?.task != nil }
         #expect(store.sessions.first { $0.id == "bg" }?.task == "Research something on the web")
+
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "hidden-bg", cwd: "/p", transcriptPath: "/t/bg.jsonl", source: "fork", host: "mac", pid: 11))
+        try await Task.sleep(for: .milliseconds(100))
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "hidden-bg", toolName: "Read", host: "mac", pid: 11))
+        #expect(store.sessions.first { $0.id == "hidden-bg" }?.task == "Research something on the web")
 
         store.apply(HookEvent(kind: .sessionStart, sessionID: "fresh", cwd: "/p", transcriptPath: "/t/fresh.jsonl", source: "startup", host: "mac", pid: 8))
         store.apply(HookEvent(kind: .sessionStart, sessionID: "remote", cwd: "/p", transcriptPath: "/t/remote.jsonl", source: "resume", host: "devbox", pid: 9))
         store.apply(HookEvent(kind: .sessionStart, sessionID: "prompted", cwd: "/p", transcriptPath: "/t/prompted.jsonl", source: "resume", host: "mac", pid: 10))
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "prompted", prompt: "newer prompt", host: "mac", pid: 10))
         try await Task.sleep(for: .milliseconds(100))
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "fresh", toolName: "Read", host: "mac", pid: 8))
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "remote", toolName: "Read", host: "devbox", pid: 9))
         #expect(store.sessions.first { $0.id == "fresh" }?.task == nil)
         #expect(store.sessions.first { $0.id == "remote" }?.task == nil)
         #expect(store.sessions.first { $0.id == "prompted" }?.task == "newer prompt")
@@ -323,7 +363,8 @@ struct AgentSessionStoreTests {
         store.apply(HookEvent(kind: .stop, sessionID: "done"))
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "second-done", prompt: "c"))
         store.apply(HookEvent(kind: .stop, sessionID: "second-done"))
-        store.apply(HookEvent(kind: .sessionStart, sessionID: "ready"))
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "interrupted", prompt: "d"))
+        store.markInterrupted("interrupted")
         #expect(store.pillStatus?.ring?.segments == [
             .init(value: 1, tint: SessionColors.workingTint),
             .init(value: 2, tint: SessionColors.finishedTint),
@@ -739,6 +780,7 @@ struct AgentSessionStoreTests {
         var changes = 0
         store.onChange = { changes += 1 }
         store.apply(HookEvent(kind: .sessionStart, sessionID: "a"))
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "go"))
         store.apply(HookEvent(kind: .sessionEnd, sessionID: "a"))
         store.dismiss("nope")
         #expect(changes == 2)
