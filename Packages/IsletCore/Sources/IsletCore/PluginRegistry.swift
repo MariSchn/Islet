@@ -83,21 +83,32 @@ public final class PluginRegistry {
         entries.filter { !disabledIDs.contains($0.id) }
     }
 
-    public func activePill(_ selection: PillSelection) -> PillStatus? {
-        let candidates = enabledEntries.compactMap { entry in
-            entry.context.pillStatus.map { (id: entry.id, pill: $0, activity: entry.context.pillActivity) }
+    public func activePill(_ selection: PillSelection, keeping heldID: String? = nil) -> PillStatus? {
+        let candidates = pillCandidates
+        if let urgent = candidates.max(by: { $0.pill.priority < $1.pill.priority }), urgent.pill.priority >= .attention {
+            return urgent.pill
         }
-        guard let mostImportant = candidates.max(by: { $0.pill.priority < $1.pill.priority }) else { return nil }
-        if mostImportant.pill.priority >= .attention {
-            return mostImportant.pill
-        }
+        let holder = pillHolder(selection, keeping: heldID)
+        return candidates.first { $0.id == holder }?.pill
+    }
+
+    public func pillHolder(_ selection: PillSelection, keeping heldID: String? = nil) -> String? {
+        let candidates = pillCandidates
+        let mostImportant = candidates.max { $0.pill.priority < $1.pill.priority }
         switch selection {
         case .mostImportant:
-            return mostImportant.pill
+            return mostImportant?.id
         case .lastViewed:
-            return candidates.first { $0.id == selectedID }?.pill ?? mostImportant.pill
+            let held = candidates.first { $0.id == heldID } ?? candidates.first { $0.id == selectedID }
+            return (held ?? mostImportant)?.id
         case .latestActivity:
-            return candidates.max { $0.activity < $1.activity }?.pill
+            return candidates.max { $0.activity < $1.activity }?.id
+        }
+    }
+
+    private var pillCandidates: [(id: String, pill: PillStatus, activity: Int)] {
+        enabledEntries.compactMap { entry in
+            entry.context.pillStatus.map { (id: entry.id, pill: $0, activity: entry.context.pillActivity) }
         }
     }
 

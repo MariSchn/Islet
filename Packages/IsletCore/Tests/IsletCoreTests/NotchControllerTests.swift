@@ -144,12 +144,42 @@ struct NotchControllerTests {
         await Task.yield()
         #expect(controller.pill?.text == "song")
 
+        controller.expand()
         registry.select("test.second")
+        await Task.yield()
+        controller.collapse()
         await Task.yield()
         #expect(controller.pill?.text == "working")
 
         registry.select("test.stub")
         controller.settings.pillSelection = .mostImportant
+        await Task.yield()
+        #expect(controller.pill?.text == "working")
+    }
+
+    @Test func fallbackPillStaysUntilItEndsOrTheNotchIsOpenedAgain() async throws {
+        let harness = Harness()
+        let registry = harness.makeRegistry()
+        let controller = makeController()
+        controller.attach(registry)
+        let stub = try await harness.registerStub(in: registry)
+        let second = try await harness.registerSecond(in: registry)
+        registry.select("test.second")
+        stub.context.pillStatus = PillStatus(text: "song", priority: .ambient)
+        await Task.yield()
+        #expect(controller.pill?.text == "song")
+
+        second.context.pillStatus = PillStatus(text: "working", priority: .info)
+        await Task.yield()
+        #expect(controller.pill?.text == "song")
+
+        controller.expand()
+        await Task.yield()
+        controller.collapse()
+        await Task.yield()
+        #expect(controller.pill?.text == "working")
+
+        stub.context.pillStatus = PillStatus(text: "next song", priority: .ambient)
         await Task.yield()
         #expect(controller.pill?.text == "working")
     }

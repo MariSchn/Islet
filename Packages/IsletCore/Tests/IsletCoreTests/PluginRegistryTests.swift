@@ -288,6 +288,27 @@ struct PluginRegistryTests {
         #expect(registry.activePill(.lastViewed)?.text == "song")
     }
 
+    @Test func lastViewedKeepsTheHeldPluginWhileItHasAPill() async throws {
+        let registry = harness.makeRegistry()
+        let stub = try await harness.registerStub(in: registry)
+        let second = try await harness.registerSecond(in: registry)
+        registry.select("test.second")
+
+        stub.context.pillStatus = PillStatus(text: "song", priority: .ambient)
+        #expect(registry.pillHolder(.lastViewed) == "test.stub")
+
+        second.context.pillStatus = PillStatus(text: "working", priority: .info)
+        #expect(registry.activePill(.lastViewed, keeping: "test.stub")?.text == "song")
+        #expect(registry.pillHolder(.lastViewed, keeping: "test.stub") == "test.stub")
+
+        second.context.pillStatus = PillStatus(text: "approve?", priority: .attention)
+        #expect(registry.activePill(.lastViewed, keeping: "test.stub")?.text == "approve?")
+        #expect(registry.pillHolder(.lastViewed, keeping: "test.stub") == "test.stub")
+
+        stub.context.pillStatus = nil
+        #expect(registry.pillHolder(.lastViewed, keeping: "test.stub") == "test.second")
+    }
+
     @Test func latestActivityFollowsNewestPillOrRaisedPriority() async throws {
         let registry = harness.makeRegistry()
         let stub = try await harness.registerStub(in: registry)

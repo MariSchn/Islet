@@ -127,6 +127,7 @@ public final class NotchController {
     @ObservationIgnored private var announcementTask: Task<Void, Never>?
     @ObservationIgnored private var seenAnnouncementIDs: Set<UUID> = []
     @ObservationIgnored private var registry: PluginRegistry?
+    @ObservationIgnored private var pillHolderID: String?
     @ObservationIgnored private var trackedExpandedShapeSize: CGSize = .zero
     @ObservationIgnored private let pointerLocation: @MainActor () -> CGPoint
 
@@ -158,7 +159,9 @@ public final class NotchController {
         guard let registry else { return }
         var announcements: [PillAnnouncement] = []
         withObservationTracking {
-            pill = registry.activePill(settings.pillSelection)
+            let heldID = isExpanded ? nil : pillHolderID
+            pill = registry.activePill(settings.pillSelection, keeping: heldID)
+            pillHolderID = registry.pillHolder(settings.pillSelection, keeping: heldID)
             trackedExpandedShapeSize = expandedShapeSize
             announcements = registry.announcements
         } onChange: {
