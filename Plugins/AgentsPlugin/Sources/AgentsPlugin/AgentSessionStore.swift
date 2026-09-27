@@ -352,17 +352,36 @@ public final class AgentSessionStore {
         let attention = attentionSessions
         if let first = attention.first {
             let text = attention.count == 1 ? "\(first.displayName) needs you" : "\(attention.count) agents need you"
-            return PillStatus(text: text, systemImage: "terminal.fill", priority: .attention)
+            return PillStatus(text: text, systemImage: "terminal.fill", priority: .attention, ring: statusRing)
         }
         let working = workingSessions
         if !working.isEmpty {
             let text = working.count == 1 ? (working[0].activity ?? working[0].displayName) : "\(working.count) agents working"
-            return PillStatus(text: text, systemImage: "terminal", priority: .info)
+            return PillStatus(text: text, systemImage: "terminal", priority: .info, ring: statusRing)
         }
         let finished = recentlyFinishedSessions
         guard let first = finished.first else { return nil }
         let text = finished.count == 1 ? "\(first.displayName) finished" : "\(finished.count) agents finished"
-        return PillStatus(text: text, systemImage: "checkmark.circle.fill", priority: .info)
+        return PillStatus(text: text, systemImage: "checkmark.circle.fill", priority: .info, ring: statusRing)
+    }
+
+    public var statusRing: PillStatus.Ring {
+        let finishedCutoff = now().addingTimeInterval(-Self.finishedPillDuration)
+        var counts = (attention: 0, working: 0, finished: 0, idle: 0)
+        for session in sessions {
+            switch session.state {
+            case .needsAttention: counts.attention += 1
+            case .working where !session.isUnreachable: counts.working += 1
+            case .done where session.updatedAt > finishedCutoff: counts.finished += 1
+            case .starting, .working, .done, .interrupted: counts.idle += 1
+            }
+        }
+        return PillStatus.Ring(segments: [
+            .init(value: Double(counts.attention), tint: SessionColors.attentionTint),
+            .init(value: Double(counts.working), tint: SessionColors.workingTint),
+            .init(value: Double(counts.finished), tint: SessionColors.finishedTint),
+            .init(value: Double(counts.idle), tint: SessionColors.idleTint),
+        ].filter { $0.value > 0 })
     }
 
     private var recentlyFinishedSessions: [AgentSession] {

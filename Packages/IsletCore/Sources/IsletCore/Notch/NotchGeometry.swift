@@ -14,6 +14,11 @@ public struct NotchGeometry: Sendable, Equatable {
     public static let pillTrailingMaxWidth: CGFloat = 220
     public static let pillTextPadding: CGFloat = 10
     public static var pillFont: NSFont { .systemFont(ofSize: 12, weight: .medium) }
+    public static let pillRingDiameter: CGFloat = 18
+    public static let announcementHeight: CGFloat = 26
+    public static let announcementPadding: CGFloat = 14
+    public static let announcementIconWidth: CGFloat = 20
+    public static var announcementFont: NSFont { .systemFont(ofSize: 12, weight: .semibold) }
 
     public let screenFrame: CGRect
     public let notchSize: CGSize
@@ -118,7 +123,7 @@ public struct NotchGeometry: Sendable, Equatable {
     }
 
     public func pillTrailingWidth(for pill: PillStatus, contentSize: CGSize? = nil) -> CGFloat {
-        pill.artwork == nil ? pillTrailingWidth(for: pill.text, contentSize: contentSize) : Self.pillLeadingWidth
+        pill.artwork == nil && pill.ring == nil ? pillTrailingWidth(for: pill.text, contentSize: contentSize) : Self.pillLeadingWidth
     }
 
     public func pillShapeSize(for pill: PillStatus, contentSize: CGSize? = nil) -> CGSize {
@@ -130,6 +135,17 @@ public struct NotchGeometry: Sendable, Equatable {
 
     public func pillShapeOffset(for pill: PillStatus, contentSize: CGSize? = nil) -> CGFloat {
         (pillTrailingWidth(for: pill, contentSize: contentSize) - Self.pillLeadingWidth) / 2
+    }
+
+    public func announcementShapeSize(for announcement: PillAnnouncement, pill: PillStatus?, contentSize: CGSize? = nil) -> CGSize {
+        let pillWidth = pill.map { pillShapeSize(for: $0, contentSize: contentSize).width + 2 * abs(pillShapeOffset(for: $0, contentSize: contentSize)) } ?? notchSize.width
+        let textWidth = ceil((announcement.text as NSString).size(withAttributes: [.font: Self.announcementFont]).width)
+        let iconWidth = announcement.systemImage == nil ? 0 : Self.announcementIconWidth
+        let wanted = max(pillWidth, textWidth + iconWidth + 2 * Self.announcementPadding)
+        return CGSize(
+            width: min(wanted, max(pillWidth, largestExpandedShapeSize.width)),
+            height: notchSize.height + Self.announcementHeight
+        )
     }
 
     public func expandedShapeFrame(for contentSize: CGSize? = nil) -> CGRect {

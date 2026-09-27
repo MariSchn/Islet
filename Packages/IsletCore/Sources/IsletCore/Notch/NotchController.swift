@@ -70,9 +70,13 @@ public final class NotchController {
         didSet {
             if !isExpanded {
                 hoverHoldSize = nil
+            } else {
+                dismissAnnouncement()
             }
         }
     }
+    public private(set) var announcement: PillAnnouncement?
+    public var announcementDuration: Duration = .seconds(4)
     public private(set) var hoverHoldSize: CGSize?
     public var isHovering = false {
         didSet { scheduleHoverUpdate() }
@@ -120,6 +124,8 @@ public final class NotchController {
     }
 
     @ObservationIgnored private var hoverTask: Task<Void, Never>?
+    @ObservationIgnored private var announcementTask: Task<Void, Never>?
+    @ObservationIgnored private var seenAnnouncementIDs: Set<UUID> = []
     @ObservationIgnored private var registry: PluginRegistry?
     @ObservationIgnored private var trackedExpandedShapeSize: CGSize = .zero
     @ObservationIgnored private let pointerLocation: @MainActor () -> CGPoint
@@ -150,9 +156,11 @@ public final class NotchController {
 
     private func observeRegistry() {
         guard let registry else { return }
+        var announcements: [PillAnnouncement] = []
         withObservationTracking {
             pill = registry.activePill
             trackedExpandedShapeSize = expandedShapeSize
+            announcements = registry.announcements
         } onChange: {
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -160,6 +168,27 @@ public final class NotchController {
                 self.observeRegistry()
             }
         }
+        receive(announcements)
+    }
+
+    private func receive(_ announcements: [PillAnnouncement]) {
+        let fresh = announcements.filter { !seenAnnouncementIDs.contains($0.id) }
+        seenAnnouncementIDs = Set(announcements.map(\.id))
+        guard let latest = fresh.max(by: { $0.priority < $1.priority }), !isExpanded else { return }
+        if let current = announcement, current.priority > latest.priority { return }
+        announcement = latest
+        announcementTask?.cancel()
+        let duration = announcementDuration
+        announcementTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: duration)
+            guard !Task.isCancelled else { return }
+            self?.announcement = nil
+        }
+    }
+
+    public func dismissAnnouncement() {
+        announcementTask?.cancel()
+        announcement = nil
     }
 
     private func holdHoverRegionIfShapeLeftPointer(previousSize: CGSize) {

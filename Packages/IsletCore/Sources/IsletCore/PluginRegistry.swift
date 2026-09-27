@@ -89,6 +89,10 @@ public final class PluginRegistry {
             .max { $0.priority < $1.priority }
     }
 
+    public var announcements: [PillAnnouncement] {
+        enabledEntries.compactMap(\.context.announcement)
+    }
+
     public var selectedContentSize: CGSize? {
         enabledEntries.first { $0.id == selectedID }?.context.contentSize
     }
@@ -141,9 +145,11 @@ public final class PluginRegistry {
         }
         userDefaults.set(Array(disabledIDs).sorted(), forKey: disabledKey)
 
+        entry.context.clearAnnouncement()
         await transition(entry, toActive: enabled)
         if !isEnabled(id) {
             entry.context.pillStatus = nil
+            entry.context.clearAnnouncement()
         }
         ensureSelection()
     }
