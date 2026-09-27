@@ -21,6 +21,8 @@ enum TranscriptReader {
               entry["type"] as? String == "user",
               entry["isMeta"] as? Bool != true,
               entry["isSidechain"] as? Bool != true,
+              entry["isCompactSummary"] as? Bool != true,
+              entry["isVisibleInTranscriptOnly"] as? Bool != true,
               let message = entry["message"] as? [String: Any]
         else { return nil }
         let text: String

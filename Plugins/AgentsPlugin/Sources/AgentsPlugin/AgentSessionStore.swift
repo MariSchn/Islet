@@ -20,7 +20,7 @@ public final class AgentSessionStore {
 
     private let now: () -> Date
     private let localHost: () -> String
-    private let lastPrompt: (String) -> String?
+    private let lastPrompt: @Sendable (String) -> String?
     private var dismissedIDs: Set<String> = []
     @ObservationIgnored private var expiryTask: Task<Void, Never>?
     @ObservationIgnored private var unreachableTask: Task<Void, Never>?
@@ -30,7 +30,7 @@ public final class AgentSessionStore {
         self.init(now: now, localHost: localHost, lastPrompt: TranscriptReader.lastPrompt(at:))
     }
 
-    init(now: @escaping () -> Date = Date.init, localHost: @escaping () -> String = { AgentSessionStore.localHostName }, lastPrompt: @escaping (String) -> String?) {
+    init(now: @escaping () -> Date = Date.init, localHost: @escaping () -> String = { AgentSessionStore.localHostName }, lastPrompt: @escaping @Sendable (String) -> String?) {
         self.now = now
         self.localHost = localHost
         self.lastPrompt = lastPrompt
@@ -119,7 +119,7 @@ public final class AgentSessionStore {
             session.state = .starting
             session.activity = nil
             if session.task == nil, !session.isRemote, event.source == "fork" || event.source == "resume", let path = session.transcriptPath {
-                session.task = lastPrompt(path).map(Self.summarize)
+                loadLastPrompt(from: path, for: session.id)
             }
         case .userPromptSubmit:
             if !event.isTaskNotification {
@@ -167,8 +167,12 @@ public final class AgentSessionStore {
             return
         }
 
-        if let pid = session.pid {
-            let replaced = sessions.filter { $0.id != session.id && $0.pid == pid && $0.host == session.host }
+        if session.agent == .claudeCode, let pid = session.pid {
+            let replacesAll = event.kind == .sessionStart
+            let replaced = sessions.filter { other in
+                other.id != session.id && other.agent == .claudeCode && other.pid == pid && other.host == session.host
+                    && (replacesAll || (other.task == nil && other.state == .starting))
+            }
             for other in replaced {
                 withdrawPendingRequest(for: other.id)
             }
@@ -264,6 +268,16 @@ public final class AgentSessionStore {
         sessions[index].activity = nil
         sessions[index].updatedAt = now()
         onChange?()
+    }
+
+    private func loadLastPrompt(from path: String, for sessionID: String) {
+        let lastPrompt = lastPrompt
+        Task {
+            let prompt = await Task.detached(priority: .utility) { lastPrompt(path) }.value
+            guard let prompt, let index = sessions.firstIndex(where: { $0.id == sessionID }), sessions[index].task == nil else { return }
+            sessions[index].task = Self.summarize(prompt)
+            onChange?()
+        }
     }
 
     func removeExitedSessions(isRunning: (Int32) -> Bool) {

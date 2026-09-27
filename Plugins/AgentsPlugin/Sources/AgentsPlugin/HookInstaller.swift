@@ -52,9 +52,10 @@ public struct HookInstaller: Sendable {
         title=""
         transcript=$(printf '%s' "$payload" | sed -n 's/.*"transcript_path":"\\([^"]*\\)".*/\\1/p')
         if [ -f "$transcript" ]; then
-          titles=$(grep -oE '"(customTitle|aiTitle)":"[^"]*"' "$transcript" 2>/dev/null)
-          title=$(printf '%s\\n' "$titles" | grep '^"customTitle"' | tail -n 1 | sed 's/^"customTitle":"//; s/"$//')
-          [ -n "$title" ] || title=$(printf '%s\\n' "$titles" | grep '^"aiTitle"' | tail -n 1 | sed 's/^"aiTitle":"//; s/"$//')
+          titles=$(grep -oE '"(customTitle|aiTitle)":"([^"\\\\]|\\\\.)*"' "$transcript" 2>/dev/null)
+          title=$(printf '%s\\n' "$titles" | grep '^"customTitle"' | tail -n 1)
+          [ -n "$title" ] || title=$(printf '%s\\n' "$titles" | grep '^"aiTitle"' | tail -n 1)
+          title=$(printf '%s' "$title" | sed 's/^"[A-Za-z]*":"//; s/"$//; s/\\\\"/"/g; s/\\\\\\\\/\\\\/g')
         fi
         terminal="${__CFBundleIdentifier:-$TERM_PROGRAM}"
         tty=""
@@ -65,8 +66,8 @@ public struct HookInstaller: Sendable {
           set -- $(ps -o ppid=,tty=,comm= -p "$pid" 2>/dev/null)
           [ -n "$1" ] || break
           case "$2" in ""|"?"|"??") ;; *) tty="/dev/$2" ;; esac
-          if [ -z "$agent_pid" ] && [ "$pid" != $$ ]; then
-            case "${3##*/}" in sh|bash|dash|zsh|-sh|-bash|-dash|-zsh) ;; *) agent_pid=$pid ;; esac
+          if [ -z "$agent_pid" ]; then
+            case "${3##*/}" in claude|claude-*|node|bun|codex|codex-*|[0-9]*.[0-9]*.[0-9]*) agent_pid=$pid ;; esac
           fi
           if [ -z "$terminal" ] && [ "$(uname)" = Darwin ]; then
             vars=$(ps -E -o command= -p "$pid" 2>/dev/null | tr ' ' '\n')
