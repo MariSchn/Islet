@@ -23,7 +23,7 @@ struct ShelfSizingTests {
         try Data("a".utf8).write(to: file)
         let store = ShelfStore(directory: directory)
         var counts: [Int] = []
-        store.onItemsChange = { counts.append(store.items.count) }
+        store.onItemsChange = { counts.append($0) }
 
         store.add([file])
         store.removeAll()
