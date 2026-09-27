@@ -132,6 +132,28 @@ struct NotchControllerTests {
         #expect(controller.pill == nil)
     }
 
+    @Test func pillFollowsSelectionSettingAndSelectedPlugin() async throws {
+        let harness = Harness()
+        let registry = harness.makeRegistry()
+        let controller = makeController()
+        controller.attach(registry)
+        let stub = try await harness.registerStub(in: registry)
+        let second = try await harness.registerSecond(in: registry)
+        stub.context.pillStatus = PillStatus(text: "song", priority: .ambient)
+        second.context.pillStatus = PillStatus(text: "working", priority: .info)
+        await Task.yield()
+        #expect(controller.pill?.text == "song")
+
+        registry.select("test.second")
+        await Task.yield()
+        #expect(controller.pill?.text == "working")
+
+        registry.select("test.stub")
+        controller.settings.pillSelection = .mostImportant
+        await Task.yield()
+        #expect(controller.pill?.text == "working")
+    }
+
     @Test func showsNewAnnouncementsBrieflyWhileCollapsed() async throws {
         let harness = Harness()
         let registry = harness.makeRegistry()

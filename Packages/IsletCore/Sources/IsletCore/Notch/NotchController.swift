@@ -158,7 +158,7 @@ public final class NotchController {
         guard let registry else { return }
         var announcements: [PillAnnouncement] = []
         withObservationTracking {
-            pill = registry.activePill
+            pill = registry.activePill(settings.pillSelection)
             trackedExpandedShapeSize = expandedShapeSize
             announcements = registry.announcements
         } onChange: {

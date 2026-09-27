@@ -83,10 +83,22 @@ public final class PluginRegistry {
         entries.filter { !disabledIDs.contains($0.id) }
     }
 
-    public var activePill: PillStatus? {
-        enabledEntries
-            .compactMap(\.context.pillStatus)
-            .max { $0.priority < $1.priority }
+    public func activePill(_ selection: PillSelection) -> PillStatus? {
+        let candidates = enabledEntries.compactMap { entry in
+            entry.context.pillStatus.map { (id: entry.id, pill: $0, activity: entry.context.pillActivity) }
+        }
+        guard let mostImportant = candidates.max(by: { $0.pill.priority < $1.pill.priority }) else { return nil }
+        if mostImportant.pill.priority >= .attention {
+            return mostImportant.pill
+        }
+        switch selection {
+        case .mostImportant:
+            return mostImportant.pill
+        case .lastViewed:
+            return candidates.first { $0.id == selectedID }?.pill ?? mostImportant.pill
+        case .latestActivity:
+            return candidates.max { $0.activity < $1.activity }?.pill
+        }
     }
 
     public var announcements: [PillAnnouncement] {

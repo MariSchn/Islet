@@ -251,6 +251,17 @@ struct NotchSettingsView: View {
                 Text("Keeps a black notch visible even while nothing is shown. When off, the shape can briefly flash while switching Spaces.")
             }
             Section {
+                Picker("Show", selection: $settings.pillSelection) {
+                    ForEach(PillSelection.allCases) { selection in
+                        Text(selection.displayName).tag(selection)
+                    }
+                }
+            } header: {
+                Text("Collapsed Pill")
+            } footer: {
+                Text("\(settings.pillSelection.summary) Anything that needs you, like a permission request, is always shown.")
+            }
+            Section {
                 Picker("Show on", selection: $settings.displayPlacement) {
                     ForEach(placementOptions, id: \.self) { placement in
                         Text(placement.displayName).tag(placement)
