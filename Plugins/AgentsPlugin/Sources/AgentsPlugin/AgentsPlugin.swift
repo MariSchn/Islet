@@ -90,6 +90,7 @@ public final class AgentsPlugin: IsletPlugin {
         controller.store.onChange = { [context, controller] in
             context.pillStatus = controller.store.pillStatus
             context.contentSize = Self.contentSize(for: controller.store.sessions, expanded: controller.expandedSessionIDs, showsUsage: controller.showsUsageBar)
+            controller.interruptions.track(controller.store.sessions)
         }
         controller.onUsageChange = controller.store.onChange
     }
@@ -147,6 +148,7 @@ public final class AgentsController {
         }
     }
 
+    let interruptions: InterruptionMonitor
     private let server: HookServer
     private let alerter: SessionAlerter
 
@@ -165,6 +167,7 @@ public final class AgentsController {
         self.alerter = alerter
         self.alerts = alerts
         store.onAlert = { alerter.handle($0) }
+        interruptions = InterruptionMonitor { store.markInterrupted($0) }
     }
 
     public func start() async {
@@ -180,6 +183,7 @@ public final class AgentsController {
         refreshInstallState()
         usage.onChange = { [weak self] in self?.onUsageChange?() }
         usage.start()
+        interruptions.start()
     }
 
     public var isCodexAvailable: Bool {
@@ -189,6 +193,7 @@ public final class AgentsController {
     public func stop() async {
         await server.stop()
         usage.stop()
+        interruptions.stop()
     }
 
     public func refreshInstallState() {

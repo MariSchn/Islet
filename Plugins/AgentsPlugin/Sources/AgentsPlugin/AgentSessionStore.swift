@@ -7,6 +7,7 @@ import Observation
 public final class AgentSessionStore {
     public static let finishedPillDuration: TimeInterval = 10 * 60
     public static let unreachableTimeout: TimeInterval = 5 * 60
+    static let replyTimeout = TimeInterval(HookServer.replyTimeout.components.seconds) - 10
 
     public enum Alert: Sendable, Equatable {
         case needsAttention(AgentSession)
@@ -45,10 +46,11 @@ public final class AgentSessionStore {
 
     public func handle(_ event: HookEvent) async -> HookReply {
         let before = Set(sessions.first { $0.id == event.sessionID }?.pendingRequests.map(\.id) ?? [])
+        let requestedAt = now()
         apply(event)
         guard event.kind == .permissionRequest,
               let request = sessions.first(where: { $0.id == event.sessionID })?.pendingRequests.first(where: { !before.contains($0.id) }),
-              let decision = await awaitDecision(for: request.id)
+              let decision = await awaitDecision(for: request.id, requestedAt: requestedAt)
         else { return .empty }
         return decision.reply(for: request)
     }
@@ -94,12 +96,13 @@ public final class AgentSessionStore {
         session.isUnreachable = false
         if let terminal = event.terminal { session.terminal = terminal }
         if let tty = event.tty { session.tty = tty }
+        if let transcriptPath = event.transcriptPath { session.transcriptPath = transcriptPath }
         if let title = event.title { session.title = title }
         session.updatedAt = timestamp
         if event.toolName == "ExitPlanMode", let plan = event.toolInput?["plan"]?.stringValue {
             session.plan = plan
         }
-        for request in session.pendingRequests where Self.withdraws(request, on: event) {
+        for request in Self.withdrawnRequests(session.pendingRequests, on: event) {
             resolve(request.id, with: nil)
             session.pendingRequests.removeAll { $0.id == request.id }
         }
@@ -118,7 +121,9 @@ public final class AgentSessionStore {
             session.turnStartedAt = timestamp
         case .preToolUse, .postToolUse:
             session.activity = event.activityDescription
-            session.state = .working
+            if event.kind == .preToolUse || session.state != .interrupted {
+                session.state = .working
+            }
             Self.record(event, in: &session, at: timestamp)
         case .permissionRequest:
             let request = event.toolName.flatMap { PendingRequest(toolName: $0, toolInput: event.toolInput) }
@@ -140,7 +145,7 @@ public final class AgentSessionStore {
                 guard session.pendingRequests.isEmpty else { break }
                 session.state = .needsAttention(event.message ?? "Waiting for your answer")
             case "idle_prompt":
-                guard session.state != .done, session.pendingRequests.isEmpty else { return }
+                guard session.state != .done, session.state != .interrupted, session.pendingRequests.isEmpty else { return }
                 session.state = .needsAttention("Waiting for your input")
             default:
                 return
@@ -203,22 +208,52 @@ public final class AgentSessionStore {
         }
     }
 
-    private func awaitDecision(for requestID: UUID) async -> PermissionDecision? {
+    private func awaitDecision(for requestID: UUID, requestedAt: Date) async -> PermissionDecision? {
         await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
                 decisions[requestID] = continuation
             }
         } onCancel: {
-            Task { @MainActor in self.withdraw(requestID) }
+            Task { @MainActor in
+                self.withdraw(requestID, timedOut: self.now().timeIntervalSince(requestedAt) >= Self.replyTimeout)
+            }
         }
     }
 
-    private func withdraw(_ requestID: UUID) {
+    private func withdraw(_ requestID: UUID, timedOut: Bool) {
         resolve(requestID, with: nil)
         guard let index = sessions.firstIndex(where: { $0.pendingRequests.contains { $0.id == requestID } }) else { return }
         sessions[index].pendingRequests.removeAll { $0.id == requestID }
-        settleState(at: index)
+        if let next = sessions[index].pendingRequests.first {
+            sessions[index].state = .needsAttention(Self.attentionReason(for: next))
+        } else if timedOut {
+            sessions[index].state = .needsAttention("Waiting for your answer in the terminal")
+        } else {
+            sessions[index].state = .interrupted
+            sessions[index].activity = nil
+        }
         onChange?()
+    }
+
+    public func markInterrupted(_ sessionID: String) {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        switch sessions[index].state {
+        case .working, .needsAttention: break
+        case .starting, .done, .interrupted: return
+        }
+        withdrawPendingRequest(for: sessionID)
+        sessions[index].pendingRequests = []
+        sessions[index].state = .interrupted
+        sessions[index].activity = nil
+        sessions[index].updatedAt = now()
+        onChange?()
+    }
+
+    private static func input(_ requested: JSONValue?, isContainedIn actual: JSONValue?) -> Bool {
+        guard case .object(let requestedFields)? = requested, case .object(let actualFields)? = actual else {
+            return requested == actual
+        }
+        return requestedFields.allSatisfy { actualFields[$0.key] == $0.value }
     }
 
     private func withdrawPendingRequest(for sessionID: String) {
@@ -238,12 +273,18 @@ public final class AgentSessionStore {
         }
     }
 
-    private static func withdraws(_ request: PendingRequest, on event: HookEvent) -> Bool {
+    private static func withdrawnRequests(_ requests: [PendingRequest], on event: HookEvent) -> [PendingRequest] {
         switch event.kind {
-        case .stop, .sessionStart, .sessionEnd: true
-        case .userPromptSubmit: !event.isTaskNotification
-        case .postToolUse: event.toolName == request.toolName && event.toolInput == request.toolInput
-        case .preToolUse, .permissionRequest, .notification: false
+        case .stop, .sessionStart, .sessionEnd:
+            return requests
+        case .userPromptSubmit:
+            return event.isTaskNotification ? [] : requests
+        case .postToolUse:
+            let sameTool = requests.filter { $0.toolName == event.toolName }
+            let match = sameTool.first { $0.toolInput == event.toolInput } ?? sameTool.first { input($0.toolInput, isContainedIn: event.toolInput) }
+            return match.map { [$0] } ?? []
+        case .preToolUse, .permissionRequest, .notification:
+            return []
         }
     }
 

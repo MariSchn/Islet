@@ -178,6 +178,7 @@ private struct SessionRow: View {
         case .working: return AnyShapeStyle(SessionColors.working)
         case .needsAttention: return AnyShapeStyle(.orange)
         case .done: return AnyShapeStyle(.green)
+        case .interrupted: return AnyShapeStyle(.secondary)
         }
     }
 
@@ -188,6 +189,7 @@ private struct SessionRow: View {
         case .working: return session.activity ?? "Working…"
         case .needsAttention(let reason): return reason
         case .done: return "Finished"
+        case .interrupted: return "Interrupted"
         }
     }
 }
@@ -406,7 +408,7 @@ private struct StateLabel: View {
             Text("Needs you")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.orange)
-        case .done:
+        case .done, .interrupted:
             Text(Self.duration(session.updatedAt.timeIntervalSince(session.turnStartedAt)))
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(.tertiary)
@@ -554,6 +556,10 @@ private struct StateIndicator: View {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 16))
                 .foregroundStyle(.green)
+        case .interrupted:
+            Image(systemName: "stop.circle.fill")
+                .font(.system(size: 16))
+                .foregroundStyle(.secondary)
         }
     }
 }
