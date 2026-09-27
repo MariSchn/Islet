@@ -174,32 +174,41 @@ private struct PillView: View {
 private struct PillRingView: View {
     let ring: PillStatus.Ring
 
-    private static let lineWidth: CGFloat = 3
-    private static let gap = 0.04
+    private static let lineWidth: CGFloat = 2.5
+    private static let visibleGap: CGFloat = 2
 
-    private var arcs: [(start: Double, end: Double, tint: Color.Resolved)] {
+    private func arcs(circumference: CGFloat) -> [(start: Double, end: Double, tint: Color.Resolved)] {
         let segments = ring.segments.filter { $0.value > 0 }
         let total = segments.reduce(0) { $0 + $1.value }
-        guard total > 0 else { return [] }
-        let gap = segments.count > 1 ? Self.gap : 0
+        guard total > 0, circumference > 0 else { return [] }
+        let gap = segments.count > 1 ? Double((Self.visibleGap + Self.lineWidth) / circumference) : 0
         var start = 0.0
         return segments.map { segment in
             let length = segment.value / total
             defer { start += length }
-            return (start + gap / 2, start + length - gap / 2, segment.tint)
+            let arcStart = start + gap / 2
+            return (arcStart, max(start + length - gap / 2, arcStart), segment.tint)
         }
     }
 
     var body: some View {
-        ZStack {
-            Circle()
-                .stroke(.white.opacity(0.15), lineWidth: Self.lineWidth)
-            ForEach(Array(arcs.enumerated()), id: \.offset) { _, arc in
-                Circle()
-                    .trim(from: arc.start, to: arc.end)
-                    .stroke(Color(arc.tint), style: StrokeStyle(lineWidth: Self.lineWidth, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
+        GeometryReader { proxy in
+            let diameter = min(proxy.size.width, proxy.size.height)
+            let arcs = arcs(circumference: .pi * diameter)
+            ZStack {
+                if arcs.isEmpty {
+                    Circle()
+                        .stroke(.white.opacity(0.15), lineWidth: Self.lineWidth)
+                }
+                ForEach(Array(arcs.enumerated()), id: \.offset) { _, arc in
+                    Circle()
+                        .trim(from: arc.start, to: arc.end)
+                        .stroke(Color(arc.tint), style: StrokeStyle(lineWidth: Self.lineWidth, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                }
             }
+            .frame(width: diameter, height: diameter)
+            .frame(width: proxy.size.width, height: proxy.size.height)
         }
         .padding(Self.lineWidth / 2)
     }

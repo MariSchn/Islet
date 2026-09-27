@@ -14,7 +14,7 @@ public struct NotchGeometry: Sendable, Equatable {
     public static let pillTrailingMaxWidth: CGFloat = 220
     public static let pillTextPadding: CGFloat = 10
     public static var pillFont: NSFont { .systemFont(ofSize: 12, weight: .medium) }
-    public static let pillRingDiameter: CGFloat = 16
+    public static let pillRingDiameter: CGFloat = 18
     public static let announcementHeight: CGFloat = 26
     public static let announcementPadding: CGFloat = 14
     public static let announcementIconWidth: CGFloat = 20
