@@ -41,7 +41,7 @@ private struct NowPlayingView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            HStack(spacing: 14) {
+            HStack(spacing: 12) {
                 ArtworkView(image: controller.artwork)
                     .frame(width: proxy.size.height, height: proxy.size.height)
                 VStack(alignment: .leading, spacing: 2) {
@@ -53,7 +53,7 @@ private struct NowPlayingView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                     Spacer(minLength: 4)
-                    HStack(spacing: 32) {
+                    HStack(spacing: 28) {
                         TransportButton(systemImage: "backward.fill", size: 17) { await controller.previousTrack() }
                         TransportButton(systemImage: nowPlaying.isPlaying ? "pause.fill" : "play.fill", size: 24) { await controller.playPause() }
                         TransportButton(systemImage: "forward.fill", size: 17) { await controller.nextTrack() }
