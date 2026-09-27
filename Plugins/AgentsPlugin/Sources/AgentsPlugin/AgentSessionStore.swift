@@ -378,20 +378,25 @@ public final class AgentSessionStore {
     }
 
     public var pillStatus: PillStatus? {
+        pillStatus(for: DisplaySettings())
+    }
+
+    public func pillStatus(for display: DisplaySettings) -> PillStatus? {
+        let ring = display.pillContent == .ring ? statusRing : nil
         let attention = attentionSessions
         if let first = attention.first {
             let text = attention.count == 1 ? "\(first.displayName) needs you" : "\(attention.count) agents need you"
-            return PillStatus(text: text, systemImage: "terminal.fill", priority: .attention, ring: statusRing)
+            return PillStatus(text: text, systemImage: "terminal.fill", priority: .attention, ring: ring)
         }
         let working = workingSessions
-        if !working.isEmpty {
+        if display.pillShowsWorking, !working.isEmpty {
             let text = working.count == 1 ? (working[0].activity ?? working[0].displayName) : "\(working.count) agents working"
-            return PillStatus(text: text, systemImage: "terminal", priority: .info, ring: statusRing)
+            return PillStatus(text: text, systemImage: "terminal", priority: .info, ring: ring)
         }
         let finished = recentlyFinishedSessions
-        guard let first = finished.first else { return nil }
+        guard display.pillShowsFinished, let first = finished.first else { return nil }
         let text = finished.count == 1 ? "\(first.displayName) finished" : "\(finished.count) agents finished"
-        return PillStatus(text: text, systemImage: "checkmark.circle.fill", priority: .ambient, ring: statusRing)
+        return PillStatus(text: text, systemImage: "checkmark.circle.fill", priority: .ambient, ring: ring)
     }
 
     public var statusRing: PillStatus.Ring {

@@ -407,6 +407,30 @@ struct AgentSessionStoreTests {
         #expect(announcer.announcement(for: store.sessions) == nil)
     }
 
+    @Test func thePillFollowsTheDisplaySettings() {
+        let store = AgentSessionStore()
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", cwd: "/p/alpha", prompt: "go"))
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "b", cwd: "/p/beta", prompt: "go"))
+        store.apply(HookEvent(kind: .stop, sessionID: "b"))
+        var display = DisplaySettings()
+        #expect(store.pillStatus(for: display) == store.pillStatus)
+        #expect(store.pillStatus(for: display)?.ring != nil)
+
+        display.pillContent = .summary
+        #expect(store.pillStatus(for: display)?.ring == nil)
+        #expect(store.pillStatus(for: display)?.text == "alpha")
+
+        display.pillShowsWorking = false
+        #expect(store.pillStatus(for: display)?.text == "beta finished")
+
+        display.pillShowsFinished = false
+        #expect(store.pillStatus(for: display) == nil)
+
+        store.apply(HookEvent(kind: .notification, sessionID: "a", message: "Pick one", notificationType: "elicitation_dialog"))
+        #expect(store.pillStatus(for: display)?.text == "alpha needs you")
+        #expect(store.pillStatus(for: display)?.priority == .attention)
+    }
+
     @Test func theRingShowsOldFinishedSessionsAsIdle() {
         var clock = Date(timeIntervalSince1970: 1_000_000)
         let store = AgentSessionStore(now: { clock })
@@ -819,6 +843,27 @@ struct AgentsPluginSizingTests {
         #expect(AgentsPlugin.contentSize(for: sessions(9), expanded: [], showsUsage: true).height == AgentsPlugin.maxContentHeight + usage)
     }
 
+    @Test func expandedRowsShowAtMostTheConfiguredNumberOfActions() {
+        var session = AgentSession(id: "a", agent: .claudeCode, host: nil, cwd: nil, task: nil, activity: nil, state: .working, startedAt: .now, turnStartedAt: .now, updatedAt: .now)
+        session.activities = (0..<10).map { index in ActivityEntry(event: HookEvent(kind: .preToolUse, sessionID: "a", toolName: "Grep", toolInput: .object(["pattern": .string("\(index)")])), at: .now, isComplete: true) }
+        let three = AgentsPlugin.contentSize(for: [session], expanded: ["a"], showsUsage: false, historyLength: 3).height
+        let five = AgentsPlugin.contentSize(for: [session], expanded: ["a"], showsUsage: false, historyLength: 5).height
+        #expect(five == three + 2 * AgentsPlugin.activityEntryHeight)
+        #expect(AgentsPlugin.visibleActivities(of: session, historyLength: 3).map(\.title) == ["Search 7", "Search 8", "Search 9"])
+        #expect(AgentsPlugin.visibleActivities(of: session, historyLength: 20).count == 10)
+        #expect(AgentsPlugin.contentSize(for: [session], expanded: [], showsUsage: false, historyLength: 3) == AgentsPlugin.contentSize(for: [session], expanded: [], showsUsage: false, historyLength: 5))
+        #expect(AgentsPlugin.contentSize(for: [session], expanded: ["a"], showsUsage: false) == AgentsPlugin.contentSize(for: [session], expanded: ["a"], showsUsage: false, historyLength: 8))
+    }
+
+    @Test func historyLengthStaysWithinItsRange() {
+        var display = DisplaySettings()
+        #expect(display.historyLength == 8)
+        display.historyLength = 0
+        #expect(display.historyLength == DisplaySettings.historyLengthRange.lowerBound)
+        display.historyLength = 500
+        #expect(display.historyLength == ActivityEntry.limit)
+    }
+
     @Test func pendingRequestsMakeRowsTaller() {
         var session = AgentSession(id: "a", agent: .claudeCode, host: nil, cwd: nil, task: nil, activity: nil, state: .working, startedAt: .now, turnStartedAt: .now, updatedAt: .now)
         let plain = AgentsPlugin.contentSize(for: [session], expanded: [], showsUsage: false).height
@@ -858,6 +903,18 @@ struct UsageTests {
         #expect(usage.sevenDay?.resetsAt == Date(timeIntervalSince1970: 1_790_499_600))
         #expect(try ClaudeUsage.decode(Data("{}".utf8)).isEmpty)
         #expect(throws: UsageError.unexpectedResponse) { try ClaudeUsage.decode(Data("[]".utf8)) }
+    }
+
+    @Test func hiddenLimitsAreDroppedAndTheBarDisappearsWithoutAny() {
+        let usage = ClaudeUsage(fiveHour: UsageWindow(utilization: 10, resetsAt: nil), sevenDay: UsageWindow(utilization: 50, resetsAt: nil))
+        var display = DisplaySettings()
+        #expect(display.visibleUsage(usage) == usage)
+        display.showsFiveHourLimit = false
+        #expect(display.visibleUsage(usage) == ClaudeUsage(fiveHour: nil, sevenDay: usage.sevenDay))
+        display.showsWeeklyLimit = false
+        #expect(display.visibleUsage(usage) == nil)
+        display.showsFiveHourLimit = true
+        #expect(display.visibleUsage(ClaudeUsage(fiveHour: nil, sevenDay: usage.sevenDay)) == nil)
     }
 
     @Test func readsTheAccessTokenFromTheLoginFile() {

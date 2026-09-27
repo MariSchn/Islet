@@ -22,23 +22,27 @@ public final class AgentsPlugin: IsletPlugin {
     static let planHeight: CGFloat = 140
     static let maxContentHeight = 2 * contentPadding + CGFloat(maxVisibleRows) * rowHeight + CGFloat(maxVisibleRows - 1) * rowSpacing
 
-    static func contentSize(for sessions: [AgentSession], expanded: Set<String>, showsUsage: Bool) -> CGSize {
+    static func contentSize(for sessions: [AgentSession], expanded: Set<String>, showsUsage: Bool, historyLength: Int = DisplaySettings().historyLength) -> CGSize {
         let usage = showsUsage ? usageBarHeight + rowSpacing : 0
         guard !sessions.isEmpty else { return CGSize(width: contentWidth, height: emptyContentHeight + usage) }
-        let rows = sessions.map { rowHeight(for: $0, expanded: expanded.contains($0.id)) }.reduce(0, +) + CGFloat(sessions.count - 1) * rowSpacing
+        let rows = sessions.map { rowHeight(for: $0, expanded: expanded.contains($0.id), historyLength: historyLength) }.reduce(0, +) + CGFloat(sessions.count - 1) * rowSpacing
         return CGSize(width: contentWidth, height: min(2 * contentPadding + usage + rows, maxContentHeight + usage))
     }
 
-    static func rowHeight(for session: AgentSession, expanded: Bool) -> CGFloat {
-        rowHeight + (session.pendingRequest.map(requestHeight(for:)) ?? 0) + (expanded ? detailHeight(for: session) : 0)
+    static func rowHeight(for session: AgentSession, expanded: Bool, historyLength: Int) -> CGFloat {
+        rowHeight + (session.pendingRequest.map(requestHeight(for:)) ?? 0) + (expanded ? detailHeight(for: session, historyLength: historyLength) : 0)
     }
 
-    static func detailHeight(for session: AgentSession) -> CGFloat {
+    static func visibleActivities(of session: AgentSession, historyLength: Int) -> ArraySlice<ActivityEntry> {
+        session.activities.suffix(historyLength)
+    }
+
+    static func detailHeight(for session: AgentSession, historyLength: Int) -> CGFloat {
         var height = 2 * requestPadding
         if session.plan != nil {
             height += activityHeaderHeight + planHeight + requestSpacing
         }
-        height += activityHeaderHeight + CGFloat(max(session.activities.count, 1)) * activityEntryHeight
+        height += activityHeaderHeight + CGFloat(max(visibleActivities(of: session, historyLength: historyLength).count, 1)) * activityEntryHeight
         return height
     }
 
@@ -55,6 +59,7 @@ public final class AgentsPlugin: IsletPlugin {
     private static let tokenKey = "hookToken"
     private static let usageKey = "showUsage"
     private static let alertKeys = (attentionSound: "attentionSound", attentionNotification: "attentionNotification", finishedSound: "finishedSound", finishedNotification: "finishedNotification", announcesInNotch: "announcesInNotch")
+    private static let displayKeys = (showsFiveHourLimit: "showFiveHourLimit", showsWeeklyLimit: "showWeeklyLimit", showsResetTimes: "showUsageResetTimes", pillContent: "pillContent", pillShowsWorking: "pillShowsWorking", pillShowsFinished: "pillShowsFinished", historyLength: "historyLength")
 
     private let context: PluginContext
     private let controller: AgentsController
@@ -74,11 +79,20 @@ public final class AgentsPlugin: IsletPlugin {
         alerts.finishedSound = context.settings.value(forKey: Self.alertKeys.finishedSound) ?? alerts.finishedSound
         alerts.finishedNotification = context.settings.value(forKey: Self.alertKeys.finishedNotification) ?? alerts.finishedNotification
         alerts.announcesInNotch = context.settings.value(forKey: Self.alertKeys.announcesInNotch) ?? alerts.announcesInNotch
+        var display = DisplaySettings()
+        display.showsFiveHourLimit = context.settings.value(forKey: Self.displayKeys.showsFiveHourLimit) ?? display.showsFiveHourLimit
+        display.showsWeeklyLimit = context.settings.value(forKey: Self.displayKeys.showsWeeklyLimit) ?? display.showsWeeklyLimit
+        display.showsResetTimes = context.settings.value(forKey: Self.displayKeys.showsResetTimes) ?? display.showsResetTimes
+        display.pillContent = context.settings.value(forKey: Self.displayKeys.pillContent).flatMap(DisplaySettings.PillContent.init(rawValue:)) ?? display.pillContent
+        display.pillShowsWorking = context.settings.value(forKey: Self.displayKeys.pillShowsWorking) ?? display.pillShowsWorking
+        display.pillShowsFinished = context.settings.value(forKey: Self.displayKeys.pillShowsFinished) ?? display.pillShowsFinished
+        display.historyLength = context.settings.value(forKey: Self.displayKeys.historyLength) ?? display.historyLength
         controller = AgentsController(
             token: token,
             claudeDirectory: URL.homeDirectory.appending(path: ".claude", directoryHint: .isDirectory),
             codexDirectory: URL.homeDirectory.appending(path: ".codex", directoryHint: .isDirectory),
             alerts: alerts,
+            display: display,
             showsUsage: context.settings.value(forKey: Self.usageKey) ?? false
         )
         controller.onUsageSettingChange = { [context] in context.settings.set($0, forKey: Self.usageKey) }
@@ -89,13 +103,22 @@ public final class AgentsPlugin: IsletPlugin {
             context.settings.set(alerts.finishedNotification, forKey: Self.alertKeys.finishedNotification)
             context.settings.set(alerts.announcesInNotch, forKey: Self.alertKeys.announcesInNotch)
         }
+        controller.onDisplaySettingsChange = { [context] display in
+            context.settings.set(display.showsFiveHourLimit, forKey: Self.displayKeys.showsFiveHourLimit)
+            context.settings.set(display.showsWeeklyLimit, forKey: Self.displayKeys.showsWeeklyLimit)
+            context.settings.set(display.showsResetTimes, forKey: Self.displayKeys.showsResetTimes)
+            context.settings.set(display.pillContent.rawValue, forKey: Self.displayKeys.pillContent)
+            context.settings.set(display.pillShowsWorking, forKey: Self.displayKeys.pillShowsWorking)
+            context.settings.set(display.pillShowsFinished, forKey: Self.displayKeys.pillShowsFinished)
+            context.settings.set(display.historyLength, forKey: Self.displayKeys.historyLength)
+        }
         var announcer = StatusAnnouncer()
         controller.store.onChange = { [context, controller] in
-            context.pillStatus = controller.store.pillStatus
+            context.pillStatus = controller.store.pillStatus(for: controller.display)
             if let announcement = announcer.announcement(for: controller.store.sessions), controller.alerts.announcesInNotch {
                 context.announce(announcement)
             }
-            context.contentSize = Self.contentSize(for: controller.store.sessions, expanded: controller.expandedSessionIDs, showsUsage: controller.showsUsageBar)
+            context.contentSize = Self.contentSize(for: controller.store.sessions, expanded: controller.expandedSessionIDs, showsUsage: controller.showsUsageBar, historyLength: controller.display.historyLength)
             controller.interruptions.track(controller.store.sessions)
         }
         controller.onUsageChange = controller.store.onChange
@@ -137,6 +160,7 @@ public final class AgentsController {
     public let usage: UsageMonitor
     public var onAlertSettingsChange: ((AlertSettings) -> Void)?
     public var onUsageSettingChange: ((Bool) -> Void)?
+    public var onDisplaySettingsChange: ((DisplaySettings) -> Void)?
     public var onUsageChange: (() -> Void)?
     public var showsUsage: Bool {
         get { usage.isEnabled }
@@ -146,7 +170,18 @@ public final class AgentsController {
             onUsageChange?()
         }
     }
-    public var showsUsageBar: Bool { usage.isEnabled && usage.usage?.isEmpty == false }
+    public var visibleUsage: ClaudeUsage? {
+        guard usage.isEnabled, let current = usage.usage else { return nil }
+        return display.visibleUsage(current)
+    }
+    public var showsUsageBar: Bool { visibleUsage != nil }
+    public var display: DisplaySettings {
+        didSet {
+            guard display != oldValue else { return }
+            onDisplaySettingsChange?(display)
+            store.onChange?()
+        }
+    }
     public var alerts: AlertSettings {
         didSet {
             alerter.settings = alerts
@@ -159,7 +194,7 @@ public final class AgentsController {
     private let server: HookServer
     private let alerter: SessionAlerter
 
-    public init(token: String, claudeDirectory: URL, codexDirectory: URL, port: UInt16 = HookServer.defaultPort, alerts: AlertSettings = AlertSettings(), showsUsage: Bool = false, usage: UsageMonitor? = nil) {
+    public init(token: String, claudeDirectory: URL, codexDirectory: URL, port: UInt16 = HookServer.defaultPort, alerts: AlertSettings = AlertSettings(), display: DisplaySettings = DisplaySettings(), showsUsage: Bool = false, usage: UsageMonitor? = nil) {
         let store = AgentSessionStore()
         self.store = store
         self.usage = usage ?? UsageMonitor(isEnabled: showsUsage)
@@ -173,6 +208,7 @@ public final class AgentsController {
         let alerter = SessionAlerter(settings: alerts)
         self.alerter = alerter
         self.alerts = alerts
+        self.display = display
         store.onAlert = { alerter.handle($0) }
         interruptions = InterruptionMonitor { store.markInterrupted($0) }
         processes = ProcessMonitor { store.removeExitedSessions(isRunning: ProcessMonitor.isRunning) }
