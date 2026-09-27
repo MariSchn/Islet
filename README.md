@@ -16,3 +16,7 @@ Core logic lives in `Packages/IsletCore`. Built-in plugins live in `Plugins/`, e
 ```sh
 cd Packages/IsletCore && swift test
 ```
+
+## Building a plugin
+
+See the [plugin developer guide](docs/plugins/README.md) for a step-by-step walkthrough, the API reference and notes on sizing, the collapsed pill, settings, resources, concurrency and testing.
