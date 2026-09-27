@@ -4,6 +4,7 @@ import SwiftUI
 @MainActor
 public final class MediaPlugin: IsletPlugin {
     public static let manifest = PluginManifest(id: "islet.media", displayName: "Media", systemImage: "music.note")
+    static let contentSize = CGSize(width: 420, height: 160)
 
     private static let showsPillKey = "showsPill"
 
@@ -12,6 +13,7 @@ public final class MediaPlugin: IsletPlugin {
 
     public init(context: PluginContext) {
         self.context = context
+        context.contentSize = Self.contentSize
         controller = MediaController(source: SpotifySource(), showsPill: context.settings.value(forKey: Self.showsPillKey) ?? true)
         controller.onPillChange = { [context] status in context.pillStatus = status }
         controller.onShowsPillChange = { [context] shows in context.settings.set(shows, forKey: Self.showsPillKey) }

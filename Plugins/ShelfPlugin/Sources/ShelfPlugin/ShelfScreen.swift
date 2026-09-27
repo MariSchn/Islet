@@ -17,12 +17,12 @@ struct ShelfScreen: View {
                 .foregroundStyle(.secondary)
             } else {
                 ScrollView(.horizontal) {
-                    HStack(alignment: .top, spacing: 8) {
+                    HStack(alignment: .top, spacing: ShelfPlugin.itemSpacing) {
                         ForEach(store.items) { item in
                             ShelfItemView(item: item) { store.remove(item.id) }
                         }
                     }
-                    .padding(4)
+                    .padding(ShelfPlugin.listPadding)
                 }
                 .scrollIndicators(.hidden)
             }
@@ -87,9 +87,10 @@ private struct ShelfItemView: View {
                 .font(.caption)
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
-                .frame(width: 72)
+                .frame(width: ShelfPlugin.itemWidth - 2 * ShelfPlugin.itemPadding)
         }
-        .padding(6)
+        .padding(ShelfPlugin.itemPadding)
+        .frame(width: ShelfPlugin.itemWidth, height: ShelfPlugin.itemHeight, alignment: .top)
         .background(
             RoundedRectangle(cornerRadius: 10)
                 .fill(.white.opacity(isHovering ? 0.12 : 0))
