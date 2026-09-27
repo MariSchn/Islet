@@ -214,15 +214,15 @@ struct PluginRegistryTests {
         let stub = try await harness.registerStub(in: registry)
         let second = try await harness.registerSecond(in: registry)
 
-        #expect(registry.activePill == nil)
+        #expect(registry.activePill(.mostImportant) == nil)
 
         stub.context.pillStatus = PillStatus(text: "song", priority: .ambient)
         second.context.pillStatus = PillStatus(text: "approve?", priority: .urgent)
-        #expect(registry.activePill?.text == "approve?")
+        #expect(registry.activePill(.mostImportant)?.text == "approve?")
 
         await registry.setEnabled(false, for: "test.second")
         second.context.pillStatus = PillStatus(text: "ghost", priority: .urgent)
-        #expect(registry.activePill?.text == "song")
+        #expect(registry.activePill(.mostImportant)?.text == "song")
     }
 
     @Test func selectNeighborWalksEnabledPlugins() async throws {
@@ -269,7 +269,80 @@ struct PluginRegistryTests {
         stub.context.pillStatus = PillStatus(text: "first", priority: .info)
         second.context.pillStatus = PillStatus(text: "second", priority: .info)
 
-        #expect(registry.activePill?.text == "first")
+        #expect(registry.activePill(.mostImportant)?.text == "first")
+    }
+
+    @Test func lastViewedShowsSelectedPluginAndFallsBackToMostImportant() async throws {
+        let registry = harness.makeRegistry()
+        let stub = try await harness.registerStub(in: registry)
+        let second = try await harness.registerSecond(in: registry)
+
+        stub.context.pillStatus = PillStatus(text: "song", priority: .ambient)
+        second.context.pillStatus = PillStatus(text: "working", priority: .info)
+        #expect(registry.activePill(.lastViewed)?.text == "song")
+
+        registry.select("test.second")
+        #expect(registry.activePill(.lastViewed)?.text == "working")
+
+        second.context.pillStatus = nil
+        #expect(registry.activePill(.lastViewed)?.text == "song")
+    }
+
+    @Test func lastViewedKeepsTheHeldPluginWhileItHasAPill() async throws {
+        let registry = harness.makeRegistry()
+        let stub = try await harness.registerStub(in: registry)
+        let second = try await harness.registerSecond(in: registry)
+        registry.select("test.second")
+
+        stub.context.pillStatus = PillStatus(text: "song", priority: .ambient)
+        #expect(registry.pillHolder(.lastViewed) == "test.stub")
+
+        second.context.pillStatus = PillStatus(text: "working", priority: .info)
+        #expect(registry.activePill(.lastViewed, keeping: "test.stub")?.text == "song")
+        #expect(registry.pillHolder(.lastViewed, keeping: "test.stub") == "test.stub")
+
+        second.context.pillStatus = PillStatus(text: "approve?", priority: .attention)
+        #expect(registry.activePill(.lastViewed, keeping: "test.stub")?.text == "approve?")
+        #expect(registry.pillHolder(.lastViewed, keeping: "test.stub") == "test.stub")
+
+        stub.context.pillStatus = nil
+        #expect(registry.pillHolder(.lastViewed, keeping: "test.stub") == "test.second")
+    }
+
+    @Test func latestActivityFollowsNewestPillOrRaisedPriority() async throws {
+        let registry = harness.makeRegistry()
+        let stub = try await harness.registerStub(in: registry)
+        let second = try await harness.registerSecond(in: registry)
+
+        second.context.pillStatus = PillStatus(text: "finished", priority: .ambient)
+        stub.context.pillStatus = PillStatus(text: "song", priority: .ambient)
+        #expect(registry.activePill(.latestActivity)?.text == "song")
+
+        second.context.pillStatus = PillStatus(text: "finished again", priority: .ambient)
+        #expect(registry.activePill(.latestActivity)?.text == "song")
+
+        second.context.pillStatus = PillStatus(text: "working", priority: .info)
+        #expect(registry.activePill(.latestActivity)?.text == "working")
+
+        stub.context.pillStatus = PillStatus(text: "next song", priority: .ambient)
+        #expect(registry.activePill(.latestActivity)?.text == "working")
+
+        stub.context.pillStatus = nil
+        stub.context.pillStatus = PillStatus(text: "resumed", priority: .ambient)
+        #expect(registry.activePill(.latestActivity)?.text == "resumed")
+    }
+
+    @Test func pillsThatNeedTheUserWinInEveryMode() async throws {
+        let registry = harness.makeRegistry()
+        let stub = try await harness.registerStub(in: registry)
+        let second = try await harness.registerSecond(in: registry)
+
+        second.context.pillStatus = PillStatus(text: "approve?", priority: .attention)
+        stub.context.pillStatus = PillStatus(text: "song", priority: .ambient)
+
+        for selection in PillSelection.allCases {
+            #expect(registry.activePill(selection)?.text == "approve?")
+        }
     }
 
     @Test func disableDuringSlowActivationWaitsForActivationToFinish() async throws {

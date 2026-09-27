@@ -22,6 +22,9 @@ public final class AppSettings {
     public var showsMenuBarIcon: Bool {
         didSet { save(showsMenuBarIcon, forKey: Keys.showsMenuBarIcon) }
     }
+    public var pillSelection: PillSelection {
+        didSet { save(pillSelection, forKey: Keys.pillSelection) }
+    }
 
     private let defaults: UserDefaults?
 
@@ -32,6 +35,7 @@ public final class AppSettings {
         static let notchSize = "islet.settings.notchSize"
         static let displayPlacement = "islet.settings.displayPlacement"
         static let showsMenuBarIcon = "islet.settings.showsMenuBarIcon"
+        static let pillSelection = "islet.settings.pillSelection"
     }
 
     public init(defaults: UserDefaults? = nil) {
@@ -42,6 +46,7 @@ public final class AppSettings {
         notchSize = Self.load(NotchSize.self, forKey: Keys.notchSize, from: defaults) ?? .default
         displayPlacement = Self.load(NotchDisplayPlacement.self, forKey: Keys.displayPlacement, from: defaults) ?? .default
         showsMenuBarIcon = Self.load(Bool.self, forKey: Keys.showsMenuBarIcon, from: defaults) ?? true
+        pillSelection = Self.load(PillSelection.self, forKey: Keys.pillSelection, from: defaults) ?? .default
     }
 
     public func resetAnimation() {
@@ -55,6 +60,7 @@ public final class AppSettings {
         notchSize = .default
         displayPlacement = .default
         showsMenuBarIcon = true
+        pillSelection = .default
     }
 
     private static func load<T: Decodable>(_ type: T.Type, forKey key: String, from defaults: UserDefaults?) -> T? {

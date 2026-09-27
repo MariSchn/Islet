@@ -12,9 +12,10 @@ struct AppSettingsTests {
         #expect(settings.notchSize == .medium)
         #expect(settings.displayPlacement == .builtIn)
         #expect(settings.showsMenuBarIcon)
+        #expect(settings.pillSelection == .lastViewed)
     }
 
-    @Test func persistsNotchSizeDisplayAndMenuBarIcon() {
+    @Test func persistsNotchSizeDisplayMenuBarIconAndPillSelection() {
         let suite = "AppSettingsTests." + UUID().uuidString
         let defaults = UserDefaults(suiteName: suite)!
         defer {
@@ -26,17 +27,20 @@ struct AppSettingsTests {
         first.notchSize = .large
         first.displayPlacement = .named("Studio Display")
         first.showsMenuBarIcon = false
+        first.pillSelection = .latestActivity
 
         let second = AppSettings(defaults: defaults)
         #expect(second.notchSize == .large)
         #expect(second.displayPlacement == .named("Studio Display"))
         #expect(!second.showsMenuBarIcon)
+        #expect(second.pillSelection == .latestActivity)
 
         second.resetAll()
         let third = AppSettings(defaults: defaults)
         #expect(third.notchSize == .medium)
         #expect(third.displayPlacement == .builtIn)
         #expect(third.showsMenuBarIcon)
+        #expect(third.pillSelection == .lastViewed)
     }
 
     @Test func notchSizeScalesTheControllerGeometry() {

@@ -83,10 +83,35 @@ public final class PluginRegistry {
         entries.filter { !disabledIDs.contains($0.id) }
     }
 
-    public var activePill: PillStatus? {
-        enabledEntries
-            .compactMap(\.context.pillStatus)
-            .max { $0.priority < $1.priority }
+    public func activePill(_ selection: PillSelection, keeping heldID: String? = nil) -> PillStatus? {
+        pillOwner(selection, keeping: heldID).flatMap { entry(for: $0)?.context.pillStatus }
+    }
+
+    public func pillOwner(_ selection: PillSelection, keeping heldID: String? = nil) -> String? {
+        if let urgent = pillCandidates.max(by: { $0.pill.priority < $1.pill.priority }), urgent.pill.priority >= .attention {
+            return urgent.id
+        }
+        return pillHolder(selection, keeping: heldID)
+    }
+
+    public func pillHolder(_ selection: PillSelection, keeping heldID: String? = nil) -> String? {
+        let candidates = pillCandidates
+        let mostImportant = candidates.max { $0.pill.priority < $1.pill.priority }
+        switch selection {
+        case .mostImportant:
+            return mostImportant?.id
+        case .lastViewed:
+            let held = candidates.first { $0.id == heldID } ?? candidates.first { $0.id == selectedID }
+            return (held ?? mostImportant)?.id
+        case .latestActivity:
+            return candidates.max { $0.activity < $1.activity }?.id
+        }
+    }
+
+    private var pillCandidates: [(id: String, pill: PillStatus, activity: Int)] {
+        enabledEntries.compactMap { entry in
+            entry.context.pillStatus.map { (id: entry.id, pill: $0, activity: entry.context.pillActivity) }
+        }
     }
 
     public var announcements: [PillAnnouncement] {

@@ -391,7 +391,7 @@ public final class AgentSessionStore {
         let finished = recentlyFinishedSessions
         guard let first = finished.first else { return nil }
         let text = finished.count == 1 ? "\(first.displayName) finished" : "\(finished.count) agents finished"
-        return PillStatus(text: text, systemImage: "checkmark.circle.fill", priority: .info, ring: statusRing)
+        return PillStatus(text: text, systemImage: "checkmark.circle.fill", priority: .ambient, ring: statusRing)
     }
 
     public var statusRing: PillStatus.Ring {
