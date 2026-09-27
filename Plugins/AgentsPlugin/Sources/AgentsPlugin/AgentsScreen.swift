@@ -641,7 +641,7 @@ struct AgentsSettings: View {
             } header: {
                 Text("Pill")
             } footer: {
-                Text("The status ring shows how many sessions need you, are working, have just finished or are idle. Summary text shows what the agents are doing instead. The pill always appears when an agent needs you.")
+                Text("The status ring shows how many sessions need you, are working, have just finished or are idle. Summary text shows what the agents are doing instead. Hiding finished sessions also skips their status change. The pill always appears when an agent needs you.")
             }
             Section {
                 LabeledContent("Recent actions") {
@@ -658,7 +658,9 @@ struct AgentsSettings: View {
                     LabeledContent("Show") {
                         VStack(alignment: .leading) {
                             Toggle("5-hour limit", isOn: $controller.display.showsFiveHourLimit)
+                                .disabled(!controller.display.showsWeeklyLimit)
                             Toggle("Weekly limit", isOn: $controller.display.showsWeeklyLimit)
+                                .disabled(!controller.display.showsFiveHourLimit)
                             Toggle("Time until reset", isOn: $controller.display.showsResetTimes)
                         }
                     }

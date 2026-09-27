@@ -1,7 +1,7 @@
 import Foundation
 
 public struct ActivityEntry: Identifiable, Sendable, Equatable {
-    public static let limit = 20
+    public static let limit = 10
 
     public let id: UUID
     public let toolName: String

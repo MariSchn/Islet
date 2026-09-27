@@ -1,4 +1,5 @@
 import Foundation
+import IsletCore
 import Testing
 @testable import AgentsPlugin
 
@@ -105,30 +106,30 @@ struct AgentSessionStoreTests {
         let store = AgentSessionStore()
         store.apply(HookEvent(kind: .sessionStart, sessionID: "s1", cwd: "/tmp/proj"))
         #expect(store.sessions.isEmpty)
-        #expect(store.pillStatus == nil)
+        #expect(store.pillStatus(for: DisplaySettings()) == nil)
 
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s1", prompt: "fix the auth bug\nmore details"))
         #expect(store.sessions.count == 1)
         #expect(store.sessions[0].projectName == "proj")
         #expect(store.sessions[0].task == "fix the auth bug")
         #expect(store.sessions[0].state == .working)
-        #expect(store.pillStatus?.text == "proj")
+        #expect(store.pillStatus(for: DisplaySettings())?.text == "proj")
 
         store.apply(HookEvent(kind: .preToolUse, sessionID: "s1", toolName: "Read", toolInput: .object(["file_path": .string("/a/b.swift")])))
         #expect(store.sessions[0].activity == "Read b.swift")
-        #expect(store.pillStatus?.text == "Read b.swift")
+        #expect(store.pillStatus(for: DisplaySettings())?.text == "Read b.swift")
 
         store.apply(HookEvent(kind: .notification, sessionID: "s1", message: "Claude needs your permission to use Bash", notificationType: "permission_prompt"))
         #expect(store.sessions[0].state == .needsAttention("Claude needs your permission to use Bash"))
-        #expect(store.pillStatus?.priority == .attention)
-        #expect(store.pillStatus?.text == "proj needs you")
+        #expect(store.pillStatus(for: DisplaySettings())?.priority == .attention)
+        #expect(store.pillStatus(for: DisplaySettings())?.text == "proj needs you")
 
         store.apply(HookEvent(kind: .postToolUse, sessionID: "s1", toolName: "Bash"))
         #expect(store.sessions[0].state == .working)
 
         store.apply(HookEvent(kind: .stop, sessionID: "s1"))
         #expect(store.sessions[0].state == .done)
-        #expect(store.pillStatus?.text == "proj finished")
+        #expect(store.pillStatus(for: DisplaySettings())?.text == "proj finished")
 
         store.apply(HookEvent(kind: .notification, sessionID: "s1", notificationType: "idle_prompt"))
         #expect(store.sessions[0].state == .done)
@@ -167,15 +168,15 @@ struct AgentSessionStoreTests {
         let store = AgentSessionStore { clock }
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", cwd: "/one", prompt: "x"))
         store.apply(HookEvent(kind: .stop, sessionID: "a"))
-        #expect(store.pillStatus?.text == "one finished")
+        #expect(store.pillStatus(for: DisplaySettings())?.text == "one finished")
 
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "b", cwd: "/two", prompt: "y"))
-        #expect(store.pillStatus?.text == "two")
+        #expect(store.pillStatus(for: DisplaySettings())?.text == "two")
         store.apply(HookEvent(kind: .sessionEnd, sessionID: "b"))
-        #expect(store.pillStatus?.text == "one finished")
+        #expect(store.pillStatus(for: DisplaySettings())?.text == "one finished")
 
         clock = clock.addingTimeInterval(AgentSessionStore.finishedPillDuration + 1)
-        #expect(store.pillStatus == nil)
+        #expect(store.pillStatus(for: DisplaySettings()) == nil)
         #expect(store.sessions.count == 1)
     }
 
@@ -185,12 +186,12 @@ struct AgentSessionStoreTests {
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "local", cwd: "/one", prompt: "x", host: "macbook"))
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "remote", cwd: "/two", prompt: "y", host: "devbox"))
         #expect(store.sessions.map(\.isRemote) == [true, false])
-        #expect(store.pillStatus?.text == "2 agents working")
+        #expect(store.pillStatus(for: DisplaySettings())?.text == "2 agents working")
 
         clock = clock.addingTimeInterval(AgentSessionStore.unreachableTimeout + 1)
         store.markUnreachableSessions()
         #expect(store.sessions.map(\.isUnreachable) == [true, false])
-        #expect(store.pillStatus?.text == "one")
+        #expect(store.pillStatus(for: DisplaySettings())?.text == "one")
 
         store.apply(HookEvent(kind: .preToolUse, sessionID: "remote", toolName: "Read"))
         #expect(store.sessions[0].isUnreachable == false)
@@ -211,7 +212,7 @@ struct AgentSessionStoreTests {
         store.apply(HookEvent(kind: .notification, sessionID: "s", message: "Authentication successful", notificationType: "auth_success"))
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s", prompt: "<task-notification>done</task-notification>"))
         #expect(store.sessions.isEmpty)
-        #expect(store.pillStatus == nil)
+        #expect(store.pillStatus(for: DisplaySettings()) == nil)
         #expect(changes == 0)
 
         clock = clock.addingTimeInterval(30)
@@ -365,15 +366,15 @@ struct AgentSessionStoreTests {
         store.apply(HookEvent(kind: .stop, sessionID: "second-done"))
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "interrupted", prompt: "d"))
         store.markInterrupted("interrupted")
-        #expect(store.pillStatus?.ring?.segments == [
+        #expect(store.pillStatus(for: DisplaySettings())?.ring?.segments == [
             .init(value: 1, tint: SessionColors.workingTint),
             .init(value: 2, tint: SessionColors.finishedTint),
             .init(value: 1, tint: SessionColors.idleTint),
         ])
 
         store.apply(HookEvent(kind: .notification, sessionID: "working", message: "Pick one", notificationType: "elicitation_dialog"))
-        #expect(store.pillStatus?.priority == .attention)
-        #expect(store.pillStatus?.ring?.segments.first == .init(value: 1, tint: SessionColors.attentionTint))
+        #expect(store.pillStatus(for: DisplaySettings())?.priority == .attention)
+        #expect(store.pillStatus(for: DisplaySettings())?.ring?.segments.first == .init(value: 1, tint: SessionColors.attentionTint))
     }
 
     @Test func statusChangesAreAnnouncedOncePreferringAttention() {
@@ -413,7 +414,6 @@ struct AgentSessionStoreTests {
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "b", cwd: "/p/beta", prompt: "go"))
         store.apply(HookEvent(kind: .stop, sessionID: "b"))
         var display = DisplaySettings()
-        #expect(store.pillStatus(for: display) == store.pillStatus)
         #expect(store.pillStatus(for: display)?.ring != nil)
 
         display.pillContent = .summary
@@ -448,9 +448,9 @@ struct AgentSessionStoreTests {
         let store = AgentSessionStore()
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", cwd: "/p/proj", prompt: "hi"))
         store.apply(HookEvent(kind: .stop, sessionID: "a", cwd: "/p/proj"))
-        #expect(store.pillStatus?.text == "proj finished")
+        #expect(store.pillStatus(for: DisplaySettings())?.text == "proj finished")
         store.apply(HookEvent(kind: .stop, sessionID: "a", cwd: "/p/proj", title: "islet-main"))
-        #expect(store.pillStatus?.text == "islet-main finished")
+        #expect(store.pillStatus(for: DisplaySettings())?.text == "islet-main finished")
     }
 
     @Test func sessionsCarryTheirCurrentTitle() {
@@ -527,12 +527,12 @@ struct AgentSessionStoreTests {
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", cwd: "/x/one", prompt: "one"))
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "b", cwd: "/x/two", prompt: "two"))
         #expect(store.sessions.map(\.id) == ["b", "a"])
-        #expect(store.pillStatus?.text == "2 agents working")
+        #expect(store.pillStatus(for: DisplaySettings())?.text == "2 agents working")
 
         store.apply(HookEvent(kind: .notification, sessionID: "a", message: "Claude needs your permission", notificationType: "permission_prompt"))
         store.apply(HookEvent(kind: .permissionRequest, sessionID: "b", toolName: "Bash", toolInput: .object(["command": .string("rm -rf build")])))
         #expect(store.sessions.first { $0.id == "b" }?.state == .needsAttention("Wants to $ rm -rf build"))
-        #expect(store.pillStatus?.text == "2 agents need you")
+        #expect(store.pillStatus(for: DisplaySettings())?.text == "2 agents need you")
 
         store.dismiss("a")
         #expect(store.sessions.map(\.id) == ["b"])
@@ -545,7 +545,7 @@ struct AgentSessionStoreTests {
         try await waitForPendingRequest(in: store)
         let request = try #require(store.sessions.first?.pendingRequest)
         #expect(request.kind == .permission(tool: "Bash", detail: "rm -rf build"))
-        #expect(store.pillStatus?.text == "one needs you")
+        #expect(store.pillStatus(for: DisplaySettings())?.text == "one needs you")
 
         store.decide(request.id, .allow)
         #expect(await reply.body == #"{"hookSpecificOutput":{"decision":{"behavior":"allow"},"hookEventName":"PermissionRequest"}}"#)
@@ -628,7 +628,7 @@ struct AgentSessionStoreTests {
         store.markInterrupted("a")
         #expect(store.sessions[0].state == .interrupted)
         #expect(store.sessions[0].activity == nil)
-        #expect(store.pillStatus == nil)
+        #expect(store.pillStatus(for: DisplaySettings()) == nil)
         #expect(alerts.isEmpty)
 
         store.apply(HookEvent(kind: .notification, sessionID: "a", notificationType: "idle_prompt"))
@@ -833,14 +833,14 @@ struct AgentsPluginSizingTests {
         func sessions(_ count: Int) -> [AgentSession] {
             (0..<count).map { AgentSession(id: "\($0)", agent: .claudeCode, host: nil, cwd: nil, task: nil, activity: nil, state: .working, startedAt: .now, turnStartedAt: .now, updatedAt: .now) }
         }
-        #expect(AgentsPlugin.contentSize(for: [], expanded: [], showsUsage: false) == CGSize(width: 520, height: 130))
-        #expect(AgentsPlugin.contentSize(for: sessions(1), expanded: [], showsUsage: false) == CGSize(width: 520, height: 92))
-        #expect(AgentsPlugin.contentSize(for: sessions(2), expanded: [], showsUsage: false) == CGSize(width: 520, height: 166))
-        #expect(AgentsPlugin.contentSize(for: sessions(4), expanded: [], showsUsage: false) == AgentsPlugin.contentSize(for: sessions(9), expanded: [], showsUsage: false))
+        #expect(AgentsPlugin.contentSize(for: [], expanded: [], showsUsage: false, historyLength: 8) == CGSize(width: 520, height: 130))
+        #expect(AgentsPlugin.contentSize(for: sessions(1), expanded: [], showsUsage: false, historyLength: 8) == CGSize(width: 520, height: 92))
+        #expect(AgentsPlugin.contentSize(for: sessions(2), expanded: [], showsUsage: false, historyLength: 8) == CGSize(width: 520, height: 166))
+        #expect(AgentsPlugin.contentSize(for: sessions(4), expanded: [], showsUsage: false, historyLength: 8) == AgentsPlugin.contentSize(for: sessions(9), expanded: [], showsUsage: false, historyLength: 8))
         let usage = AgentsPlugin.usageBarHeight + AgentsPlugin.rowSpacing
-        #expect(AgentsPlugin.contentSize(for: [], expanded: [], showsUsage: true).height == 130 + usage)
-        #expect(AgentsPlugin.contentSize(for: sessions(1), expanded: [], showsUsage: true).height == 92 + usage)
-        #expect(AgentsPlugin.contentSize(for: sessions(9), expanded: [], showsUsage: true).height == AgentsPlugin.maxContentHeight + usage)
+        #expect(AgentsPlugin.contentSize(for: [], expanded: [], showsUsage: true, historyLength: 8).height == 130 + usage)
+        #expect(AgentsPlugin.contentSize(for: sessions(1), expanded: [], showsUsage: true, historyLength: 8).height == 92 + usage)
+        #expect(AgentsPlugin.contentSize(for: sessions(9), expanded: [], showsUsage: true, historyLength: 8).height == AgentsPlugin.maxContentHeight + usage)
     }
 
     @Test func expandedRowsShowAtMostTheConfiguredNumberOfActions() {
@@ -852,7 +852,6 @@ struct AgentsPluginSizingTests {
         #expect(AgentsPlugin.visibleActivities(of: session, historyLength: 3).map(\.title) == ["Search 7", "Search 8", "Search 9"])
         #expect(AgentsPlugin.visibleActivities(of: session, historyLength: 20).count == 10)
         #expect(AgentsPlugin.contentSize(for: [session], expanded: [], showsUsage: false, historyLength: 3) == AgentsPlugin.contentSize(for: [session], expanded: [], showsUsage: false, historyLength: 5))
-        #expect(AgentsPlugin.contentSize(for: [session], expanded: ["a"], showsUsage: false) == AgentsPlugin.contentSize(for: [session], expanded: ["a"], showsUsage: false, historyLength: 8))
     }
 
     @Test func historyLengthStaysWithinItsRange() {
@@ -866,9 +865,9 @@ struct AgentsPluginSizingTests {
 
     @Test func pendingRequestsMakeRowsTaller() {
         var session = AgentSession(id: "a", agent: .claudeCode, host: nil, cwd: nil, task: nil, activity: nil, state: .working, startedAt: .now, turnStartedAt: .now, updatedAt: .now)
-        let plain = AgentsPlugin.contentSize(for: [session], expanded: [], showsUsage: false).height
+        let plain = AgentsPlugin.contentSize(for: [session], expanded: [], showsUsage: false, historyLength: 8).height
         session.pendingRequests = [PendingRequest(toolName: "Bash", toolInput: .object(["command": .string("ls")]))!]
-        let permission = AgentsPlugin.contentSize(for: [session], expanded: [], showsUsage: false).height
+        let permission = AgentsPlugin.contentSize(for: [session], expanded: [], showsUsage: false, historyLength: 8).height
         #expect(permission > plain)
         session.pendingRequests = [PendingRequest(toolName: "AskUserQuestion", toolInput: .object([
             "questions": .array([
@@ -876,21 +875,21 @@ struct AgentsPluginSizingTests {
                 .object(["question": .string("Multi?"), "multiSelect": .bool(true), "options": .array([.object(["label": .string("X")])])]),
             ]),
         ]))!]
-        let question = AgentsPlugin.contentSize(for: [session], expanded: [], showsUsage: false).height
+        let question = AgentsPlugin.contentSize(for: [session], expanded: [], showsUsage: false, historyLength: 8).height
         #expect(question > permission)
         #expect(question <= AgentsPlugin.maxContentHeight)
     }
 
     @Test func expandedRowsGrowWithActivityAndPlan() {
         var session = AgentSession(id: "a", agent: .claudeCode, host: nil, cwd: nil, task: nil, activity: nil, state: .working, startedAt: .now, turnStartedAt: .now, updatedAt: .now)
-        let collapsed = AgentsPlugin.contentSize(for: [session], expanded: [], showsUsage: false).height
-        let empty = AgentsPlugin.contentSize(for: [session], expanded: ["a"], showsUsage: false).height
+        let collapsed = AgentsPlugin.contentSize(for: [session], expanded: [], showsUsage: false, historyLength: 8).height
+        let empty = AgentsPlugin.contentSize(for: [session], expanded: ["a"], showsUsage: false, historyLength: 8).height
         #expect(empty > collapsed)
         session.activities = (0..<3).map { _ in ActivityEntry(event: HookEvent(kind: .preToolUse, sessionID: "a", toolName: "Read"), at: .now, isComplete: true) }
-        let withActivity = AgentsPlugin.contentSize(for: [session], expanded: ["a"], showsUsage: false).height
+        let withActivity = AgentsPlugin.contentSize(for: [session], expanded: ["a"], showsUsage: false, historyLength: 8).height
         #expect(withActivity == empty + 2 * AgentsPlugin.activityEntryHeight)
         session.plan = "# Plan"
-        #expect(AgentsPlugin.contentSize(for: [session], expanded: ["a"], showsUsage: false).height > withActivity)
+        #expect(AgentsPlugin.contentSize(for: [session], expanded: ["a"], showsUsage: false, historyLength: 8).height > withActivity)
     }
 }
 
@@ -1508,5 +1507,69 @@ struct HookServerTests {
             cancelled += 1
             open(with: .empty)
         }
+    }
+}
+
+@MainActor
+struct DisplaySettingsControllerTests {
+    private func makeController() -> AgentsController {
+        let directory = FileManager.default.temporaryDirectory.appending(path: "DisplaySettingsControllerTests." + UUID().uuidString)
+        let usage = UsageMonitor(isEnabled: true, accessToken: { "token" }, load: { request in
+            (Data(#"{"five_hour":{"utilization":40,"resets_at":null},"seven_day":{"utilization":10,"resets_at":null}}"#.utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        })
+        return AgentsController(token: "t", claudeDirectory: directory, codexDirectory: directory, port: 0, showsUsage: true, usage: usage)
+    }
+
+    private func waitUntil(_ condition: @MainActor () -> Bool) async throws {
+        for _ in 0..<200 where !condition() {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(condition())
+    }
+
+    @Test func changingTheDisplaySettingsSavesAndRefreshesOnlyOnRealChanges() {
+        let controller = makeController()
+        var saved: [DisplaySettings] = []
+        var refreshes = 0
+        controller.onDisplaySettingsChange = { saved.append($0) }
+        controller.store.onChange = { refreshes += 1 }
+
+        controller.display.historyLength = 3
+        controller.display.historyLength = 3
+        controller.display = controller.display
+
+        #expect(saved.map(\.historyLength) == [3])
+        #expect(refreshes == 1)
+    }
+
+    @Test func hidingBothLimitsRemovesTheUsageBar() async throws {
+        let controller = makeController()
+        controller.usage.refresh(force: true)
+        try await waitUntil { controller.usage.usage != nil }
+        #expect(controller.showsUsageBar)
+        let withBar = AgentsPlugin.contentSize(for: [], expanded: [], showsUsage: controller.showsUsageBar, historyLength: 8).height
+
+        controller.display.showsFiveHourLimit = false
+        #expect(controller.visibleUsage?.fiveHour == nil)
+        #expect(controller.showsUsageBar)
+
+        controller.display.showsWeeklyLimit = false
+        #expect(!controller.showsUsageBar)
+        let withoutBar = AgentsPlugin.contentSize(for: [], expanded: [], showsUsage: controller.showsUsageBar, historyLength: 8).height
+        #expect(withBar - withoutBar == AgentsPlugin.usageBarHeight + AgentsPlugin.rowSpacing)
+    }
+
+    @Test func finishedAnnouncementsFollowTheFinishedPillSetting() {
+        let controller = makeController()
+        let finished = PillAnnouncement(text: "a finished", systemImage: "checkmark.circle.fill", tint: SessionColors.finishedTint)
+        let attention = PillAnnouncement(text: "a · Has a question", systemImage: "exclamationmark.circle.fill", tint: SessionColors.attentionTint, priority: .attention)
+        #expect(controller.shouldAnnounce(finished))
+
+        controller.display.pillShowsFinished = false
+        #expect(!controller.shouldAnnounce(finished))
+        #expect(controller.shouldAnnounce(attention))
+
+        controller.alerts.announcesInNotch = false
+        #expect(!controller.shouldAnnounce(attention))
     }
 }

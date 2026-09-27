@@ -22,7 +22,7 @@ public final class AgentsPlugin: IsletPlugin {
     static let planHeight: CGFloat = 140
     static let maxContentHeight = 2 * contentPadding + CGFloat(maxVisibleRows) * rowHeight + CGFloat(maxVisibleRows - 1) * rowSpacing
 
-    static func contentSize(for sessions: [AgentSession], expanded: Set<String>, showsUsage: Bool, historyLength: Int = DisplaySettings().historyLength) -> CGSize {
+    static func contentSize(for sessions: [AgentSession], expanded: Set<String>, showsUsage: Bool, historyLength: Int) -> CGSize {
         let usage = showsUsage ? usageBarHeight + rowSpacing : 0
         guard !sessions.isEmpty else { return CGSize(width: contentWidth, height: emptyContentHeight + usage) }
         let rows = sessions.map { rowHeight(for: $0, expanded: expanded.contains($0.id), historyLength: historyLength) }.reduce(0, +) + CGFloat(sessions.count - 1) * rowSpacing
@@ -115,7 +115,7 @@ public final class AgentsPlugin: IsletPlugin {
         var announcer = StatusAnnouncer()
         controller.store.onChange = { [context, controller] in
             context.pillStatus = controller.store.pillStatus(for: controller.display)
-            if let announcement = announcer.announcement(for: controller.store.sessions), controller.alerts.announcesInNotch {
+            if let announcement = announcer.announcement(for: controller.store.sessions), controller.shouldAnnounce(announcement) {
                 context.announce(announcement)
             }
             context.contentSize = Self.contentSize(for: controller.store.sessions, expanded: controller.expandedSessionIDs, showsUsage: controller.showsUsageBar, historyLength: controller.display.historyLength)
@@ -175,6 +175,10 @@ public final class AgentsController {
         return display.visibleUsage(current)
     }
     public var showsUsageBar: Bool { visibleUsage != nil }
+
+    func shouldAnnounce(_ announcement: PillAnnouncement) -> Bool {
+        alerts.announcesInNotch && (announcement.priority == .attention || display.pillShowsFinished)
+    }
     public var display: DisplaySettings {
         didSet {
             guard display != oldValue else { return }

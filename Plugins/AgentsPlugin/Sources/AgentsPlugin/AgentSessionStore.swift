@@ -377,10 +377,6 @@ public final class AgentSessionStore {
         }
     }
 
-    public var pillStatus: PillStatus? {
-        pillStatus(for: DisplaySettings())
-    }
-
     public func pillStatus(for display: DisplaySettings) -> PillStatus? {
         let ring = display.pillContent == .ring ? statusRing : nil
         let attention = attentionSessions
