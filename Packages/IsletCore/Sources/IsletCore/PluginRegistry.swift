@@ -67,6 +67,7 @@ public final class PluginRegistry {
     public private(set) var disabledIDs: Set<String>
     public private(set) var selectedID: String?
 
+    private var expandedNotches: Set<ObjectIdentifier> = []
     private let storageRoot: URL
     private let userDefaults: UserDefaults
     private let disabledKey = "islet.disabledPlugins"
@@ -135,6 +136,11 @@ public final class PluginRegistry {
     }
 
     @discardableResult
+    public func register(_ type: any IsletPlugin.Type) async throws -> PluginEntry {
+        try await register(manifest: type.manifest) { type.init(context: $0) }
+    }
+
+    @discardableResult
     public func register(
         manifest: PluginManifest,
         make: (PluginContext) -> any IsletPlugin
@@ -177,12 +183,38 @@ public final class PluginRegistry {
             entry.context.clearAnnouncement()
         }
         ensureSelection()
+        updateScreenVisibility()
+    }
+
+    public func setNotchExpanded(_ expanded: Bool, by notch: AnyObject) {
+        if expanded {
+            expandedNotches.insert(ObjectIdentifier(notch))
+        } else {
+            expandedNotches.remove(ObjectIdentifier(notch))
+        }
+        updateScreenVisibility()
+    }
+
+    public func deactivateAll() async {
+        for entry in entries {
+            await transition(entry, toActive: false)
+        }
     }
 
     public func select(_ id: String?) {
         guard id == nil || (entry(for: id!) != nil && isEnabled(id!)) else { return }
         selectedID = id
         userDefaults.set(id, forKey: selectedKey)
+        updateScreenVisibility()
+    }
+
+    private func updateScreenVisibility() {
+        for entry in entries {
+            let visible = !expandedNotches.isEmpty && entry.id == selectedID && isEnabled(entry.id)
+            if entry.context.isScreenVisible != visible {
+                entry.context.isScreenVisible = visible
+            }
+        }
     }
 
     @discardableResult
@@ -211,12 +243,14 @@ public final class PluginRegistry {
                 do {
                     try await entry.plugin.activate()
                     entry.state = .active
+                    entry.context.isActive = true
                 } catch {
                     entry.state = .failed(error)
                 }
             } else {
                 guard entry.state.isActive else { return }
                 entry.state = .deactivating
+                entry.context.isActive = false
                 await entry.plugin.deactivate()
                 entry.state = .inactive
             }

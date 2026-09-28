@@ -1,6 +1,7 @@
 import CoreGraphics
 import Testing
 import IsletCore
+import IsletHost
 
 struct HorizontalSwipeRecognizerTests {
     @Test func leftwardSwipeNavigatesForwardOncePerGesture() {

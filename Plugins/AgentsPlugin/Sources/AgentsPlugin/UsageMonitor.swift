@@ -1,28 +1,28 @@
 import Foundation
 import Security
 
-public struct UsageWindow: Sendable, Equatable {
-    public var utilization: Double
-    public var resetsAt: Date?
+struct UsageWindow: Sendable, Equatable {
+    var utilization: Double
+    var resetsAt: Date?
 
-    public init(utilization: Double, resetsAt: Date?) {
+    init(utilization: Double, resetsAt: Date?) {
         self.utilization = utilization
         self.resetsAt = resetsAt
     }
 }
 
-public struct ClaudeUsage: Sendable, Equatable {
-    public var fiveHour: UsageWindow?
-    public var sevenDay: UsageWindow?
+struct ClaudeUsage: Sendable, Equatable {
+    var fiveHour: UsageWindow?
+    var sevenDay: UsageWindow?
 
-    public init(fiveHour: UsageWindow?, sevenDay: UsageWindow?) {
+    init(fiveHour: UsageWindow?, sevenDay: UsageWindow?) {
         self.fiveHour = fiveHour
         self.sevenDay = sevenDay
     }
 
-    public var isEmpty: Bool { fiveHour == nil && sevenDay == nil }
+    var isEmpty: Bool { fiveHour == nil && sevenDay == nil }
 
-    public static func decode(_ data: Data) throws -> ClaudeUsage {
+    static func decode(_ data: Data) throws -> ClaudeUsage {
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw UsageError.unexpectedResponse }
         return ClaudeUsage(fiveHour: window(object["five_hour"]), sevenDay: window(object["seven_day"]))
     }
@@ -39,12 +39,12 @@ public struct ClaudeUsage: Sendable, Equatable {
     }
 }
 
-public enum UsageError: Error, LocalizedError, Equatable {
+enum UsageError: Error, LocalizedError, Equatable {
     case notLoggedIn
     case unexpectedResponse
     case status(Int)
 
-    public var errorDescription: String? {
+    var errorDescription: String? {
         switch self {
         case .notLoggedIn: "Claude Code is not logged in"
         case .unexpectedResponse: "Unexpected usage response"
@@ -53,15 +53,15 @@ public enum UsageError: Error, LocalizedError, Equatable {
     }
 }
 
-public struct ClaudeCredentials: Sendable {
-    public static let keychainService = "Claude Code-credentials"
+struct ClaudeCredentials: Sendable {
+    static let keychainService = "Claude Code-credentials"
 
-    public static func accessToken(from data: Data) -> String? {
+    static func accessToken(from data: Data) -> String? {
         let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         return (object?["claudeAiOauth"] as? [String: Any])?["accessToken"] as? String
     }
 
-    public static func keychainAccessToken() -> String? {
+    static func keychainAccessToken() -> String? {
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: keychainService,
@@ -73,7 +73,7 @@ public struct ClaudeCredentials: Sendable {
         return accessToken(from: data)
     }
 
-    public static func fileAccessToken(in directory: URL) -> String? {
+    static func fileAccessToken(in directory: URL) -> String? {
         guard let data = try? Data(contentsOf: directory.appending(path: ".credentials.json")) else { return nil }
         return accessToken(from: data)
     }
@@ -81,18 +81,15 @@ public struct ClaudeCredentials: Sendable {
 
 @MainActor
 @Observable
-public final class UsageMonitor {
-    public static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
-    public static let refreshInterval: TimeInterval = 5 * 60
-    public static let minimumInterval: TimeInterval = 30
-    public static let maximumStaleness: TimeInterval = 30 * 60
+final class UsageMonitor {
+    static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
+    static let refreshInterval: TimeInterval = 5 * 60
+    static let minimumInterval: TimeInterval = 30
+    static let maximumStaleness: TimeInterval = 30 * 60
 
-    public private(set) var usage: ClaudeUsage? {
-        didSet { if usage != oldValue { onChange?() } }
-    }
-    public private(set) var error: String?
-    @ObservationIgnored public var onChange: (() -> Void)?
-    public var isEnabled: Bool {
+    private(set) var usage: ClaudeUsage?
+    private(set) var error: String?
+    var isEnabled: Bool {
         didSet {
             guard isEnabled != oldValue else { return }
             if isEnabled { startTimer() } else { clear() }
@@ -107,7 +104,7 @@ public final class UsageMonitor {
     private var timer: Task<Void, Never>?
     private var isActive = false
 
-    public init(
+    init(
         isEnabled: Bool = false,
         accessToken: @escaping @Sendable () -> String? = { ClaudeCredentials.keychainAccessToken() ?? ClaudeCredentials.fileAccessToken(in: URL.homeDirectory.appending(path: ".claude")) },
         load: @escaping @Sendable (URLRequest) async throws -> (Data, URLResponse) = { try await URLSession.shared.data(for: $0) }
@@ -117,12 +114,12 @@ public final class UsageMonitor {
         self.load = load
     }
 
-    public func start() {
+    func start() {
         isActive = true
         startTimer()
     }
 
-    public func stop() {
+    func stop() {
         isActive = false
         clear()
     }
@@ -134,7 +131,7 @@ public final class UsageMonitor {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(Self.refreshInterval))
                 guard !Task.isCancelled else { return }
-                await self?.refresh()
+                self?.refresh()
             }
         }
     }
@@ -157,7 +154,7 @@ public final class UsageMonitor {
         }
     }
 
-    public func refresh(force: Bool = false) {
+    func refresh(force: Bool = false) {
         guard isEnabled, task == nil else { return }
         if !force, let lastFetch, Date().timeIntervalSince(lastFetch) < Self.minimumInterval { return }
         lastFetch = Date()

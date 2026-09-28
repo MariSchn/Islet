@@ -89,8 +89,8 @@ private struct CounterScreen: View {
 The conventions, which all built-in plugins follow:
 
 - The class is `@MainActor public final class`, because `IsletPlugin` is main-actor isolated.
-- `public static let manifest` holds the identity the host registers the plugin under.
-- `public init(context: PluginContext)` keeps the context. The host creates the context and hands it to your initializer.
+- `public static let manifest` holds the identity the host registers the plugin under. It is required by `IsletPlugin`.
+- `public init(context: PluginContext)` keeps the context. It is also required by `IsletPlugin`: the host creates the context and hands it to your initializer.
 - State lives in an `@Observable` model owned by the plugin, not in `@State` of the screen. The host calls `makeScreen()` once and reuses the view, and it may show it on several displays at once.
 - `activate()` sets `context.contentSize`, so the notch opens at the right size. Without it the notch uses a default of 520 × 220 points (see [Sizing](sizing.md)).
 
@@ -112,16 +112,18 @@ targets:
 
 ## 4. Register the plugin
 
-In `App/AppDelegate.swift`, import the module and register it in `registerBuiltInPlugins()`:
+In `App/AppDelegate.swift`, import the module and add the type to `builtInPlugins`:
 
 ```swift
 import CounterPlugin
 
-// in registerBuiltInPlugins():
-try await registry.register(manifest: CounterPlugin.manifest) { CounterPlugin(context: $0) }
+static let builtInPlugins: [any IsletPlugin.Type] = [
+    // ...
+    CounterPlugin.self,
+]
 ```
 
-Registration order is the order of the tabs in the notch's navigation row. All registrations share one `do`/`catch`, so a plugin that fails to register (for example because of a duplicate or invalid id) also skips the ones after it.
+The order of the list is the order of the tabs in the notch's navigation row. Each plugin is registered on its own, so a plugin that fails to register (for example because of a duplicate or invalid id) is logged and skipped without affecting the others.
 
 New plugins are enabled by default. Users can turn them off under Settings › Plugins.
 

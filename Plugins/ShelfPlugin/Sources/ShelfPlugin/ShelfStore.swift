@@ -1,27 +1,27 @@
 import Foundation
 import Observation
+import os
 
 @MainActor
 @Observable
-public final class ShelfStore {
-    public private(set) var items: [ShelfItem] = [] {
-        didSet { onItemsChange?(items.count) }
-    }
-    @ObservationIgnored var onItemsChange: ((Int) -> Void)?
+final class ShelfStore {
+    private(set) var items: [ShelfItem] = []
 
     private let fileURL: URL
+    private let logger: Logger
 
-    public init(directory: URL) {
+    init(directory: URL, logger: Logger = Logger()) {
         fileURL = directory.appending(path: "shelf.json")
+        self.logger = logger
     }
 
-    public func load() {
+    func load() {
         guard let data = try? Data(contentsOf: fileURL) else { return }
         var loaded: [ShelfItem]
         do {
             loaded = try JSONDecoder().decode([ShelfItem].self, from: data)
         } catch {
-            NSLog("Shelf: could not read \(fileURL.path), keeping it aside: \(error)")
+            logger.error("Could not read \(self.fileURL.path, privacy: .public), keeping it aside: \(error, privacy: .public)")
             try? FileManager.default.moveItem(at: fileURL, to: fileURL.appendingPathExtension("corrupt"))
             return
         }
@@ -37,7 +37,7 @@ public final class ShelfStore {
     }
 
     @discardableResult
-    public func add(_ urls: [URL]) -> [ShelfItem] {
+    func add(_ urls: [URL]) -> [ShelfItem] {
         let existing = Set(items.map(\.url))
         var seen = Set<URL>()
         let added = urls
@@ -51,13 +51,13 @@ public final class ShelfStore {
         return added
     }
 
-    public func remove(_ id: ShelfItem.ID) {
+    func remove(_ id: ShelfItem.ID) {
         guard items.contains(where: { $0.id == id }) else { return }
         items.removeAll { $0.id == id }
         save()
     }
 
-    public func refreshReachability() {
+    func refreshReachability() {
         let snapshot = items.map { ($0.id, $0.url) }
         Task.detached(priority: .utility) { [weak self] in
             let results = snapshot.map { ($0.0, ShelfItem.checkReachable($0.1)) }
@@ -74,7 +74,7 @@ public final class ShelfStore {
         }
     }
 
-    public func removeAll() {
+    func removeAll() {
         items.removeAll()
         save()
     }
@@ -84,7 +84,7 @@ public final class ShelfStore {
             let data = try JSONEncoder().encode(items)
             try data.write(to: fileURL, options: .atomic)
         } catch {
-            NSLog("Shelf: failed to save: \(error)")
+            logger.error("Failed to save: \(error, privacy: .public)")
         }
     }
 }

@@ -1,16 +1,16 @@
 import AppKit
 import UserNotifications
 
-public struct AlertSettings: Sendable, Equatable {
-    public var attentionSound = true
-    public var attentionNotification = false
-    public var finishedSound = true
-    public var finishedNotification = false
-    public var announcesInNotch = true
+struct AlertSettings: Sendable, Equatable {
+    var attentionSound = true
+    var attentionNotification = false
+    var finishedSound = true
+    var finishedNotification = false
+    var announcesInNotch = true
 
-    public init() {}
+    init() {}
 
-    public var usesNotifications: Bool { attentionNotification || finishedNotification }
+    var usesNotifications: Bool { attentionNotification || finishedNotification }
 }
 
 @MainActor
@@ -45,8 +45,10 @@ final class SessionAlerter {
     }
 
     private static func reason(for session: AgentSession) -> String {
-        if case .needsAttention(let reason) = session.state { return reason }
-        return session.task ?? session.agent.displayName
+        switch session.state {
+        case .needsAttention(let reason), .failed(let reason): reason
+        case .starting, .working, .done, .interrupted: session.task ?? session.agent.displayName
+        }
     }
 
     private func play(_ name: String) {

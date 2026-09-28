@@ -5,14 +5,12 @@ let package = Package(
     name: "IsletCore",
     platforms: [.macOS(.v15)],
     products: [
-        .library(name: "IsletCore", targets: ["IsletCore"])
+        .library(name: "IsletCore", targets: ["IsletCore"]),
+        .library(name: "IsletTestSupport", targets: ["IsletTestSupport"])
     ],
     targets: [
-        .target(
-            name: "CSkyLight",
-            linkerSettings: [.unsafeFlags(["-F/System/Library/PrivateFrameworks", "-framework", "SkyLight"])]
-        ),
-        .target(name: "IsletCore", dependencies: ["CSkyLight"]),
-        .testTarget(name: "IsletCoreTests", dependencies: ["IsletCore"])
+        .target(name: "IsletCore"),
+        .target(name: "IsletTestSupport", dependencies: ["IsletCore"]),
+        .testTarget(name: "IsletCoreTests", dependencies: ["IsletCore", "IsletTestSupport"])
     ]
 )

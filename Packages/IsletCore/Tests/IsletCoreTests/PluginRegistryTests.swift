@@ -2,99 +2,7 @@ import Foundation
 import SwiftUI
 import Testing
 import IsletCore
-
-@MainActor
-final class StubPlugin: IsletPlugin {
-    static let manifest = PluginManifest(id: "test.stub", displayName: "Stub", systemImage: "circle")
-
-    let context: PluginContext
-    var activations = 0
-    var deactivations = 0
-    var activationDelay: Duration = .zero
-    var activationError: (any Error)?
-    var pillAfterActivation: PillStatus?
-
-    init(context: PluginContext) {
-        self.context = context
-    }
-
-    func activate() async throws {
-        activations += 1
-        if activationDelay > .zero {
-            try? await Task.sleep(for: activationDelay)
-        }
-        if let activationError { throw activationError }
-        if let pillAfterActivation { context.pillStatus = pillAfterActivation }
-    }
-
-    var deactivationDelay: Duration = .zero
-
-    func deactivate() async {
-        deactivations += 1
-        if deactivationDelay > .zero {
-            try? await Task.sleep(for: deactivationDelay)
-        }
-    }
-    var screenBuilds = 0
-    var acceptsFileDrops = false
-
-    func makeScreen() -> AnyView {
-        screenBuilds += 1
-        return AnyView(Text("stub"))
-    }
-}
-
-struct StubError: Error, Equatable {}
-
-let secondManifest = PluginManifest(id: "test.second", displayName: "Second", systemImage: "square")
-
-@MainActor
-final class Harness {
-    let suiteName = "IsletCoreTests." + UUID().uuidString
-    let defaults: UserDefaults
-    let root: URL
-
-    init() {
-        defaults = UserDefaults(suiteName: suiteName)!
-        root = FileManager.default.temporaryDirectory.appending(path: suiteName)
-    }
-
-    func makeRegistry() -> PluginRegistry {
-        PluginRegistry(storageRoot: root, userDefaults: defaults)
-    }
-
-    @discardableResult
-    func registerStub(in registry: PluginRegistry, configure: (StubPlugin) -> Void = { _ in }) async throws -> StubPlugin {
-        var created: StubPlugin?
-        try await registry.register(manifest: StubPlugin.manifest) { context in
-            let plugin = StubPlugin(context: context)
-            configure(plugin)
-            created = plugin
-            return plugin
-        }
-        return created!
-    }
-
-    @discardableResult
-    func registerSecond(in registry: PluginRegistry, configure: (StubPlugin) -> Void = { _ in }) async throws -> StubPlugin {
-        var created: StubPlugin?
-        try await registry.register(manifest: secondManifest) { context in
-            let plugin = StubPlugin(context: context)
-            configure(plugin)
-            created = plugin
-            return plugin
-        }
-        return created!
-    }
-
-    isolated deinit {
-        defaults.removePersistentDomain(forName: suiteName)
-        let preferencesFile = URL.libraryDirectory
-            .appending(path: "Preferences/\(suiteName).plist")
-        try? FileManager.default.removeItem(at: preferencesFile)
-        try? FileManager.default.removeItem(at: root)
-    }
-}
+import IsletTestSupport
 
 @Suite
 @MainActor
@@ -111,6 +19,29 @@ struct PluginRegistryTests {
         #expect(entry.state.isActive)
         #expect(registry.selectedID == "test.stub")
         #expect(FileManager.default.fileExists(atPath: entry.context.storageDirectory.path))
+    }
+
+    @Test func registersAPluginTypeByItsManifest() async throws {
+        let registry = harness.makeRegistry()
+
+        let entry = try await registry.register(StubPlugin.self)
+
+        #expect(entry.id == StubPlugin.manifest.id)
+        #expect(entry.plugin is StubPlugin)
+        #expect(entry.state.isActive)
+    }
+
+    @Test func deactivateAllStopsEveryActivePlugin() async throws {
+        let registry = harness.makeRegistry()
+        let first = try await harness.registerStub(in: registry)
+        let second = try await harness.registerSecond(in: registry)
+        await registry.setEnabled(false, for: secondManifest.id)
+
+        await registry.deactivateAll()
+
+        #expect(first.deactivations == 1)
+        #expect(second.deactivations == 1)
+        #expect(registry.entries.allSatisfy { !$0.state.isActive })
     }
 
     @Test func rejectsDuplicateAndInvalidIDs() async throws {

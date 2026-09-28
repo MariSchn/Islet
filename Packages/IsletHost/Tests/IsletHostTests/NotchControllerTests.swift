@@ -1,6 +1,8 @@
 import CoreGraphics
 import Testing
 import IsletCore
+import IsletHost
+import IsletTestSupport
 
 @Suite(.serialized)
 @MainActor
@@ -130,6 +132,20 @@ struct NotchControllerTests {
         await registry.setEnabled(false, for: "test.stub")
         await Task.yield()
         #expect(controller.pill == nil)
+    }
+
+    @Test func expandingShowsTheSelectedPluginsScreen() async throws {
+        let harness = Harness()
+        let registry = harness.makeRegistry()
+        let controller = makeController()
+        controller.attach(registry)
+        let stub = try await harness.registerStub(in: registry)
+        #expect(!stub.context.isScreenVisible)
+
+        controller.expand()
+        #expect(stub.context.isScreenVisible)
+        controller.collapse()
+        #expect(!stub.context.isScreenVisible)
     }
 
     @Test func pillFollowsSelectionSettingAndSelectedPlugin() async throws {

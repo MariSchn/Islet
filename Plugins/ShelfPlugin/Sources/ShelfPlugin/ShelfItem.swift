@@ -1,13 +1,13 @@
 import Foundation
 
-public struct ShelfItem: Identifiable, Codable, Equatable, Sendable {
-    public let id: UUID
-    public private(set) var url: URL
-    public let addedAt: Date
-    public internal(set) var isReachable: Bool
+struct ShelfItem: Identifiable, Codable, Equatable, Sendable {
+    let id: UUID
+    private(set) var url: URL
+    let addedAt: Date
+    var isReachable: Bool
     private var bookmark: Data?
 
-    public init(url: URL, addedAt: Date = .now) {
+    init(url: URL, addedAt: Date = .now) {
         self.id = UUID()
         self.url = Self.canonical(url)
         self.addedAt = addedAt
@@ -15,7 +15,7 @@ public struct ShelfItem: Identifiable, Codable, Equatable, Sendable {
         self.bookmark = try? url.bookmarkData(options: .minimalBookmark)
     }
 
-    public var name: String { url.lastPathComponent }
+    var name: String { url.lastPathComponent }
 
     static func canonical(_ url: URL) -> URL {
         url.standardizedFileURL.resolvingSymlinksInPath()

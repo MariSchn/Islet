@@ -25,7 +25,11 @@ public func activate() async throws {
 - The size is in points at the Default notch size, and it includes the host's padding: your view is inset by 12 points on every side. A `contentSize` of 360 × 120 leaves 336 × 96 points for your layout.
 - `nil` means the default size, 520 × 220 (`NotchGeometry.defaultContentSize`).
 - Set it before the notch first opens, in `init` or `activate()`, so it doesn't open at the default size and then jump.
-- Change it whenever your content changes. The resize is animated with the same animation as expanding the notch. `contentSize` is observable, so setting it from a model callback or a view action both work.
+- Change it whenever your content changes. The resize is animated with the same animation as expanding the notch. The simplest way is to derive it from your model, so it follows every change on its own:
+
+  ```swift
+  context.derive(\.contentSize) { [store] in Self.contentSize(forItemCount: store.items.count) }
+  ```
 - While the notch is open, the host lays out the plugins on either side of the selected one using their own `contentSize`, and animates the size when the user switches plugins.
 
 ## Clamping
@@ -51,11 +55,11 @@ When the height depends on your content (rows, expanded sections), derive it fro
 static func contentSize(for sessions: [AgentSession], expanded: Set<String>, showsUsage: Bool, historyLength: Int) -> CGSize
 ```
 
-It is called whenever the session store changes, its result is assigned to `context.contentSize`, and the views use the same `rowHeight`, `rowSpacing` and padding constants. A static function like this is easy to cover with unit tests (see [Testing](testing.md)).
+The plugin passes it to `context.derive(\.contentSize)`, so it is recomputed whenever the sessions, the expanded rows or the display settings change, and the views use the same `rowHeight`, `rowSpacing` and padding constants. A static function like this is easy to cover with unit tests (see [Testing](testing.md)).
 
 The other built-in plugins follow the same pattern:
 
-- `ShelfPlugin.contentSize(forItemCount:)` keeps a fixed height and grows the width with the number of files, between a minimum and a maximum after which the list scrolls. `ShelfStore` reports item changes through a callback, and the plugin only assigns a new size when it differs from the current one.
+- `ShelfPlugin.contentSize(forItemCount:)` keeps a fixed height and grows the width with the number of files, between a minimum and a maximum after which the list scrolls. The plugin derives it from `store.items.count`.
 - `MediaPlugin` keeps a fixed size while playing, so pausing or changing tracks doesn't move the notch, and grows the height by one row per playlist while the playlist browser is open.
 
 Use `@Environment(\.notchAnimation)` for animations inside your screen that go with a size change (see [API reference](api-reference.md#environment-notchanimation)).

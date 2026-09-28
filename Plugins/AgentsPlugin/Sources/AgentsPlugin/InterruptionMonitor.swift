@@ -22,7 +22,7 @@ final class InterruptionMonitor {
 
     func track(_ sessions: [AgentSession]) {
         var next: [String: Watch] = [:]
-        for session in sessions where !session.isRemote && (session.state == .working || session.state.requiresAttention) {
+        for session in sessions where !session.isRemote && Self.canBeInterrupted(session.state) {
             guard let path = session.transcriptPath else { continue }
             if let existing = watches[session.id], existing.path == path, existing.turnStartedAt == session.turnStartedAt {
                 next[session.id] = existing
@@ -31,6 +31,13 @@ final class InterruptionMonitor {
             }
         }
         watches = next
+    }
+
+    private static func canBeInterrupted(_ state: AgentSession.State) -> Bool {
+        switch state {
+        case .working, .needsAttention: true
+        case .starting, .done, .interrupted, .failed: false
+        }
     }
 
     func start() {

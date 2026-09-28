@@ -7,8 +7,8 @@ A plugin contributes up to four things:
 | What | How |
 | --- | --- |
 | The expanded screen | `makeScreen()` returns the SwiftUI view shown below the navigation row when the notch is open. |
-| Its size | `context.contentSize` tells the host how big the expanded area should be. |
-| The collapsed pill | `context.pillStatus` shows a short status next to the closed notch; `context.announce(_:)` briefly shows a line below it. |
+| Its size | `context.contentSize` tells the host how big the expanded area should be. `context.derive(\.contentSize) { ... }` keeps it in sync with your model. |
+| The collapsed pill | `context.pillStatus` shows a short status next to the closed notch, and can be derived the same way; `context.announce(_:)` briefly shows a line below it. |
 | A settings pane | `makeSettingsView()` adds a tab to the Islet settings window. |
 
 ## Pages
@@ -26,17 +26,19 @@ A plugin contributes up to four things:
 All built-in plugins live in `Plugins/` and use only the public `IsletCore` API, so they double as examples:
 
 - `HelloPlugin`: the minimal example. It covers a screen, a settings view, pill priorities and resizing at runtime.
-- `ShelfPlugin`: file drops (`acceptsFileDrops`), state that persists as JSON in `context.storageDirectory`, and a width that follows the number of items.
-- `MediaPlugin`: polling in `activate()`/`deactivate()`, a pill with artwork and tint, interchangeable data sources with per-source capabilities, a height that grows while a list is open, and stubbed sources in tests.
-- `AgentsPlugin`: a local server started in `activate()`, content size computed from state, a ring pill, announcements, bundled resources (`Bundle.module`) and a large settings pane.
+- `ShelfPlugin`: file drops (`acceptsFileDrops`), state that persists as JSON in `context.storageDirectory`, a width derived from the number of items, and logging through `context.logger`.
+- `MediaPlugin`: polling in `activate()`/`deactivate()` that slows down while its screen is hidden (`context.isScreenVisible`), a derived pill with artwork and tint, interchangeable data sources with per-source capabilities, a height that grows while a list is open, and stubbed sources in tests.
+- `AgentsPlugin`: a local server started in `activate()`, a pill and content size derived from its session store, a ring pill, announcements driven by `context.observe`, bundled resources (`Bundle.module`) and a large settings pane.
 
 ## Checklist for a new plugin
+
+With Claude Code, the `new-plugin` skill (`.claude/skills/new-plugin`) scaffolds the package, the plugin class, a test and the app wiring below, then builds and tests the result.
 
 - [ ] `Plugins/<Name>Plugin/Package.swift` with a library product and a dependency on `../../Packages/IsletCore`.
 - [ ] A `@MainActor public final class` conforming to `IsletPlugin`, with a `public static let manifest` and `public init(context: PluginContext)`.
 - [ ] A unique, valid manifest `id` (see [PluginManifest](api-reference.md#pluginmanifest)).
 - [ ] Package listed in `project.yml` under `packages` and as a dependency of the `Islet` target.
-- [ ] `import` and `registry.register(...)` in `App/AppDelegate.swift`.
-- [ ] `context.contentSize` set before the notch first opens.
+- [ ] `import` in `App/AppDelegate.swift` and the type added to `builtInPlugins`.
+- [ ] `context.contentSize` set or derived before the notch first opens.
 - [ ] `context.pillStatus` cleared (`nil`) when there is nothing to show.
 - [ ] Background work started in `activate()` and stopped in `deactivate()`.

@@ -1,4 +1,5 @@
 import AppKit
+import IsletCore
 import SwiftUI
 
 @MainActor
@@ -31,8 +32,8 @@ public final class NotchDisplayManager {
     private func observePlacement() {
         withObservationTracking {
             _ = settings.displayPlacement
-        } onChange: {
-            Task { @MainActor [weak self] in
+        } onChange: { [weak self] in
+            Task { @MainActor in
                 self?.relayout()
                 self?.observePlacement()
             }

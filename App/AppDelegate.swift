@@ -2,11 +2,22 @@ import AgentsPlugin
 import AppKit
 import HelloPlugin
 import IsletCore
+import IsletHost
 import MediaPlugin
+import os
 import ShelfPlugin
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    static let builtInPlugins: [any IsletPlugin.Type] = [
+        ShelfPlugin.self,
+        MediaPlugin.self,
+        AgentsPlugin.self,
+        HelloPlugin.self,
+    ]
+    private static let terminationTimeout: Duration = .seconds(2)
+    private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Islet", category: "app")
+
     let settings = AppSettings(defaults: .standard)
     let registry = PluginRegistry(
         storageRoot: URL.applicationSupportDirectory.appending(path: "Islet/Plugins", directoryHint: .isDirectory)
@@ -15,14 +26,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         makePanel(for: display)
     }
     private var statusItem: NSStatusItem?
+    private var registration: Task<Void, Never>?
     private lazy var settingsWindow = SettingsWindowController(settings: settings, registry: registry)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         displays.start()
         observeMenuBarIconSetting()
-        Task { @MainActor in
+        registration = Task { @MainActor in
             await registerBuiltInPlugins()
         }
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        var replied = false
+        let reply = {
+            guard !replied else { return }
+            replied = true
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        Task { @MainActor [registry, registration] in
+            await registration?.value
+            await registry.deactivateAll()
+            reply()
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: Self.terminationTimeout)
+            reply()
+        }
+        return .terminateLater
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -45,8 +76,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func observeMenuBarIconSetting() {
         withObservationTracking {
             updateStatusItem(visible: settings.showsMenuBarIcon)
-        } onChange: {
-            Task { @MainActor [weak self] in
+        } onChange: { [weak self] in
+            Task { @MainActor in
                 self?.observeMenuBarIconSetting()
             }
         }
@@ -79,13 +110,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func registerBuiltInPlugins() async {
-        do {
-            try await registry.register(manifest: ShelfPlugin.manifest) { ShelfPlugin(context: $0) }
-            try await registry.register(manifest: MediaPlugin.manifest) { MediaPlugin(context: $0) }
-            try await registry.register(manifest: AgentsPlugin.manifest) { AgentsPlugin(context: $0) }
-            try await registry.register(manifest: HelloPlugin.manifest) { HelloPlugin(context: $0) }
-        } catch {
-            NSLog("Failed to register built-in plugin: \(error)")
+        for plugin in Self.builtInPlugins {
+            do {
+                try await registry.register(plugin)
+            } catch {
+                Self.logger.error("Failed to register \(plugin.manifest.id, privacy: .public): \(error, privacy: .public)")
+            }
         }
     }
 }

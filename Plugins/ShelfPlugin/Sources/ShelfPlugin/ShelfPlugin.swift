@@ -22,17 +22,11 @@ public final class ShelfPlugin: IsletPlugin {
         )
     }
 
-    private let store: ShelfStore
+    let store: ShelfStore
 
     public init(context: PluginContext) {
-        store = ShelfStore(directory: context.storageDirectory)
-        store.onItemsChange = { [context] count in
-            let size = Self.contentSize(forItemCount: count)
-            if context.contentSize != size {
-                context.contentSize = size
-            }
-        }
-        store.onItemsChange?(store.items.count)
+        store = ShelfStore(directory: context.storageDirectory, logger: context.logger)
+        context.derive(\.contentSize) { [store] in Self.contentSize(forItemCount: store.items.count) }
     }
 
     public func activate() async throws {

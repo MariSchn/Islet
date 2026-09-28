@@ -27,6 +27,19 @@ struct AppleScriptError: LocalizedError {
     }
 }
 
+enum AppleScript {
+    static func tell(_ application: String, timeout: Int = 2, _ body: String) -> String {
+        """
+        if application "\(application)" is not running then error "Application isn't running." number -600
+        with timeout of \(timeout) seconds
+            tell application "\(application)"
+                \(body)
+            end tell
+        end timeout
+        """
+    }
+}
+
 actor AppleScriptRunner {
     private var compiled: [String: NSAppleScript] = [:]
 

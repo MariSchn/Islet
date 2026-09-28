@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate the Xcode project
+        run: xcodegen generate
+      - name: Build the app and tests
+        run: xcodebuild -project Islet.xcodeproj -scheme Islet -configuration Debug -derivedDataPath DerivedData build-for-testing
+      - name: Pack the build products
+        run: tar -czf products.tar.gz -C DerivedData/Build Products
+      - uses: actions/upload-artifact@v4
+        with:
+          name: products
+          path: products.tar.gz
+          retention-days: 1
+
+  test:
+    name: Test
+    needs: build
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: products
+      - name: Unpack the build products
+        run: mkdir -p DerivedData/Build && tar -xzf products.tar.gz -C DerivedData/Build
+      - name: Run the tests
+        run: xcodebuild test-without-building -destination 'platform=macOS' -xctestrun "$(ls DerivedData/Build/Products/*.xctestrun | head -n 1)"

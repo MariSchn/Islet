@@ -4,30 +4,30 @@ import Observation
 
 @MainActor
 @Observable
-public final class AgentSessionStore {
-    public static let finishedPillDuration: TimeInterval = 10 * 60
-    public static let unreachableTimeout: TimeInterval = 5 * 60
+final class AgentSessionStore {
+    static let finishedPillDuration: TimeInterval = 10 * 60
+    static let unreachableTimeout: TimeInterval = 5 * 60
     static let replyTimeout = TimeInterval(HookServer.replyTimeout.components.seconds) - 10
 
-    public enum Alert: Sendable, Equatable {
+    enum Alert: Sendable, Equatable {
         case needsAttention(AgentSession)
         case finished(AgentSession)
     }
 
-    public private(set) var sessions: [AgentSession] = []
-    public var onChange: (() -> Void)?
-    public var onAlert: ((Alert) -> Void)?
+    private(set) var sessions: [AgentSession] = []
+    var onAlert: ((Alert) -> Void)?
 
     private let now: () -> Date
     private let localHost: () -> String
     private let lastPrompt: @Sendable (String) -> String?
     private var dismissedIDs: Set<String> = []
+    private var finishedExpiries = 0
     @ObservationIgnored private var hiddenSessions: [String: AgentSession] = [:]
     @ObservationIgnored private var expiryTask: Task<Void, Never>?
     @ObservationIgnored private var unreachableTask: Task<Void, Never>?
     @ObservationIgnored private var decisions: [UUID: CheckedContinuation<PermissionDecision?, Never>] = [:]
 
-    public convenience init(now: @escaping () -> Date = Date.init, localHost: @escaping () -> String = { AgentSessionStore.localHostName }) {
+    convenience init(now: @escaping () -> Date = Date.init, localHost: @escaping () -> String = { AgentSessionStore.localHostName }) {
         self.init(now: now, localHost: localHost, lastPrompt: TranscriptReader.lastPrompt(at:))
     }
 
@@ -37,21 +37,22 @@ public final class AgentSessionStore {
         self.lastPrompt = lastPrompt
     }
 
-    public static var localHostName: String {
+    static var localHostName: String {
         var buffer = [CChar](repeating: 0, count: 256)
         gethostname(&buffer, buffer.count)
-        return String(String(cString: buffer).prefix { $0 != "." })
+        let name = String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+        return String(name.prefix { $0 != "." })
     }
 
-    public var attentionSessions: [AgentSession] {
+    var attentionSessions: [AgentSession] {
         sessions.filter(\.state.requiresAttention)
     }
 
-    public var workingSessions: [AgentSession] {
+    var workingSessions: [AgentSession] {
         sessions.filter { $0.state == .working && !$0.isUnreachable }
     }
 
-    public func handle(_ event: HookEvent) async -> HookReply {
+    func handle(_ event: HookEvent) async -> HookReply {
         let before = Set(sessions.first { $0.id == event.sessionID }?.pendingRequests.map(\.id) ?? [])
         let requestedAt = now()
         apply(event)
@@ -62,14 +63,16 @@ public final class AgentSessionStore {
         return decision.reply(for: request)
     }
 
-    public func apply(_ event: HookEvent) {
+    func apply(_ event: HookEvent) {
         let timestamp = now()
+        if event.kind == .other {
+            return
+        }
         if event.kind == .sessionEnd {
             dismissedIDs.remove(event.sessionID)
             hiddenSessions[event.sessionID] = nil
             withdrawPendingRequest(for: event.sessionID)
             sessions.removeAll { $0.id == event.sessionID }
-            onChange?()
             return
         }
         if event.kind == .sessionStart, event.source == "compact" {
@@ -131,11 +134,14 @@ public final class AgentSessionStore {
             session.activity = nil
             session.state = .working
             session.turnStartedAt = timestamp
-        case .preToolUse, .postToolUse:
+        case .preToolUse, .postToolUse, .postToolUseFailure:
             session.activity = event.activityDescription
             if event.kind == .preToolUse || session.state != .interrupted {
                 session.state = .working
             }
+            Self.record(event, in: &session, at: timestamp)
+        case .permissionDenied:
+            session.activity = event.activityDescription.map { "Denied: \($0)" } ?? "Denied a tool call"
             Self.record(event, in: &session, at: timestamp)
         case .permissionRequest:
             let request = event.toolName.flatMap { PendingRequest(toolName: $0, toolInput: event.toolInput, agentType: event.agentType) }
@@ -157,7 +163,11 @@ public final class AgentSessionStore {
                 guard session.pendingRequests.isEmpty else { break }
                 session.state = .needsAttention(event.message ?? "Waiting for your answer")
             case "idle_prompt":
-                guard session.state != .done, session.state != .interrupted, session.pendingRequests.isEmpty else { return }
+                switch session.state {
+                case .done, .interrupted, .failed: return
+                case .starting, .working, .needsAttention: break
+                }
+                guard session.pendingRequests.isEmpty else { return }
                 session.state = .needsAttention("Waiting for your input")
             default:
                 return
@@ -165,11 +175,13 @@ public final class AgentSessionStore {
         case .stop:
             session.state = .done
             session.activity = nil
-        case .sessionEnd:
+        case .stopFailure:
+            session.state = .failed(event.failureDescription)
+            session.activity = nil
+        case .sessionEnd, .other:
             return
         }
 
-        var replacedVisibleSession = false
         if session.agent == .claudeCode, let pid = session.pid {
             let replacesAll = event.kind == .sessionStart
             let isReplaced = { (other: AgentSession) in
@@ -182,7 +194,6 @@ public final class AgentSessionStore {
             }
             sessions.removeAll { other in replaced.contains { $0.id == other.id } }
             hiddenSessions = hiddenSessions.filter { !isReplaced($0.value) }
-            replacedVisibleSession = !replaced.isEmpty
         }
         if let index = sessions.firstIndex(where: { $0.id == session.id }) {
             sessions[index] = session
@@ -191,10 +202,8 @@ public final class AgentSessionStore {
             sessions.insert(session, at: 0)
         } else {
             hiddenSessions[session.id] = session
-            if replacedVisibleSession { onChange?() }
             return
         }
-        onChange?()
         if let alert = Self.alert(from: previous?.state, to: session.state, in: session) {
             onAlert?(alert)
         }
@@ -205,29 +214,27 @@ public final class AgentSessionStore {
     private static func isActivity(_ event: HookEvent) -> Bool {
         switch event.kind {
         case .userPromptSubmit: !event.isTaskNotification
-        case .preToolUse, .postToolUse, .permissionRequest, .stop: true
+        case .preToolUse, .postToolUse, .postToolUseFailure, .permissionRequest, .permissionDenied, .stop, .stopFailure: true
         case .notification: event.notificationType == "permission_prompt" || event.notificationType == "elicitation_dialog"
-        case .sessionStart, .sessionEnd: false
+        case .sessionStart, .sessionEnd, .other: false
         }
     }
 
     private static func alert(from previous: AgentSession.State?, to current: AgentSession.State, in session: AgentSession) -> Alert? {
-        switch current {
-        case .needsAttention where previous?.requiresAttention != true: .needsAttention(session)
-        case .done where previous != .done: .finished(session)
-        default: nil
+        if current.requiresAttention {
+            return previous?.requiresAttention == true ? nil : .needsAttention(session)
         }
+        return current == .done && previous != .done ? .finished(session) : nil
     }
 
-    public func dismiss(_ id: String) {
+    func dismiss(_ id: String) {
         guard sessions.contains(where: { $0.id == id }) else { return }
         dismissedIDs.insert(id)
         withdrawPendingRequest(for: id)
         sessions.removeAll { $0.id == id }
-        onChange?()
     }
 
-    public func decide(_ requestID: UUID, _ decision: PermissionDecision) {
+    func decide(_ requestID: UUID, _ decision: PermissionDecision) {
         guard let index = sessions.firstIndex(where: { $0.pendingRequests.contains { $0.id == requestID } }),
               let request = sessions[index].pendingRequests.first(where: { $0.id == requestID })
         else { return }
@@ -238,7 +245,6 @@ public final class AgentSessionStore {
             sessions[index].activity = "Denied \(request.toolName)"
         }
         settleState(at: index)
-        onChange?()
     }
 
     private func settleState(at index: Int) {
@@ -273,21 +279,19 @@ public final class AgentSessionStore {
             sessions[index].state = .interrupted
             sessions[index].activity = nil
         }
-        onChange?()
     }
 
-    public func markInterrupted(_ sessionID: String) {
+    func markInterrupted(_ sessionID: String) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         switch sessions[index].state {
         case .working, .needsAttention: break
-        case .starting, .done, .interrupted: return
+        case .starting, .done, .interrupted, .failed: return
         }
         withdrawPendingRequest(for: sessionID)
         sessions[index].pendingRequests = []
         sessions[index].state = .interrupted
         sessions[index].activity = nil
         sessions[index].updatedAt = now()
-        onChange?()
     }
 
     private func loadLastPrompt(from path: String, for sessionID: String) {
@@ -298,7 +302,6 @@ public final class AgentSessionStore {
             if let index = sessions.firstIndex(where: { $0.id == sessionID }) {
                 guard sessions[index].task == nil else { return }
                 sessions[index].task = Self.summarize(prompt)
-                onChange?()
             } else if hiddenSessions[sessionID]?.task == nil {
                 hiddenSessions[sessionID]?.task = Self.summarize(prompt)
             }
@@ -319,7 +322,6 @@ public final class AgentSessionStore {
             withdrawPendingRequest(for: session.id)
         }
         sessions.removeAll { session in exited.contains { $0.id == session.id } }
-        onChange?()
     }
 
     private static func input(_ requested: JSONValue?, isContainedIn actual: JSONValue?) -> Bool {
@@ -336,11 +338,13 @@ public final class AgentSessionStore {
     }
 
     private static func record(_ event: HookEvent, in session: inout AgentSession, at timestamp: Date) {
-        if event.kind == .postToolUse, let index = session.activities.lastIndex(where: { !$0.isComplete && $0.matches(event) }) {
+        let didFail = event.kind == .postToolUseFailure || event.kind == .permissionDenied
+        if event.kind != .preToolUse, let index = session.activities.lastIndex(where: { !$0.isComplete && $0.matches(event) }) {
             session.activities[index].isComplete = true
+            session.activities[index].didFail = didFail
             return
         }
-        session.activities.append(ActivityEntry(event: event, at: timestamp, isComplete: event.kind == .postToolUse))
+        session.activities.append(ActivityEntry(event: event, at: timestamp, isComplete: event.kind != .preToolUse, didFail: didFail))
         if session.activities.count > ActivityEntry.limit {
             session.activities.removeFirst(session.activities.count - ActivityEntry.limit)
         }
@@ -348,11 +352,11 @@ public final class AgentSessionStore {
 
     private static func withdrawnRequests(_ requests: [PendingRequest], on event: HookEvent) -> [PendingRequest] {
         switch event.kind {
-        case .stop, .sessionStart, .sessionEnd:
+        case .stop, .stopFailure, .sessionStart, .sessionEnd:
             return requests
         case .userPromptSubmit:
             return event.isTaskNotification ? [] : requests
-        case .postToolUse:
+        case .postToolUse, .postToolUseFailure:
             let sameTool = requests.filter { $0.toolName == event.toolName }
             let match = sameTool.first { $0.toolInput == event.toolInput }
                 ?? sameTool.first { input($0.toolInput, isContainedIn: event.toolInput) }
@@ -361,7 +365,7 @@ public final class AgentSessionStore {
         case .preToolUse:
             guard event.agentType == nil, let toolName = event.toolName, toolName != "AskUserQuestion" else { return [] }
             return requests.filter { $0.isQuestion && $0.agentType == nil }
-        case .permissionRequest, .notification:
+        case .permissionRequest, .permissionDenied, .notification, .other:
             return []
         }
     }
@@ -377,8 +381,8 @@ public final class AgentSessionStore {
         }
     }
 
-    public func pillStatus(for display: DisplaySettings) -> PillStatus? {
-        let ring = display.pillContent == .ring ? statusRing : nil
+    func pillStatus(for display: DisplaySettings) -> PillStatus? {
+        let ring = display.pillContent == .ring ? statusRing(keepingFinishedSessions: display.ringKeepsFinishedSessions) : nil
         let attention = attentionSessions
         if let first = attention.first {
             let text = attention.count == 1 ? "\(first.displayName) needs you" : "\(attention.count) agents need you"
@@ -395,14 +399,14 @@ public final class AgentSessionStore {
         return PillStatus(text: text, systemImage: "checkmark.circle.fill", priority: .ambient, ring: ring)
     }
 
-    public var statusRing: PillStatus.Ring {
-        let finishedCutoff = now().addingTimeInterval(-Self.finishedPillDuration)
+    func statusRing(keepingFinishedSessions: Bool) -> PillStatus.Ring {
+        let cutoff = keepingFinishedSessions ? .distantPast : finishedCutoff
         var counts = (attention: 0, working: 0, finished: 0, idle: 0)
         for session in sessions {
             switch session.state {
-            case .needsAttention: counts.attention += 1
+            case .needsAttention, .failed: counts.attention += 1
             case .working where !session.isUnreachable: counts.working += 1
-            case .done where session.updatedAt > finishedCutoff: counts.finished += 1
+            case .done where session.updatedAt > cutoff: counts.finished += 1
             case .starting, .working, .done, .interrupted: counts.idle += 1
             }
         }
@@ -414,8 +418,13 @@ public final class AgentSessionStore {
         ].filter { $0.value > 0 })
     }
 
+    private var finishedCutoff: Date {
+        _ = finishedExpiries
+        return now().addingTimeInterval(-Self.finishedPillDuration)
+    }
+
     private var recentlyFinishedSessions: [AgentSession] {
-        let cutoff = now().addingTimeInterval(-Self.finishedPillDuration)
+        let cutoff = finishedCutoff
         return sessions.filter { $0.state == .done && $0.updatedAt > cutoff }
     }
 
@@ -426,7 +435,7 @@ public final class AgentSessionStore {
         expiryTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(max(delay, 0) + 1))
             guard !Task.isCancelled else { return }
-            self?.onChange?()
+            self?.finishedExpiries += 1
             self?.scheduleFinishedExpiry()
         }
     }
@@ -446,14 +455,11 @@ public final class AgentSessionStore {
         }
     }
 
-    public func markUnreachableSessions() {
+    func markUnreachableSessions() {
         let cutoff = now().addingTimeInterval(-Self.unreachableTimeout)
-        var changed = false
         for index in sessions.indices where sessions[index].isRemote && sessions[index].state == .working && !sessions[index].isUnreachable && sessions[index].updatedAt <= cutoff {
             sessions[index].isUnreachable = true
-            changed = true
         }
-        if changed { onChange?() }
         scheduleUnreachableCheck()
     }
 
