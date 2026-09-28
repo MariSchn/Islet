@@ -8,8 +8,8 @@ struct AgentsScreen: View {
 
     var body: some View {
         VStack(spacing: AgentsPlugin.rowSpacing) {
-            if controller.showsUsageBar, let usage = controller.usage.usage {
-                UsageBar(usage: usage)
+            if let usage = controller.visibleUsage {
+                UsageBar(usage: usage, showsResetTimes: controller.display.showsResetTimes)
                     .frame(height: AgentsPlugin.usageBarHeight)
             }
             content
@@ -65,6 +65,7 @@ struct AgentsScreen: View {
                             session: session,
                             terminal: session.terminal.flatMap(InstalledTerminal.lookup),
                             isExpanded: controller.expandedSessionIDs.contains(session.id),
+                            historyLength: controller.display.historyLength,
                             dismiss: { controller.store.dismiss(session.id) },
                             toggleExpanded: { controller.toggleExpanded(session.id) },
                             decide: { controller.decide($0, $1) }
@@ -83,6 +84,7 @@ private struct SessionRow: View {
     let session: AgentSession
     let terminal: InstalledTerminal?
     let isExpanded: Bool
+    let historyLength: Int
     let dismiss: () -> Void
     let toggleExpanded: () -> Void
     let decide: (UUID, PermissionDecision) -> Void
@@ -98,9 +100,9 @@ private struct SessionRow: View {
                     .id(request.id)
                     .frame(height: AgentsPlugin.requestHeight(for: request))
             }
-            ActivityView(session: session)
-                .frame(height: AgentsPlugin.detailHeight(for: session), alignment: .top)
-                .frame(height: isExpanded ? AgentsPlugin.detailHeight(for: session) : 0, alignment: .top)
+            ActivityView(session: session, historyLength: historyLength)
+                .frame(height: AgentsPlugin.detailHeight(for: session, historyLength: historyLength), alignment: .top)
+                .frame(height: isExpanded ? AgentsPlugin.detailHeight(for: session, historyLength: historyLength) : 0, alignment: .top)
                 .clipped()
                 .allowsHitTesting(isExpanded)
                 .accessibilityHidden(!isExpanded)
@@ -196,6 +198,7 @@ private struct SessionRow: View {
 
 private struct ActivityView: View {
     let session: AgentSession
+    let historyLength: Int
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -217,7 +220,7 @@ private struct ActivityView: View {
                     .foregroundStyle(.tertiary)
                     .frame(height: AgentsPlugin.activityEntryHeight)
             }
-            ForEach(session.activities) { entry in
+            ForEach(AgentsPlugin.visibleActivities(of: session, historyLength: historyLength)) { entry in
                 HStack(spacing: 6) {
                     Image(systemName: entry.systemImage)
                         .font(.system(size: 10))
@@ -491,20 +494,21 @@ private struct Chip: View {
 
 private struct UsageBar: View {
     let usage: ClaudeUsage
+    let showsResetTimes: Bool
 
     var body: some View {
         HStack(spacing: 8) {
             ClaudeLogo()
                 .frame(width: 13, height: 13)
             if let window = usage.fiveHour {
-                UsageWindowView(label: "5h", window: window)
+                UsageWindowView(label: "5h", window: window, showsResetTime: showsResetTimes)
             }
             if usage.fiveHour != nil, usage.sevenDay != nil {
                 Text("|")
                     .foregroundStyle(.quaternary)
             }
             if let window = usage.sevenDay {
-                UsageWindowView(label: "7d", window: window)
+                UsageWindowView(label: "7d", window: window, showsResetTime: showsResetTimes)
             }
             Spacer(minLength: 0)
         }
@@ -517,6 +521,7 @@ private struct UsageBar: View {
 private struct UsageWindowView: View {
     let label: String
     let window: UsageWindow
+    let showsResetTime: Bool
 
     var body: some View {
         HStack(spacing: 4) {
@@ -525,7 +530,7 @@ private struct UsageWindowView: View {
             Text("\(Int(window.utilization.rounded()))%")
                 .fontWeight(.medium)
                 .foregroundStyle(color)
-            if let resetsAt = window.resetsAt, resetsAt > .now {
+            if showsResetTime, let resetsAt = window.resetsAt, resetsAt > .now {
                 Text(resetsAt, style: .relative)
                     .foregroundStyle(.tertiary)
             }
@@ -613,18 +618,55 @@ struct AgentsSettings: View {
                         Toggle("Show a notification", isOn: $controller.alerts.finishedNotification)
                     }
                 }
-                LabeledContent("Status changes") {
-                    Toggle("Show briefly in the notch", isOn: $controller.alerts.announcesInNotch)
-                }
             } header: {
                 Text("Alerts")
             } footer: {
                 Text("Alerts fire when a session asks for permission, has a question or waits for input, and when it finishes its turn. Notifications need permission from macOS the first time they are enabled.")
             }
             Section {
+                Picker("Next to the notch", selection: $controller.display.pillContent) {
+                    ForEach(DisplaySettings.PillContent.allCases) { content in
+                        Text(content.displayName).tag(content)
+                    }
+                }
+                LabeledContent("Show the pill") {
+                    VStack(alignment: .leading) {
+                        Toggle("While agents are working", isOn: $controller.display.pillShowsWorking)
+                        Toggle("When an agent has just finished", isOn: $controller.display.pillShowsFinished)
+                    }
+                }
+                LabeledContent("Status changes") {
+                    Toggle("Show briefly in the notch", isOn: $controller.alerts.announcesInNotch)
+                }
+            } header: {
+                Text("Pill")
+            } footer: {
+                Text("The status ring shows how many sessions need you, are working, have just finished or are idle. Summary text shows what the agents are doing instead. Hiding finished sessions also skips their status change. The pill always appears when an agent needs you.")
+            }
+            Section {
+                LabeledContent("Recent actions") {
+                    Stepper("\(controller.display.historyLength)", value: $controller.display.historyLength, in: DisplaySettings.historyLengthRange)
+                }
+            } header: {
+                Text("Session list")
+            } footer: {
+                Text("The number of recent tool calls listed when a session is expanded.")
+            }
+            Section {
                 Toggle("Show Claude usage limits", isOn: $controller.showsUsage)
-                if controller.showsUsage, let error = controller.usage.error {
-                    Text(error).foregroundStyle(.orange)
+                if controller.showsUsage {
+                    LabeledContent("Show") {
+                        VStack(alignment: .leading) {
+                            Toggle("5-hour limit", isOn: $controller.display.showsFiveHourLimit)
+                                .disabled(!controller.display.showsWeeklyLimit)
+                            Toggle("Weekly limit", isOn: $controller.display.showsWeeklyLimit)
+                                .disabled(!controller.display.showsFiveHourLimit)
+                            Toggle("Time until reset", isOn: $controller.display.showsResetTimes)
+                        }
+                    }
+                    if let error = controller.usage.error {
+                        Text(error).foregroundStyle(.orange)
+                    }
                 }
             } header: {
                 Text("Usage")
