@@ -25,7 +25,11 @@ struct ShelfSizingTests {
         let registry = PluginRegistry(storageRoot: root, userDefaults: defaults)
         let entry = try await registry.register(ShelfPlugin.self)
         let plugin = try #require(entry.plugin as? ShelfPlugin)
-        #expect(entry.context.contentSize == ShelfPlugin.contentSize(forItemCount: 0))
+        let deadline = ContinuousClock.now + .seconds(2)
+        while entry.context.contentSize != ShelfPlugin.contentSize(forItemCount: 0) {
+            try #require(ContinuousClock.now < deadline)
+            await Task.yield()
+        }
 
         let files = try (0..<4).map { index in
             let file = root.appending(path: "\(index).txt")
@@ -33,7 +37,6 @@ struct ShelfSizingTests {
             return file
         }
         plugin.store.add(files)
-        let deadline = ContinuousClock.now + .seconds(2)
         while entry.context.contentSize != ShelfPlugin.contentSize(forItemCount: 4) {
             try #require(ContinuousClock.now < deadline)
             await Task.yield()

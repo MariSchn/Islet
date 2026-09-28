@@ -26,12 +26,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         makePanel(for: display)
     }
     private var statusItem: NSStatusItem?
+    private var registration: Task<Void, Never>?
     private lazy var settingsWindow = SettingsWindowController(settings: settings, registry: registry)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         displays.start()
         observeMenuBarIconSetting()
-        Task { @MainActor in
+        registration = Task { @MainActor in
             await registerBuiltInPlugins()
         }
     }
@@ -43,7 +44,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             replied = true
             sender.reply(toApplicationShouldTerminate: true)
         }
-        Task { @MainActor [registry] in
+        Task { @MainActor [registry, registration] in
+            await registration?.value
             await registry.deactivateAll()
             reply()
         }

@@ -243,12 +243,14 @@ public final class PluginRegistry {
                 do {
                     try await entry.plugin.activate()
                     entry.state = .active
+                    entry.context.isActive = true
                 } catch {
                     entry.state = .failed(error)
                 }
             } else {
                 guard entry.state.isActive else { return }
                 entry.state = .deactivating
+                entry.context.isActive = false
                 await entry.plugin.deactivate()
                 entry.state = .inactive
             }

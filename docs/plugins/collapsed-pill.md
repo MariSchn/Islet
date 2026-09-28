@@ -27,7 +27,7 @@ When the status follows from observable state, derive it instead of setting it b
 context.derive(\.pillStatus) { controller.pillStatus }
 ```
 
-The host recomputes the pill whenever the state it reads changes and only publishes values that differ from the current one, so a pill that returns `nil` when there is nothing to show is cleared automatically. `pillStatus` can also be set directly from anywhere on the main actor.
+The host recomputes the pill whenever the state it reads changes and only publishes values that differ from the current one, so a pill that returns `nil` when there is nothing to show is cleared automatically. A derived pill takes precedence over values set directly while the plugin is active; without `derive`, `pillStatus` can be set from anywhere on the main actor.
 
 ## Layout
 

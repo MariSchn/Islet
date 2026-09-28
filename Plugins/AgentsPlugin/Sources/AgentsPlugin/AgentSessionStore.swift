@@ -339,7 +339,7 @@ final class AgentSessionStore {
 
     private static func record(_ event: HookEvent, in session: inout AgentSession, at timestamp: Date) {
         let didFail = event.kind == .postToolUseFailure || event.kind == .permissionDenied
-        if event.kind == .postToolUse || event.kind == .postToolUseFailure, let index = session.activities.lastIndex(where: { !$0.isComplete && $0.matches(event) }) {
+        if event.kind != .preToolUse, let index = session.activities.lastIndex(where: { !$0.isComplete && $0.matches(event) }) {
             session.activities[index].isComplete = true
             session.activities[index].didFail = didFail
             return

@@ -60,9 +60,12 @@ struct AgentSessionStoreTests {
         #expect(store.sessions[0].state == .working)
 
         let remove = JSONValue.object(["command": .string("rm -rf /tmp/build")])
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "s1", toolName: "Bash", toolInput: remove))
         store.apply(HookEvent(kind: .permissionDenied, sessionID: "s1", toolName: "Bash", toolInput: remove, reason: "[Irreversible Local Destruction]"))
         #expect(store.sessions[0].activity == "Denied: $ rm -rf /tmp/build")
+        #expect(store.sessions[0].activities.count == 2)
         #expect(store.sessions[0].activities.last?.didFail == true)
+        #expect(store.sessions[0].activities.last?.isComplete == true)
 
         let reply = Task { await store.handle(HookEvent(kind: .permissionRequest, sessionID: "s1", toolName: "Bash", toolInput: command)) }
         try await waitUntil { store.sessions[0].pendingRequest != nil }

@@ -93,7 +93,7 @@ public final class PluginContext {
 
     public func announce(_ announcement: PillAnnouncement)
     public func derive<Value: Equatable>(_ property: ReferenceWritableKeyPath<PluginContext, Value>, from value: @escaping @MainActor () -> Value)
-    public func observe<Value: Equatable>(_ value: @escaping @MainActor () -> Value, onChange: @escaping @MainActor (Value) -> Void)
+    public func observe<Value: Equatable>(_ value: @escaping @MainActor () -> Value, initial: Bool = false, onChange: @escaping @MainActor (Value) -> Void)
 }
 ```
 
@@ -108,7 +108,7 @@ public final class PluginContext {
 | `isScreenVisible` | `true` while the notch is open on this plugin. Use it to do expensive work, such as frequent polling, only while the screen is seen. |
 | `announcement`, `announce(_:)` | A short line shown once below the closed notch. See [Announcements](collapsed-pill.md#announcements). |
 | `derive(_:from:)` | Keeps `pillStatus` or `contentSize` equal to a value computed from observable state. See [Deriving state](#deriving-state). |
-| `observe(_:onChange:)` | Calls `onChange` with the current value, and again whenever the observed value changes. See [Deriving state](#deriving-state). |
+| `observe(_:initial:onChange:)` | Calls `onChange` whenever the observed value changes, and once with the current value when `initial` is `true`. See [Deriving state](#deriving-state). |
 
 There is no public initializer. To get a context in tests, register the plugin with a `PluginRegistry` (see [Testing](testing.md)).
 
@@ -125,9 +125,9 @@ public init(context: PluginContext) {
 }
 ```
 
-The closure is evaluated right away and again whenever an `@Observable` property it read changes. The new value is applied on the next turn of the main actor and only when it differs from the current one. A derived property is also restored if something else overwrites it, for example the host clearing the pill after `deactivate()`. Values that don't come from observable state, such as the current time, are not tracked: read an observable property that you change when they should be recomputed, as `AgentSessionStore` does for finished sessions that expire.
+The value is applied while the plugin is active: right after `activate()` returns, and again whenever an `@Observable` property the closure read changes. Updates land on the next turn of the main actor and only when the value differs from the current one. A derived property is also restored if something else overwrites it while the plugin is active; after `deactivate()` nothing is applied, so the host's clearing of the pill sticks until the plugin is enabled again. Values that don't come from observable state, such as the current time, are not tracked: read an observable property that you change when they should be recomputed, as `AgentSessionStore` does for finished sessions that expire.
 
-`observe(_:onChange:)` is for side effects, such as saving a setting or announcing a status change. `onChange` runs once with the initial value and then only when the value changes.
+`observe(_:initial:onChange:)` is for side effects, such as saving a setting or announcing a status change. Like SwiftUI's `onChange(of:initial:)`, `onChange` only runs when the value changes unless `initial` is `true`. Saving settings without `initial` means defaults are never written, so a changed default still reaches users who never touched the setting. Several changes within one turn of the main actor are reported once, with the latest value.
 
 ## PluginSettings
 

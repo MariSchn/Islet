@@ -77,6 +77,6 @@ The built-in plugins keep most logic out of the plugin class and the views, in m
 - **Models with injected dependencies.** `MediaController` takes a `MediaSource`, and the tests pass a stub source to check the pill without Spotify. Exposing the pill as a computed property of the model and deriving the context's pill from it keeps the model testable without a registry.
 - **Derived values.** Values kept in sync with `derive` or `observe` update on the next turn of the main actor after the state changes. Wait for them in a loop with `await Task.yield()` and a deadline instead of checking right away, as `ShelfSizingTests` does.
 - **Storage.** `ShelfStoreTests` creates a `ShelfStore` on a temporary directory and checks saving, loading and handling of a corrupt file.
-- **Sizing.** `AgentsPluginTests` calls `AgentsPlugin.contentSize(for:expanded:showsUsage:)` with different states and checks the heights, which keeps the size calculation in sync with the layout constants.
+- **Sizing.** `AgentsPluginSizingTests` calls `AgentsPlugin.contentSize(for:expanded:showsUsage:historyLength:)` with different states and checks the heights, which keeps the size calculation in sync with the layout constants.
 
 Expanded views, the pill's appearance and the notch animation are not covered by unit tests. Check them by building and running the app.

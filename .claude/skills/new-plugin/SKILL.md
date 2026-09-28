@@ -102,7 +102,7 @@ struct <Name>Screen: View {
 Replace the counter with the real feature, keeping these rules:
 
 - Start timers, servers and observers in `activate()` and stop them in `deactivate()`; the initializer also runs for disabled plugins.
-- Use `context.observe({ context.isScreenVisible }) { ... }` to slow down work while the screen is hidden.
+- Use `context.observe({ [unowned context] in context.isScreenVisible }) { ... }` to slow down work while the screen is hidden.
 - Persist preferences with `context.settings` and save them with `context.observe`; put data files in `context.storageDirectory`.
 - Log through `context.logger`, never `print` or `NSLog`.
 - If the height depends on content, compute it in a static function from the same constants the views use and derive `contentSize` from it.
@@ -131,11 +131,15 @@ struct <Name>PluginTests {
         let entry = try await registry.register(<Name>Plugin.self)
         let plugin = try #require(entry.plugin as? <Name>Plugin)
         #expect(entry.state.isActive)
-        #expect(entry.context.contentSize == <Name>Plugin.contentSize)
+
+        let deadline = ContinuousClock.now + .seconds(2)
+        while entry.context.contentSize != <Name>Plugin.contentSize {
+            try #require(ContinuousClock.now < deadline)
+            await Task.yield()
+        }
         #expect(entry.context.pillStatus == nil)
 
         plugin.model.count = 2
-        let deadline = ContinuousClock.now + .seconds(2)
         while entry.context.pillStatus?.text != "2" {
             try #require(ContinuousClock.now < deadline)
             await Task.yield()
