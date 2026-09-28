@@ -4,17 +4,40 @@ import SwiftUI
 @MainActor
 public final class MediaPlugin: IsletPlugin {
     public static let manifest = PluginManifest(id: "islet.media", displayName: "Media", systemImage: "music.note")
+    static let contentWidth: CGFloat = 420
+    static let contentPadding: CGFloat = 12
+    static let nowPlayingHeight: CGFloat = 136
+    static let browserSpacing: CGFloat = 10
+    static let browserHeaderHeight: CGFloat = 20
+    static let playlistRowHeight: CGFloat = 28
+    static let maxVisiblePlaylistRows = 5
+
+    static func contentSize(isBrowsing: Bool, playlistCount: Int) -> CGSize {
+        let browser = isBrowsing ? browserSpacing + browserHeight(playlistCount: playlistCount) : 0
+        return CGSize(width: contentWidth, height: 2 * contentPadding + nowPlayingHeight + browser)
+    }
+
+    static func browserHeight(playlistCount: Int) -> CGFloat {
+        browserHeaderHeight + CGFloat(min(max(playlistCount, 1), maxVisiblePlaylistRows)) * playlistRowHeight
+    }
 
     private static let showsPillKey = "showsPill"
+    static let playerKey = "player"
 
     private let context: PluginContext
     private let controller: MediaController
+    private(set) var player: MediaPlayer
 
     public init(context: PluginContext) {
         self.context = context
-        controller = MediaController(source: SpotifySource(), showsPill: context.settings.value(forKey: Self.showsPillKey) ?? true)
+        player = MediaPlayer(setting: context.settings.value(forKey: Self.playerKey))
+        controller = MediaController(source: player.makeSource(), showsPill: context.settings.value(forKey: Self.showsPillKey) ?? true)
         controller.onPillChange = { [context] status in context.pillStatus = status }
         controller.onShowsPillChange = { [context] shows in context.settings.set(shows, forKey: Self.showsPillKey) }
+        controller.onLayoutChange = { [context, controller] in
+            context.contentSize = Self.contentSize(isBrowsing: controller.isBrowsingPlaylists, playlistCount: controller.playlists.count)
+        }
+        controller.onLayoutChange()
     }
 
     public func activate() async throws {
@@ -30,19 +53,61 @@ public final class MediaPlugin: IsletPlugin {
     }
 
     public func makeSettingsView() -> AnyView? {
-        AnyView(MediaSettings(controller: controller))
+        AnyView(MediaSettings(controller: controller, player: player) { [weak self] player in
+            self?.select(player)
+        })
+    }
+
+    func select(_ player: MediaPlayer) {
+        guard player != self.player else { return }
+        self.player = player
+        context.settings.set(player.rawValue, forKey: Self.playerKey)
+        controller.replaceSource(player.makeSource())
+    }
+}
+
+enum MediaPlayer: String, CaseIterable, Identifiable {
+    case spotify
+    case music
+
+    init(setting: String?) {
+        self = setting.flatMap(Self.init(rawValue:)) ?? .spotify
+    }
+
+    var id: Self { self }
+
+    var displayName: String {
+        switch self {
+        case .spotify: "Spotify"
+        case .music: "Music"
+        }
+    }
+
+    func makeSource() -> any MediaSource {
+        switch self {
+        case .spotify: SpotifySource()
+        case .music: MusicSource()
+        }
     }
 }
 
 private struct MediaSettings: View {
     @Bindable var controller: MediaController
+    @State var player: MediaPlayer
+    let onPlayerChange: (MediaPlayer) -> Void
 
     var body: some View {
         Form {
             Section {
+                Picker("Player", selection: $player) {
+                    ForEach(MediaPlayer.allCases) { player in
+                        Text(player.displayName).tag(player)
+                    }
+                }
+                .onChange(of: player) { onPlayerChange(player) }
                 Toggle("Show the current track in the collapsed notch", isOn: $controller.showsPill)
             } footer: {
-                Text("Islet needs permission to control Spotify. macOS asks for it the first time the plugin reads what's playing.")
+                Text("Islet needs permission to control \(player.displayName). macOS asks for it the first time the plugin reads what's playing.")
             }
         }
     }

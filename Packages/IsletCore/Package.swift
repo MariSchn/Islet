@@ -8,7 +8,11 @@ let package = Package(
         .library(name: "IsletCore", targets: ["IsletCore"])
     ],
     targets: [
-        .target(name: "IsletCore"),
+        .target(
+            name: "CSkyLight",
+            linkerSettings: [.unsafeFlags(["-F/System/Library/PrivateFrameworks", "-framework", "SkyLight"])]
+        ),
+        .target(name: "IsletCore", dependencies: ["CSkyLight"]),
         .testTarget(name: "IsletCoreTests", dependencies: ["IsletCore"])
     ]
 )

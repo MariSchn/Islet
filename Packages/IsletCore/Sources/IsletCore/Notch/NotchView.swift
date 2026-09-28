@@ -161,7 +161,7 @@ private struct PillView: View {
                 Image(decorative: artwork, scale: 1)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
-                    .frame(width: artworkSide, height: artworkSide)
+                    .frame(width: NotchGeometry.pillArtworkSide, height: NotchGeometry.pillArtworkSide)
                     .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
                     .frame(width: geometry.pillTrailingWidth(for: pill, contentSize: contentSize))
             } else {
@@ -176,10 +176,6 @@ private struct PillView: View {
         .foregroundStyle(color)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(pill.text)
-    }
-
-    private var artworkSide: CGFloat {
-        geometry.notchSize.height - 8
     }
 
     private var color: Color {
