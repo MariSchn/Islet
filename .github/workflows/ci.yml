@@ -42,4 +42,4 @@ jobs:
       - name: Unpack the build products
         run: mkdir -p DerivedData/Build && tar -xzf products.tar.gz -C DerivedData/Build
       - name: Run the tests
-        run: xcodebuild test-without-building -xctestrun "$(ls DerivedData/Build/Products/*.xctestrun | head -n 1)"
+        run: xcodebuild test-without-building -destination 'platform=macOS' -xctestrun "$(ls DerivedData/Build/Products/*.xctestrun | head -n 1)"
