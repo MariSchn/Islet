@@ -29,7 +29,7 @@ public final class MediaController {
     @ObservationIgnored public var onShowsPillChange: (Bool) -> Void = { _ in }
     @ObservationIgnored public var onLayoutChange: () -> Void = {}
 
-    @ObservationIgnored private let loadArtwork: ArtworkLoader
+    @ObservationIgnored private let loadArtwork: ArtworkLoader?
     @ObservationIgnored private let playingInterval: Duration
     @ObservationIgnored private let pausedInterval: Duration
     @ObservationIgnored private var pollTask: Task<Void, Never>?
@@ -45,7 +45,7 @@ public final class MediaController {
         showsPill: Bool = true,
         playingInterval: Duration = .seconds(1),
         pausedInterval: Duration = .seconds(3),
-        loadArtwork: @escaping ArtworkLoader = { try await URLSession.shared.data(from: $0).0 }
+        loadArtwork: ArtworkLoader? = nil
     ) {
         self.source = source
         self.showsPill = showsPill
@@ -117,6 +117,7 @@ public final class MediaController {
             apply(nowPlaying: nowPlaying, error: nil)
         case .failure(let error as AppleScriptError) where error.isApplicationNotRunning:
             isSourceRunning = false
+            hidePlaylists()
             apply(nowPlaying: nil, error: nil)
         case .failure(let error):
             apply(nowPlaying: nil, error: error.localizedDescription)
@@ -197,8 +198,24 @@ public final class MediaController {
     }
 
     public func play(_ playlist: MediaPlaylist) async {
-        hidePlaylists()
-        await perform { try await $0.play(playlist) }
+        guard source.isRunning else {
+            isSourceRunning = false
+            hidePlaylists()
+            apply(nowPlaying: nil, error: nil)
+            return
+        }
+        let requested = browseGeneration
+        do {
+            try await source.play(playlist)
+            hidePlaylists()
+        } catch let error as AppleScriptError where error.isApplicationNotRunning {
+            hidePlaylists()
+        } catch {
+            if requested == browseGeneration, isBrowsingPlaylists {
+                playlistError = error.localizedDescription
+            }
+        }
+        await refresh()
     }
 
     public func launchSource() {
@@ -213,6 +230,8 @@ public final class MediaController {
         }
         do {
             try await command(source)
+        } catch let error as AppleScriptError where error.isApplicationNotRunning {
+            hidePlaylists()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -235,14 +254,20 @@ public final class MediaController {
             tint = nil
             return
         }
-        artworkTask = Task { [weak self, loadArtwork] in
-            let loaded = try? await loadArtwork(url)
-            let artwork = await Task.detached { loaded.flatMap(Artwork.init(data:)) }.value
-            guard let self, !Task.isCancelled, artworkURL == url else { return }
-            guard let artwork else {
+        let load = loadArtwork ?? { [source] in try await source.artwork(at: $0) }
+        artworkTask = Task { [weak self] in
+            let loaded: Data?
+            do {
+                loaded = try await load(url)
+            } catch is CancellationError {
+                guard let self, artworkURL == url else { return }
                 artworkURL = nil
                 return
+            } catch {
+                loaded = nil
             }
+            let artwork = await Task.detached { loaded.flatMap(Artwork.init(data:)) }.value
+            guard let self, !Task.isCancelled, artworkURL == url, let artwork else { return }
             self.artwork = artwork.image
             tint = artwork.tint
             updatePill()

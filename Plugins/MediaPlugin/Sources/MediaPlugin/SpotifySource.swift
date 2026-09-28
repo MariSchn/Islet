@@ -22,36 +22,53 @@ public struct SpotifySource: MediaSource {
     }
 
     public func nowPlaying() async throws -> NowPlaying? {
-        try await runner.run(Self.script("""
-            if player state is stopped then return {}
-            set t to current track
-            return {name of t, artist of t, album of t, artwork url of t, player state is playing, player position, duration of t, shuffling, repeating}
-            """)) { Self.nowPlaying(from: $0) }
+        try await runner.run(Self.nowPlayingScript) { Self.nowPlaying(from: $0) }
     }
 
     public func playPause() async throws {
-        try await runner.run(Self.script("playpause"))
+        try await runner.run(Self.playPauseScript)
     }
 
     public func nextTrack() async throws {
-        try await runner.run(Self.script("next track"))
+        try await runner.run(Self.nextTrackScript)
     }
 
     public func previousTrack() async throws {
-        try await runner.run(Self.script("previous track"))
+        try await runner.run(Self.previousTrackScript)
     }
 
     public func seek(to position: TimeInterval) async throws {
         guard position.isFinite else { return }
-        try await runner.run(Self.script("set player position to \(String(format: "%.3f", position))"), cached: false)
+        try await runner.run(Self.seekScript(to: position), cached: false)
     }
 
     public func setShuffling(_ shuffling: Bool) async throws {
-        try await runner.run(Self.script("set shuffling to \(shuffling)"))
+        try await runner.run(Self.shuffleScript(shuffling))
     }
 
     public func setRepeatMode(_ mode: RepeatMode) async throws {
-        try await runner.run(Self.script("set repeating to \(mode != .off)"))
+        try await runner.run(Self.repeatScript(mode))
+    }
+
+    static let nowPlayingScript = script("""
+        if player state is stopped then return {}
+        set t to current track
+        return {name of t, artist of t, album of t, artwork url of t, player state is playing, player position, duration of t, shuffling, repeating}
+        """)
+    static let playPauseScript = script("playpause")
+    static let nextTrackScript = script("next track")
+    static let previousTrackScript = script("previous track")
+
+    static func seekScript(to position: TimeInterval) -> String {
+        script("set player position to \(String(format: "%.3f", position))")
+    }
+
+    static func shuffleScript(_ shuffling: Bool) -> String {
+        script("set shuffling to \(shuffling)")
+    }
+
+    static func repeatScript(_ mode: RepeatMode) -> String {
+        script("set repeating to \(mode != .off)")
     }
 
     static func script(_ body: String) -> String {

@@ -28,14 +28,17 @@ struct MediaScreen: View {
                         .foregroundStyle(.secondary)
                     Button("Open \(controller.source.displayName)") { controller.launchSource() }
                         .buttonStyle(.bordered)
-                } else if let error = controller.errorMessage {
-                    Text(error)
-                        .font(.callout)
-                        .foregroundStyle(.orange)
-                        .multilineTextAlignment(.center)
                 } else {
-                    Text("Nothing playing")
-                        .foregroundStyle(.secondary)
+                    if let error = controller.errorMessage {
+                        Text(error)
+                            .font(.callout)
+                            .foregroundStyle(.orange)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                    } else {
+                        Text("Nothing playing")
+                            .foregroundStyle(.secondary)
+                    }
                     if controller.capabilities.canBrowsePlaylists, !controller.isBrowsingPlaylists {
                         Button("Browse Playlists") { Task { await controller.showPlaylists() } }
                             .buttonStyle(.bordered)
@@ -257,9 +260,16 @@ private struct PlaylistBrowser: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("Playlists")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                if let error = controller.playlistError, !controller.playlists.isEmpty {
+                    Text(error)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.orange)
+                        .lineLimit(1)
+                } else {
+                    Text("Playlists")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
                 Button {
                     controller.hidePlaylists()
@@ -279,7 +289,7 @@ private struct PlaylistBrowser: View {
                     .controlSize(.small)
                     .frame(maxWidth: .infinity)
                     .frame(height: MediaPlugin.playlistRowHeight)
-            } else if let error = controller.playlistError {
+            } else if controller.playlists.isEmpty, let error = controller.playlistError {
                 message(error, color: .orange)
             } else if controller.playlists.isEmpty {
                 message("No playlists", color: .secondary)

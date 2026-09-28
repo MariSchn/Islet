@@ -22,15 +22,15 @@ public final class MediaPlugin: IsletPlugin {
     }
 
     private static let showsPillKey = "showsPill"
-    private static let playerKey = "player"
+    static let playerKey = "player"
 
     private let context: PluginContext
     private let controller: MediaController
-    private var player: MediaPlayer
+    private(set) var player: MediaPlayer
 
     public init(context: PluginContext) {
         self.context = context
-        player = (context.settings.value(forKey: Self.playerKey) as String?).flatMap(MediaPlayer.init(rawValue:)) ?? .spotify
+        player = MediaPlayer(setting: context.settings.value(forKey: Self.playerKey))
         controller = MediaController(source: player.makeSource(), showsPill: context.settings.value(forKey: Self.showsPillKey) ?? true)
         controller.onPillChange = { [context] status in context.pillStatus = status }
         controller.onShowsPillChange = { [context] shows in context.settings.set(shows, forKey: Self.showsPillKey) }
@@ -58,7 +58,7 @@ public final class MediaPlugin: IsletPlugin {
         })
     }
 
-    private func select(_ player: MediaPlayer) {
+    func select(_ player: MediaPlayer) {
         guard player != self.player else { return }
         self.player = player
         context.settings.set(player.rawValue, forKey: Self.playerKey)
@@ -69,6 +69,10 @@ public final class MediaPlugin: IsletPlugin {
 enum MediaPlayer: String, CaseIterable, Identifiable {
     case spotify
     case music
+
+    init(setting: String?) {
+        self = setting.flatMap(Self.init(rawValue:)) ?? .spotify
+    }
 
     var id: Self { self }
 

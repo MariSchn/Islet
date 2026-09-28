@@ -66,6 +66,7 @@ public protocol MediaSource: Sendable {
     func setRepeatMode(_ mode: RepeatMode) async throws
     func playlists() async throws -> [MediaPlaylist]
     func play(_ playlist: MediaPlaylist) async throws
+    func artwork(at url: URL) async throws -> Data
 }
 
 public extension MediaSource {
@@ -96,5 +97,9 @@ public extension MediaSource {
 
     func play(_ playlist: MediaPlaylist) async throws {
         throw UnsupportedMediaCommand(sourceName: displayName)
+    }
+
+    func artwork(at url: URL) async throws -> Data {
+        try await URLSession.shared.data(from: url).0
     }
 }
