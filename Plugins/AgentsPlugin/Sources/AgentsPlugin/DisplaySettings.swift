@@ -21,6 +21,7 @@ struct DisplaySettings: Sendable, Equatable {
     var pillContent = PillContent.ring
     var pillShowsWorking = true
     var pillShowsFinished = true
+    var ringKeepsFinishedSessions = true
     var historyLength = 8 {
         didSet { historyLength = min(max(historyLength, Self.historyLengthRange.lowerBound), Self.historyLengthRange.upperBound) }
     }

@@ -382,7 +382,7 @@ final class AgentSessionStore {
     }
 
     func pillStatus(for display: DisplaySettings) -> PillStatus? {
-        let ring = display.pillContent == .ring ? statusRing : nil
+        let ring = display.pillContent == .ring ? statusRing(keepingFinishedSessions: display.ringKeepsFinishedSessions) : nil
         let attention = attentionSessions
         if let first = attention.first {
             let text = attention.count == 1 ? "\(first.displayName) needs you" : "\(attention.count) agents need you"
@@ -399,8 +399,8 @@ final class AgentSessionStore {
         return PillStatus(text: text, systemImage: "checkmark.circle.fill", priority: .ambient, ring: ring)
     }
 
-    var statusRing: PillStatus.Ring {
-        let cutoff = finishedCutoff
+    func statusRing(keepingFinishedSessions: Bool) -> PillStatus.Ring {
+        let cutoff = keepingFinishedSessions ? .distantPast : finishedCutoff
         var counts = (attention: 0, working: 0, finished: 0, idle: 0)
         for session in sessions {
             switch session.state {

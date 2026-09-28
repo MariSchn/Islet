@@ -51,6 +51,12 @@ struct AgentsSettings: View {
                         Text(content.displayName).tag(content)
                     }
                 }
+                if controller.display.pillContent == .ring {
+                    Picker("Finished sessions in the ring", selection: $controller.display.ringKeepsFinishedSessions) {
+                        Text("Stay green until the next prompt").tag(true)
+                        Text("Turn gray after \(Int(AgentSessionStore.finishedPillDuration / 60)) minutes").tag(false)
+                    }
+                }
                 LabeledContent("Show the pill") {
                     VStack(alignment: .leading) {
                         Toggle("While agents are working", isOn: $controller.display.pillShowsWorking)
@@ -63,7 +69,7 @@ struct AgentsSettings: View {
             } header: {
                 Text("Pill")
             } footer: {
-                Text("The status ring shows how many sessions need you, are working, have just finished or are idle. Summary text shows what the agents are doing instead. Hiding finished sessions also skips their status change. The pill always appears when an agent needs you.")
+                Text("The status ring shows how many sessions need you, are working, have finished or are idle. Summary text shows what the agents are doing instead. Hiding finished sessions also skips their status change. The pill always appears when an agent needs you.")
             }
             Section {
                 LabeledContent("Recent actions") {

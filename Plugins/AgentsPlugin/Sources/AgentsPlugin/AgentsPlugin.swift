@@ -73,6 +73,7 @@ public final class AgentsPlugin: IsletPlugin {
         ("showUsageResetTimes", \.showsResetTimes),
         ("pillShowsWorking", \.pillShowsWorking),
         ("pillShowsFinished", \.pillShowsFinished),
+        ("ringKeepsFinishedSessions", \.ringKeepsFinishedSessions),
     ]
 
     private let context: PluginContext

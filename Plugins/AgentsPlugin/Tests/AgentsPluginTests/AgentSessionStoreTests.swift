@@ -402,17 +402,25 @@ struct AgentSessionStoreTests {
         #expect(store.pillStatus(for: display)?.priority == .attention)
     }
 
-    @Test func theRingShowsOldFinishedSessionsAsIdle() {
+    @Test func oldFinishedSessionsStayFinishedInTheRingUnlessTheyShouldTurnIdle() {
         var clock = Date(timeIntervalSince1970: 1_000_000)
         let store = AgentSessionStore(now: { clock })
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "old", prompt: "a"))
         store.apply(HookEvent(kind: .stop, sessionID: "old"))
         clock = clock.addingTimeInterval(AgentSessionStore.finishedPillDuration + 1)
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "new", prompt: "b"))
-        #expect(store.statusRing.segments == [
+        #expect(store.statusRing(keepingFinishedSessions: true).segments == [
+            .init(value: 1, tint: SessionColors.workingTint),
+            .init(value: 1, tint: SessionColors.finishedTint),
+        ])
+        #expect(store.statusRing(keepingFinishedSessions: false).segments == [
             .init(value: 1, tint: SessionColors.workingTint),
             .init(value: 1, tint: SessionColors.idleTint),
         ])
+
+        var display = DisplaySettings()
+        display.ringKeepsFinishedSessions = false
+        #expect(store.pillStatus(for: display)?.ring == store.statusRing(keepingFinishedSessions: false))
     }
 
     @Test func thePillNamesSessionsByTitleWhenTheyHaveOne() {
