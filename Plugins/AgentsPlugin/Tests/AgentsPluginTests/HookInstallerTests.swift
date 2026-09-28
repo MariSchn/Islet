@@ -226,7 +226,7 @@ struct HookInstallerTests {
     @Test func refusesToOverwriteSettingsThatAreNotAnObject() throws {
         let installer = try makeInstaller()
         try "[1, 2]".write(to: installer.settingsURL, atomically: true, encoding: .utf8)
-        #expect(throws: HookInstaller.UnreadableSettings.self) { try installer.install() }
+        #expect(throws: SettingsFile.Unreadable.self) { try installer.install() }
         #expect(try String(contentsOf: installer.settingsURL, encoding: .utf8) == "[1, 2]")
     }
 

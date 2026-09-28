@@ -3,10 +3,12 @@ import Network
 
 actor HookServer {
     typealias Handler = @Sendable (HookEvent) async -> HookReply
+    typealias StatusLineHandler = @Sendable (StatusLineUpdate) async -> Void
 
     static let defaultPort: UInt16 = 7365
     static let hookPath = "/hook"
     static let installPath = "/install"
+    static let statusLinePath = "/statusline"
     static let maxBodySize = 16 << 20
     static let requestTimeout: Duration = .seconds(10)
     static let replyTimeout: Duration = .seconds(600)
@@ -21,14 +23,16 @@ actor HookServer {
     let token: String
     let installScript: String?
     private let handler: Handler
+    private let statusLineHandler: StatusLineHandler?
     private var listener: NWListener?
     private var clients: [ObjectIdentifier: Client] = [:]
     private let queue = DispatchQueue(label: "islet.agents.hook-server")
 
-    init(port: UInt16 = HookServer.defaultPort, token: String, installScript: String? = nil, handler: @escaping Handler) {
+    init(port: UInt16 = HookServer.defaultPort, token: String, installScript: String? = nil, statusLineHandler: StatusLineHandler? = nil, handler: @escaping Handler) {
         self.port = port
         self.token = token
         self.installScript = installScript
+        self.statusLineHandler = statusLineHandler
         self.handler = handler
     }
 
@@ -185,6 +189,14 @@ actor HookServer {
             response = .json(401, #"{"error":"unauthorized"}"#)
         } else if request.method == "GET", request.path == Self.installPath, let installScript {
             response = .text(installScript)
+        } else if request.method == "POST", request.path == Self.statusLinePath, let statusLineHandler {
+            guard let update = try? StatusLineUpdate.decode(request.body) else {
+                send(.json(400, #"{"error":"invalid status line payload"}"#), on: connection)
+                return
+            }
+            await statusLineHandler(update)
+            guard !Task.isCancelled else { return }
+            response = .json(200)
         } else if request.method != "POST" || request.path != Self.hookPath {
             response = .json(404, #"{"error":"not found"}"#)
         } else if let event = try? HookEvent.decode(request.body, agent: request.headers["x-islet-agent"], host: request.headers["x-islet-host"], terminal: request.headers["x-islet-terminal"], tty: request.headers["x-islet-tty"], pid: request.headers["x-islet-pid"], title: request.headers["x-islet-title"]) {

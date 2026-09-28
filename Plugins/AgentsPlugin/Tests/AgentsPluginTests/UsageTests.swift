@@ -4,14 +4,22 @@ import Testing
 @testable import AgentsPlugin
 
 struct UsageTests {
-    @Test func decodesUsageWindowsAndSkipsMissingOnes() throws {
-        let usage = try ClaudeUsage.decode(Data(#"{"five_hour":{"utilization":11.5,"resets_at":"2026-09-20T18:00:00.5+00:00"},"seven_day":{"utilization":2,"resets_at":"2026-09-27T09:00:00Z"},"seven_day_opus":null}"#.utf8))
-        #expect(usage.fiveHour?.utilization == 11.5)
-        #expect(usage.fiveHour?.resetsAt == Date(timeIntervalSince1970: 1_789_927_200.5))
-        #expect(usage.sevenDay?.utilization == 2)
-        #expect(usage.sevenDay?.resetsAt == Date(timeIntervalSince1970: 1_790_499_600))
-        #expect(try ClaudeUsage.decode(Data("{}".utf8)).isEmpty)
-        #expect(throws: UsageError.unexpectedResponse) { try ClaudeUsage.decode(Data("[]".utf8)) }
+    @Test func decodesTheStatusLineInput() throws {
+        let update = try StatusLineUpdate.decode(Data(#"{"session_id":"s1","session_name":"islet main","rate_limits":{"five_hour":{"used_percentage":23.5,"resets_at":1738425600},"seven_day":{"used_percentage":41,"resets_at":1738857600}},"model":{"id":"claude-opus-5-5"}}"#.utf8))
+        #expect(update.sessionID == "s1")
+        #expect(update.sessionName == "islet main")
+        #expect(update.usage == ClaudeUsage(
+            fiveHour: UsageWindow(utilization: 23.5, resetsAt: Date(timeIntervalSince1970: 1_738_425_600)),
+            sevenDay: UsageWindow(utilization: 41, resetsAt: Date(timeIntervalSince1970: 1_738_857_600))
+        ))
+
+        let partial = try StatusLineUpdate.decode(Data(#"{"session_id":"s1","session_name":"","rate_limits":{"seven_day":{"used_percentage":2}}}"#.utf8))
+        #expect(partial.sessionName == nil)
+        #expect(partial.usage == ClaudeUsage(fiveHour: nil, sevenDay: UsageWindow(utilization: 2, resetsAt: nil)))
+
+        #expect(try StatusLineUpdate.decode(Data(#"{"session_id":"s1"}"#.utf8)).usage == nil)
+        #expect(throws: (any Error).self) { try StatusLineUpdate.decode(Data(#"{"session_name":"x"}"#.utf8)) }
+        #expect(throws: (any Error).self) { try StatusLineUpdate.decode(Data("[]".utf8)) }
     }
 
     @Test func hiddenLimitsAreDroppedAndTheBarDisappearsWithoutAny() {
@@ -26,70 +34,24 @@ struct UsageTests {
         #expect(display.visibleUsage(ClaudeUsage(fiveHour: nil, sevenDay: usage.sevenDay)) == nil)
     }
 
-    @Test func readsTheAccessTokenFromTheLoginFile() {
-        #expect(ClaudeCredentials.accessToken(from: Data(#"{"claudeAiOauth":{"accessToken":"token-from-test","expiresAt":1}}"#.utf8)) == "token-from-test")
-        #expect(ClaudeCredentials.accessToken(from: Data("{}".utf8)) == nil)
-    }
-
     @MainActor
-    @Test func monitorSendsTheBearerTokenAndReportsFailures() async throws {
-        let requests = Requests()
-        let token = Box(value: "token-from-test")
-        let status = StatusBox()
-        let monitor = UsageMonitor(isEnabled: true, accessToken: { token.value }, load: { request in
-            await requests.record(request)
-            return (Data(#"{"five_hour":{"utilization":40,"resets_at":null}}"#.utf8), HTTPURLResponse(url: request.url!, statusCode: status.value, httpVersion: nil, headerFields: nil)!)
-        })
-        monitor.refresh(force: true)
-        try await waitUntil { monitor.usage != nil }
-        #expect(monitor.usage == ClaudeUsage(fiveHour: UsageWindow(utilization: 40, resetsAt: nil), sevenDay: nil))
-        let request = await requests.all.first
-        #expect(request?.url == UsageMonitor.endpoint)
-        #expect(request?.value(forHTTPHeaderField: "Authorization") == "Bearer token-from-test")
-        #expect(request?.value(forHTTPHeaderField: "anthropic-beta") == "oauth-2025-04-20")
+    @Test func theMonitorKeepsTheLatestLimitsUntilTheyReset() {
+        var clock = Date(timeIntervalSince1970: 1_000_000)
+        let monitor = UsageMonitor(isEnabled: true, now: { clock })
+        #expect(monitor.usage == nil)
 
-        monitor.refresh()
-        try await Task.sleep(for: .milliseconds(50))
-        #expect(await requests.all.count == 1)
+        let fiveHour = UsageWindow(utilization: 30, resetsAt: clock.addingTimeInterval(60))
+        let sevenDay = UsageWindow(utilization: 10, resetsAt: clock.addingTimeInterval(3600))
+        monitor.receive(ClaudeUsage(fiveHour: fiveHour, sevenDay: sevenDay))
+        #expect(monitor.usage == ClaudeUsage(fiveHour: fiveHour, sevenDay: sevenDay))
 
-        status.value = 503
-        monitor.refresh(force: true)
-        try await waitUntil { monitor.error != nil }
-        #expect(monitor.error == UsageError.status(503).errorDescription)
-        #expect(monitor.usage != nil)
+        clock = clock.addingTimeInterval(120)
+        #expect(monitor.usage == ClaudeUsage(fiveHour: nil, sevenDay: sevenDay))
 
-        status.value = 200
-        monitor.refresh(force: true)
-        try await waitUntil { monitor.error == nil }
+        clock = clock.addingTimeInterval(3600)
+        #expect(monitor.usage == nil)
 
-        token.value = nil
-        monitor.refresh(force: true)
-        try await waitUntil { monitor.usage == nil }
-        #expect(monitor.error == UsageError.notLoggedIn.errorDescription)
-
-        monitor.isEnabled = false
-        #expect(monitor.error == nil)
-    }
-
-    private func waitUntil(_ condition: @MainActor () -> Bool) async throws {
-        for _ in 0..<100 {
-            if await condition() { return }
-            try await Task.sleep(for: .milliseconds(10))
-        }
-        Issue.record("Timed out")
-    }
-
-    private actor Requests {
-        var all: [URLRequest] = []
-        func record(_ request: URLRequest) { all.append(request) }
-    }
-
-    private final class Box: @unchecked Sendable {
-        var value: String?
-        init(value: String?) { self.value = value }
-    }
-
-    private final class StatusBox: @unchecked Sendable {
-        var value = 200
+        monitor.receive(ClaudeUsage(fiveHour: UsageWindow(utilization: 5, resetsAt: nil), sevenDay: nil))
+        #expect(monitor.usage?.fiveHour?.utilization == 5)
     }
 }

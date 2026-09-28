@@ -80,6 +80,21 @@ struct AgentSessionStoreTests {
         #expect(store.sessions.isEmpty)
     }
 
+    @Test func theStatusLineRenamesSessions() {
+        let store = AgentSessionStore()
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "hidden", cwd: "/p/a"))
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "shown", cwd: "/p/b", prompt: "go", title: "old"))
+
+        store.applyStatusLine(StatusLineUpdate(sessionID: "shown", sessionName: "renamed"))
+        store.applyStatusLine(StatusLineUpdate(sessionID: "hidden", sessionName: "named early"))
+        store.applyStatusLine(StatusLineUpdate(sessionID: "unknown", sessionName: "ignored"))
+        store.applyStatusLine(StatusLineUpdate(sessionID: "shown", sessionName: nil))
+        #expect(store.sessions.map(\.displayName) == ["renamed"])
+
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "hidden", prompt: "go"))
+        #expect(store.sessions.first { $0.id == "hidden" }?.displayName == "named early")
+    }
+
     @Test func walksThroughSessionLifecycle() {
         let store = AgentSessionStore()
         store.apply(HookEvent(kind: .sessionStart, sessionID: "s1", cwd: "/tmp/proj"))

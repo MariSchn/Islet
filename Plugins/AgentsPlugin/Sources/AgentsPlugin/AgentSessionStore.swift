@@ -227,6 +227,17 @@ final class AgentSessionStore {
         return current == .done && previous != .done ? .finished(session) : nil
     }
 
+    func applyStatusLine(_ update: StatusLineUpdate) {
+        guard let name = update.sessionName else { return }
+        if let index = sessions.firstIndex(where: { $0.id == update.sessionID }) {
+            if sessions[index].title != name {
+                sessions[index].title = name
+            }
+        } else if hiddenSessions[update.sessionID] != nil {
+            hiddenSessions[update.sessionID]?.title = name
+        }
+    }
+
     func dismiss(_ id: String) {
         guard sessions.contains(where: { $0.id == id }) else { return }
         dismissedIDs.insert(id)

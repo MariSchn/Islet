@@ -43,6 +43,7 @@ struct HookInstaller: Sendable {
 
     var scriptURL: URL { directory.appending(path: Self.scriptName) }
     var settingsURL: URL { directory.appending(path: settingsFileName) }
+    private var settingsFile: SettingsFile { SettingsFile(url: settingsURL, description: settingsDescription) }
 
     var script: String {
         """
@@ -176,12 +177,12 @@ struct HookInstaller: Sendable {
     }
 
     private var hasAnyHooks: Bool {
-        guard let settings = try? readSettings(), let hooks = settings["hooks"] as? [String: Any] else { return false }
+        guard let settings = try? settingsFile.read(), let hooks = settings["hooks"] as? [String: Any] else { return false }
         return events.contains { !Self.isletHooks(in: hooks[$0]).isEmpty }
     }
 
     private var hasAllHooks: Bool {
-        guard let settings = try? readSettings(), let hooks = settings["hooks"] as? [String: Any] else { return false }
+        guard let settings = try? settingsFile.read(), let hooks = settings["hooks"] as? [String: Any] else { return false }
         return events.allSatisfy { event in
             Self.isletHooks(in: hooks[event]).contains { NSDictionary(dictionary: $0).isEqual(to: Self.hookEntry(for: event, script: scriptURL.path)) }
         }
@@ -197,7 +198,7 @@ struct HookInstaller: Sendable {
             throw CocoaError(.fileWriteUnknown)
         }
 
-        var settings = try readSettings() ?? [:]
+        var settings = try settingsFile.read() ?? [:]
         var hooks = settings["hooks"] as? [String: Any] ?? [:]
         for event in events {
             var groups = Self.withoutIsletHooks(hooks[event])
@@ -205,17 +206,17 @@ struct HookInstaller: Sendable {
             hooks[event] = groups
         }
         settings["hooks"] = hooks
-        try writeSettings(settings)
+        try settingsFile.write(settings)
     }
 
     func uninstall() throws {
-        if var settings = try readSettings(), var hooks = settings["hooks"] as? [String: Any] {
+        if var settings = try settingsFile.read(), var hooks = settings["hooks"] as? [String: Any] {
             for event in hooks.keys {
                 let groups = Self.withoutIsletHooks(hooks[event])
                 hooks[event] = groups.isEmpty ? nil : groups
             }
             settings["hooks"] = hooks.isEmpty ? nil : hooks
-            try writeSettings(settings)
+            try settingsFile.write(settings)
         }
         try? FileManager.default.removeItem(at: scriptURL)
     }
@@ -244,23 +245,5 @@ struct HookInstaller: Sendable {
             let commands = (group["hooks"] as? [[String: Any]] ?? []).compactMap { $0["command"] as? String }
             return !commands.contains { $0.contains(scriptName) }
         }
-    }
-
-    struct UnreadableSettings: Error, LocalizedError {
-        let path: String
-        var errorDescription: String? { "\(path) is not a JSON object" }
-    }
-
-    private func readSettings() throws -> [String: Any]? {
-        guard FileManager.default.fileExists(atPath: settingsURL.path) else { return nil }
-        let data = try Data(contentsOf: settingsURL)
-        if String(decoding: data, as: UTF8.self).allSatisfy(\.isWhitespace) { return [:] }
-        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw UnreadableSettings(path: settingsDescription) }
-        return object
-    }
-
-    private func writeSettings(_ settings: [String: Any]) throws {
-        let data = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
-        try data.write(to: settingsURL, options: .atomic)
     }
 }

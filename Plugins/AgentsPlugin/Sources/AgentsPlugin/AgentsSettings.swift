@@ -8,11 +8,11 @@ struct AgentsSettings: View {
     var body: some View {
         Form {
             Section {
-                HookRow(title: "Claude Code hooks", isInstalled: controller.isHookInstalled, error: $error) { installed in
+                InstallRow(title: "Claude Code hooks", isInstalled: controller.isHookInstalled, error: $error) { installed in
                     installed ? try controller.uninstallHooks(for: .claudeCode) : try controller.installHooks(for: .claudeCode)
                 }
                 if controller.isCodexAvailable {
-                    HookRow(title: "Codex hooks", isInstalled: controller.isCodexHookInstalled, error: $error) { installed in
+                    InstallRow(title: "Codex hooks", isInstalled: controller.isCodexHookInstalled, error: $error) { installed in
                         installed ? try controller.uninstallHooks(for: .codex) : try controller.installHooks(for: .codex)
                     }
                 }
@@ -26,6 +26,30 @@ struct AgentsSettings: View {
                 }
             } footer: {
                 Text("Installing adds a small script to ~/.claude (registered in ~/.claude/settings.json) or ~/.codex (registered in ~/.codex/hooks.json) so the agent reports session activity to Islet; the files are reformatted. Already running sessions need to be restarted. Codex additionally needs the hooks feature enabled in ~/.codex/config.toml and the hooks trusted once via /hooks. Nothing leaves your Mac.")
+            }
+            Section {
+                StatusLineRow(state: controller.statusLineState, error: $error) {
+                    switch controller.statusLineState {
+                    case .installed, .outdated: try controller.uninstallStatusLine()
+                    case .notInstalled, .replaced: try controller.installStatusLine()
+                    }
+                }
+                if controller.statusLineState == .replaced {
+                    Text("The status line was changed outside Islet, so usage limits and session names no longer reach Islet. Reinstalling keeps showing your new status line.")
+                        .foregroundStyle(.orange)
+                } else if controller.statusLineState == .installed, let original = controller.statusLineInstaller.originalCommand {
+                    LabeledContent("Your status line") {
+                        Text(original)
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+            } header: {
+                Text("Status line")
+            } footer: {
+                Text("Claude Code passes its status line command the session name and your usage limits. Installing adds a small script to ~/.claude that forwards this data to Islet and then runs your own status line command, so Claude Code still shows the same status line. While any status line is configured, Claude Code hides its keyboard hints below the prompt. Removing restores your previous status line.")
             }
             Section {
                 LabeledContent("Needs attention") {
@@ -92,14 +116,21 @@ struct AgentsSettings: View {
                             Toggle("Time until reset", isOn: $controller.display.showsResetTimes)
                         }
                     }
-                    if let error = controller.usage.error {
-                        Text(error).foregroundStyle(.orange)
+                    switch controller.statusLineState {
+                    case .notInstalled, .replaced:
+                        Text("Needs the Claude Code status line above.")
+                            .foregroundStyle(.orange)
+                    case .installed, .outdated:
+                        if controller.usage.usage == nil {
+                            Text("Appears after your next message in Claude Code. Usage limits are only reported for Claude Pro and Max plans.")
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             } header: {
                 Text("Usage")
             } footer: {
-                Text("Shows how much of the 5-hour and 7-day Claude quota is used above the session list. Islet reads the Claude Code login from the Keychain to ask Anthropic for the numbers; macOS asks for permission the first time.")
+                Text("Shows how much of the 5-hour and 7-day Claude quota is used above the session list. The numbers come from Claude Code's status line and update while you use Claude Code.")
             }
             Section {
                 CopyableCommand(title: "SSH config", text: controller.installer.sshConfigSnippet)
@@ -114,26 +145,58 @@ struct AgentsSettings: View {
     }
 }
 
-private struct HookRow: View {
+private struct InstallRow: View {
     let title: String
-    let isInstalled: Bool
+    let status: String
+    let action: String
     @Binding var error: String?
-    let toggle: (Bool) throws -> Void
+    let perform: () throws -> Void
+
+    init(title: String, isInstalled: Bool, error: Binding<String?>, toggle: @escaping (Bool) throws -> Void) {
+        self.init(title: title, status: isInstalled ? "Installed" : "Not installed", action: isInstalled ? "Remove" : "Install", error: error) {
+            try toggle(isInstalled)
+        }
+    }
+
+    init(title: String, status: String, action: String, error: Binding<String?>, perform: @escaping () throws -> Void) {
+        self.title = title
+        self.status = status
+        self.action = action
+        self._error = error
+        self.perform = perform
+    }
 
     var body: some View {
         LabeledContent(title) {
             HStack {
-                Text(isInstalled ? "Installed" : "Not installed")
+                Text(status)
                     .foregroundStyle(.secondary)
-                Button(isInstalled ? "Remove" : "Install") {
+                Button(action) {
                     do {
-                        try toggle(isInstalled)
+                        try perform()
                         error = nil
                     } catch {
                         self.error = error.localizedDescription
                     }
                 }
             }
+        }
+    }
+}
+
+private struct StatusLineRow: View {
+    let state: StatusLineInstaller.State
+    @Binding var error: String?
+    let perform: () throws -> Void
+
+    var body: some View {
+        switch state {
+        case .installed, .outdated:
+            InstallRow(title: "Claude Code status line", status: "Installed", action: "Remove", error: $error, perform: perform)
+        case .notInstalled:
+            InstallRow(title: "Claude Code status line", status: "Not installed", action: "Install", error: $error, perform: perform)
+        case .replaced:
+            InstallRow(title: "Claude Code status line", status: "Replaced", action: "Reinstall", error: $error, perform: perform)
         }
     }
 }

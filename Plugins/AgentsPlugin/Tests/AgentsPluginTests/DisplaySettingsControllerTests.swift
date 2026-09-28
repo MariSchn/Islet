@@ -7,9 +7,8 @@ import Testing
 struct DisplaySettingsControllerTests {
     private func makeController() -> AgentsController {
         let directory = FileManager.default.temporaryDirectory.appending(path: "DisplaySettingsControllerTests." + UUID().uuidString)
-        let usage = UsageMonitor(isEnabled: true, accessToken: { "token" }, load: { request in
-            (Data(#"{"five_hour":{"utilization":40,"resets_at":null},"seven_day":{"utilization":10,"resets_at":null}}"#.utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
-        })
+        let usage = UsageMonitor(isEnabled: true)
+        usage.receive(ClaudeUsage(fiveHour: UsageWindow(utilization: 40, resetsAt: nil), sevenDay: UsageWindow(utilization: 10, resetsAt: nil)))
         return AgentsController(token: "t", claudeDirectory: directory, codexDirectory: directory, port: 0, showsUsage: true, usage: usage)
     }
 
@@ -49,8 +48,6 @@ struct DisplaySettingsControllerTests {
 
     @Test func hidingBothLimitsRemovesTheUsageBar() async throws {
         let controller = makeController()
-        controller.usage.refresh(force: true)
-        try await waitUntil { controller.usage.usage != nil }
         #expect(controller.showsUsageBar)
         let withBar = AgentsPlugin.contentSize(for: [], expanded: [], showsUsage: controller.showsUsageBar, historyLength: 8).height
 
