@@ -527,7 +527,8 @@ struct MusicParsingTests {
 
 @MainActor
 struct AppleScriptCompilationTests {
-    @Test func spotifyScriptsCompile() {
+    @Test(.enabled(if: NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.spotify.client") != nil, "Compiling needs Spotify's scripting dictionary"))
+    func spotifyScriptsCompile() {
         let scripts = [
             SpotifySource.nowPlayingScript,
             SpotifySource.playPauseScript,
