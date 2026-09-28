@@ -55,7 +55,7 @@ struct MediaControllerTests {
         #expect(await source.reads == 1)
 
         controller.isScreenVisible = true
-        try? await Task.sleep(for: .milliseconds(100))
+        await waitUntil { await source.reads > 3 }
         #expect(await source.reads > 3)
         controller.stop()
     }
