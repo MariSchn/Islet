@@ -4,18 +4,18 @@ import os
 
 @MainActor
 @Observable
-public final class ShelfStore {
-    public private(set) var items: [ShelfItem] = []
+final class ShelfStore {
+    private(set) var items: [ShelfItem] = []
 
     private let fileURL: URL
     private let logger: Logger
 
-    public init(directory: URL, logger: Logger = Logger()) {
+    init(directory: URL, logger: Logger = Logger()) {
         fileURL = directory.appending(path: "shelf.json")
         self.logger = logger
     }
 
-    public func load() {
+    func load() {
         guard let data = try? Data(contentsOf: fileURL) else { return }
         var loaded: [ShelfItem]
         do {
@@ -37,7 +37,7 @@ public final class ShelfStore {
     }
 
     @discardableResult
-    public func add(_ urls: [URL]) -> [ShelfItem] {
+    func add(_ urls: [URL]) -> [ShelfItem] {
         let existing = Set(items.map(\.url))
         var seen = Set<URL>()
         let added = urls
@@ -51,13 +51,13 @@ public final class ShelfStore {
         return added
     }
 
-    public func remove(_ id: ShelfItem.ID) {
+    func remove(_ id: ShelfItem.ID) {
         guard items.contains(where: { $0.id == id }) else { return }
         items.removeAll { $0.id == id }
         save()
     }
 
-    public func refreshReachability() {
+    func refreshReachability() {
         let snapshot = items.map { ($0.id, $0.url) }
         Task.detached(priority: .utility) { [weak self] in
             let results = snapshot.map { ($0.0, ShelfItem.checkReachable($0.1)) }
@@ -74,7 +74,7 @@ public final class ShelfStore {
         }
     }
 
-    public func removeAll() {
+    func removeAll() {
         items.removeAll()
         save()
     }

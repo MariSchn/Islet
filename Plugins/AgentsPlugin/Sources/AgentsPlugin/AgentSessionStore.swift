@@ -4,18 +4,18 @@ import Observation
 
 @MainActor
 @Observable
-public final class AgentSessionStore {
-    public static let finishedPillDuration: TimeInterval = 10 * 60
-    public static let unreachableTimeout: TimeInterval = 5 * 60
+final class AgentSessionStore {
+    static let finishedPillDuration: TimeInterval = 10 * 60
+    static let unreachableTimeout: TimeInterval = 5 * 60
     static let replyTimeout = TimeInterval(HookServer.replyTimeout.components.seconds) - 10
 
-    public enum Alert: Sendable, Equatable {
+    enum Alert: Sendable, Equatable {
         case needsAttention(AgentSession)
         case finished(AgentSession)
     }
 
-    public private(set) var sessions: [AgentSession] = []
-    public var onAlert: ((Alert) -> Void)?
+    private(set) var sessions: [AgentSession] = []
+    var onAlert: ((Alert) -> Void)?
 
     private let now: () -> Date
     private let localHost: () -> String
@@ -27,7 +27,7 @@ public final class AgentSessionStore {
     @ObservationIgnored private var unreachableTask: Task<Void, Never>?
     @ObservationIgnored private var decisions: [UUID: CheckedContinuation<PermissionDecision?, Never>] = [:]
 
-    public convenience init(now: @escaping () -> Date = Date.init, localHost: @escaping () -> String = { AgentSessionStore.localHostName }) {
+    convenience init(now: @escaping () -> Date = Date.init, localHost: @escaping () -> String = { AgentSessionStore.localHostName }) {
         self.init(now: now, localHost: localHost, lastPrompt: TranscriptReader.lastPrompt(at:))
     }
 
@@ -37,21 +37,22 @@ public final class AgentSessionStore {
         self.lastPrompt = lastPrompt
     }
 
-    public static var localHostName: String {
+    static var localHostName: String {
         var buffer = [CChar](repeating: 0, count: 256)
         gethostname(&buffer, buffer.count)
-        return String(String(cString: buffer).prefix { $0 != "." })
+        let name = String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+        return String(name.prefix { $0 != "." })
     }
 
-    public var attentionSessions: [AgentSession] {
+    var attentionSessions: [AgentSession] {
         sessions.filter(\.state.requiresAttention)
     }
 
-    public var workingSessions: [AgentSession] {
+    var workingSessions: [AgentSession] {
         sessions.filter { $0.state == .working && !$0.isUnreachable }
     }
 
-    public func handle(_ event: HookEvent) async -> HookReply {
+    func handle(_ event: HookEvent) async -> HookReply {
         let before = Set(sessions.first { $0.id == event.sessionID }?.pendingRequests.map(\.id) ?? [])
         let requestedAt = now()
         apply(event)
@@ -62,7 +63,7 @@ public final class AgentSessionStore {
         return decision.reply(for: request)
     }
 
-    public func apply(_ event: HookEvent) {
+    func apply(_ event: HookEvent) {
         let timestamp = now()
         if event.kind == .other {
             return
@@ -226,14 +227,14 @@ public final class AgentSessionStore {
         return current == .done && previous != .done ? .finished(session) : nil
     }
 
-    public func dismiss(_ id: String) {
+    func dismiss(_ id: String) {
         guard sessions.contains(where: { $0.id == id }) else { return }
         dismissedIDs.insert(id)
         withdrawPendingRequest(for: id)
         sessions.removeAll { $0.id == id }
     }
 
-    public func decide(_ requestID: UUID, _ decision: PermissionDecision) {
+    func decide(_ requestID: UUID, _ decision: PermissionDecision) {
         guard let index = sessions.firstIndex(where: { $0.pendingRequests.contains { $0.id == requestID } }),
               let request = sessions[index].pendingRequests.first(where: { $0.id == requestID })
         else { return }
@@ -280,7 +281,7 @@ public final class AgentSessionStore {
         }
     }
 
-    public func markInterrupted(_ sessionID: String) {
+    func markInterrupted(_ sessionID: String) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         switch sessions[index].state {
         case .working, .needsAttention: break
@@ -380,7 +381,7 @@ public final class AgentSessionStore {
         }
     }
 
-    public func pillStatus(for display: DisplaySettings) -> PillStatus? {
+    func pillStatus(for display: DisplaySettings) -> PillStatus? {
         let ring = display.pillContent == .ring ? statusRing : nil
         let attention = attentionSessions
         if let first = attention.first {
@@ -398,7 +399,7 @@ public final class AgentSessionStore {
         return PillStatus(text: text, systemImage: "checkmark.circle.fill", priority: .ambient, ring: ring)
     }
 
-    public var statusRing: PillStatus.Ring {
+    var statusRing: PillStatus.Ring {
         let cutoff = finishedCutoff
         var counts = (attention: 0, working: 0, finished: 0, idle: 0)
         for session in sessions {
@@ -454,7 +455,7 @@ public final class AgentSessionStore {
         }
     }
 
-    public func markUnreachableSessions() {
+    func markUnreachableSessions() {
         let cutoff = now().addingTimeInterval(-Self.unreachableTimeout)
         for index in sessions.indices where sessions[index].isRemote && sessions[index].state == .working && !sessions[index].isUnreachable && sessions[index].updatedAt <= cutoff {
             sessions[index].isUnreachable = true

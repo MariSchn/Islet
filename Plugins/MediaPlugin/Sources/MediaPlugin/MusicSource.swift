@@ -1,17 +1,17 @@
 import Foundation
 
-public struct MusicSource: MediaSource {
-    public let displayName = "Music"
-    public let bundleIdentifier = "com.apple.Music"
-    public let capabilities = MediaCapabilities(canShuffle: true, repeatModes: [.off, .all, .one], canBrowsePlaylists: true)
+struct MusicSource: MediaSource {
+    let displayName = "Music"
+    let bundleIdentifier = "com.apple.Music"
+    let capabilities = MediaCapabilities(canShuffle: true, repeatModes: [.off, .all, .one], canBrowsePlaylists: true)
 
     private let runner = AppleScriptRunner()
     private let browsingRunner = AppleScriptRunner()
     private let artworkFailures = ArtworkFailures()
 
-    public init() {}
+    init() {}
 
-    public func stateChanges() -> AsyncStream<Void> {
+    func stateChanges() -> AsyncStream<Void> {
         AsyncStream { continuation in
             let center = DistributedNotificationCenter.default()
             nonisolated(unsafe) let token = center.addObserver(
@@ -23,45 +23,45 @@ public struct MusicSource: MediaSource {
         }
     }
 
-    public func nowPlaying() async throws -> NowPlaying? {
+    func nowPlaying() async throws -> NowPlaying? {
         try await runner.run(Self.nowPlayingScript) { Self.track(from: $0) }
     }
 
-    public func playPause() async throws {
+    func playPause() async throws {
         try await runner.run(Self.playPauseScript)
     }
 
-    public func nextTrack() async throws {
+    func nextTrack() async throws {
         try await runner.run(Self.nextTrackScript)
     }
 
-    public func previousTrack() async throws {
+    func previousTrack() async throws {
         try await runner.run(Self.previousTrackScript)
     }
 
-    public func seek(to position: TimeInterval) async throws {
+    func seek(to position: TimeInterval) async throws {
         guard position.isFinite else { return }
         try await runner.run(Self.seekScript(to: position), cached: false)
     }
 
-    public func setShuffling(_ shuffling: Bool) async throws {
+    func setShuffling(_ shuffling: Bool) async throws {
         try await runner.run(Self.shuffleScript(shuffling))
     }
 
-    public func setRepeatMode(_ mode: RepeatMode) async throws {
+    func setRepeatMode(_ mode: RepeatMode) async throws {
         try await runner.run(Self.repeatScript(mode))
     }
 
-    public func playlists() async throws -> [MediaPlaylist] {
+    func playlists() async throws -> [MediaPlaylist] {
         try await browsingRunner.run(Self.playlistsScript) { Self.playlists(from: $0) }
     }
 
-    public func play(_ playlist: MediaPlaylist) async throws {
+    func play(_ playlist: MediaPlaylist) async throws {
         guard let script = Self.playScript(playlistID: playlist.id) else { throw UnsupportedMediaCommand(sourceName: displayName) }
         try await runner.run(script, cached: false)
     }
 
-    public func artwork(at url: URL) async throws -> Data {
+    func artwork(at url: URL) async throws -> Data {
         guard let persistentID = Self.persistentID(fromArtworkURL: url) else { throw MissingArtwork() }
         guard await !artworkFailures.contains(persistentID) else { throw MissingArtwork() }
         let artwork: (persistentID: String, data: Data?)?
@@ -143,14 +143,7 @@ public struct MusicSource: MediaSource {
     }
 
     static func script(_ body: String, timeout: Int = 2) -> String {
-        """
-        if application "Music" is not running then error "Application isn't running." number -600
-        with timeout of \(timeout) seconds
-            tell application "Music"
-                \(body)
-            end tell
-        end timeout
-        """
+        AppleScript.tell("Music", timeout: timeout, body)
     }
 
     static func isPersistentID(_ value: String) -> Bool {

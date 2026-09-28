@@ -1,36 +1,36 @@
 import Foundation
 
-public struct HookInstaller: Sendable {
-    public static let scriptName = "islet-hook.sh"
+struct HookInstaller: Sendable {
+    static let scriptName = "islet-hook.sh"
     private static let scriptPlaceholder = "__ISLET_SCRIPT__"
 
-    public let agent: AgentSession.Agent
-    public let directory: URL
-    public let port: UInt16
-    public let token: String
+    let agent: AgentSession.Agent
+    let directory: URL
+    let port: UInt16
+    let token: String
 
-    public init(agent: AgentSession.Agent = .claudeCode, directory: URL, port: UInt16, token: String) {
+    init(agent: AgentSession.Agent = .claudeCode, directory: URL, port: UInt16, token: String) {
         self.agent = agent
         self.directory = directory
         self.port = port
         self.token = token
     }
 
-    public var events: [String] {
+    var events: [String] {
         switch agent {
         case .claudeCode: ["SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest", "PermissionDenied", "Notification", "Stop", "StopFailure"]
         case .codex: ["SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PermissionRequest", "Stop"]
         }
     }
 
-    public var settingsFileName: String {
+    var settingsFileName: String {
         switch agent {
         case .claudeCode: "settings.json"
         case .codex: "hooks.json"
         }
     }
 
-    public var settingsDescription: String {
+    var settingsDescription: String {
         "~/\(directory.lastPathComponent)/\(settingsFileName)"
     }
 
@@ -41,10 +41,10 @@ public struct HookInstaller: Sendable {
         }
     }
 
-    public var scriptURL: URL { directory.appending(path: Self.scriptName) }
-    public var settingsURL: URL { directory.appending(path: settingsFileName) }
+    var scriptURL: URL { directory.appending(path: Self.scriptName) }
+    var settingsURL: URL { directory.appending(path: settingsFileName) }
 
-    public var script: String {
+    var script: String {
         """
         #!/bin/sh
         timeout="${1:-5}"
@@ -106,15 +106,15 @@ public struct HookInstaller: Sendable {
         """
     }
 
-    public var remoteInstallCommand: String {
+    var remoteInstallCommand: String {
         "curl -sf -H 'Authorization: Bearer \(token)' http://127.0.0.1:\(port)\(HookServer.installPath) | sh"
     }
 
-    public var sshConfigSnippet: String {
+    var sshConfigSnippet: String {
         "RemoteForward \(port) 127.0.0.1:\(port)"
     }
 
-    public static func remoteInstallScript(for installers: [HookInstaller]) -> String {
+    static func remoteInstallScript(for installers: [HookInstaller]) -> String {
         var script = """
         #!/bin/sh
         set -e
@@ -167,11 +167,11 @@ public struct HookInstaller: Sendable {
         "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
-    public var isInstalled: Bool {
+    var isInstalled: Bool {
         hasAllHooks && isScriptCurrent
     }
 
-    public var needsUpgrade: Bool {
+    var needsUpgrade: Bool {
         hasAnyHooks && !isInstalled
     }
 
@@ -191,7 +191,7 @@ public struct HookInstaller: Sendable {
         (try? String(contentsOf: scriptURL, encoding: .utf8)) == script
     }
 
-    public func install() throws {
+    func install() throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         guard FileManager.default.createFile(atPath: scriptURL.path, contents: Data(script.utf8), attributes: [.posixPermissions: 0o700]) else {
             throw CocoaError(.fileWriteUnknown)
@@ -208,7 +208,7 @@ public struct HookInstaller: Sendable {
         try writeSettings(settings)
     }
 
-    public func uninstall() throws {
+    func uninstall() throws {
         if var settings = try readSettings(), var hooks = settings["hooks"] as? [String: Any] {
             for event in hooks.keys {
                 let groups = Self.withoutIsletHooks(hooks[event])
@@ -246,9 +246,9 @@ public struct HookInstaller: Sendable {
         }
     }
 
-    public struct UnreadableSettings: Error, LocalizedError {
-        public let path: String
-        public var errorDescription: String? { "\(path) is not a JSON object" }
+    struct UnreadableSettings: Error, LocalizedError {
+        let path: String
+        var errorDescription: String? { "\(path) is not a JSON object" }
     }
 
     private func readSettings() throws -> [String: Any]? {

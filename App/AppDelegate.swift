@@ -74,8 +74,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func observeMenuBarIconSetting() {
         withObservationTracking {
             updateStatusItem(visible: settings.showsMenuBarIcon)
-        } onChange: {
-            Task { @MainActor [weak self] in
+        } onChange: { [weak self] in
+            Task { @MainActor in
                 self?.observeMenuBarIconSetting()
             }
         }

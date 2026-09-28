@@ -1,7 +1,7 @@
 import Foundation
 
-public struct HookEvent: Sendable, Equatable, Decodable {
-    public enum Kind: String, Sendable, Decodable {
+struct HookEvent: Sendable, Equatable, Decodable {
+    enum Kind: String, Sendable, Decodable {
         case sessionStart = "SessionStart"
         case sessionEnd = "SessionEnd"
         case userPromptSubmit = "UserPromptSubmit"
@@ -15,32 +15,32 @@ public struct HookEvent: Sendable, Equatable, Decodable {
         case stopFailure = "StopFailure"
         case other
 
-        public init(from decoder: any Decoder) throws {
+        init(from decoder: any Decoder) throws {
             self = Self(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .other
         }
     }
 
-    public var kind: Kind
-    public var sessionID: String
-    public var cwd: String?
-    public var transcriptPath: String?
-    public var toolName: String?
-    public var toolInput: JSONValue?
-    public var prompt: String?
-    public var message: String?
-    public var notificationType: String?
-    public var source: String?
-    public var permissionMode: String?
-    public var agentType: String?
-    public var error: String?
-    public var lastAssistantMessage: String?
-    public var reason: String?
-    public var agent: AgentSession.Agent = .claudeCode
-    public var host: String?
-    public var terminal: TerminalApp?
-    public var tty: String?
-    public var pid: Int32?
-    public var title: String?
+    var kind: Kind
+    var sessionID: String
+    var cwd: String?
+    var transcriptPath: String?
+    var toolName: String?
+    var toolInput: JSONValue?
+    var prompt: String?
+    var message: String?
+    var notificationType: String?
+    var source: String?
+    var permissionMode: String?
+    var agentType: String?
+    var error: String?
+    var lastAssistantMessage: String?
+    var reason: String?
+    var agent: AgentSession.Agent = .claudeCode
+    var host: String?
+    var terminal: TerminalApp?
+    var tty: String?
+    var pid: Int32?
+    var title: String?
 
     private enum CodingKeys: String, CodingKey {
         case kind = "hook_event_name"
@@ -61,7 +61,7 @@ public struct HookEvent: Sendable, Equatable, Decodable {
         case title = "session_title"
     }
 
-    public init(kind: Kind, sessionID: String, cwd: String? = nil, transcriptPath: String? = nil, toolName: String? = nil, toolInput: JSONValue? = nil, prompt: String? = nil, message: String? = nil, notificationType: String? = nil, source: String? = nil, permissionMode: String? = nil, agentType: String? = nil, error: String? = nil, lastAssistantMessage: String? = nil, reason: String? = nil, agent: AgentSession.Agent = .claudeCode, host: String? = nil, terminal: TerminalApp? = nil, tty: String? = nil, pid: Int32? = nil, title: String? = nil) {
+    init(kind: Kind, sessionID: String, cwd: String? = nil, transcriptPath: String? = nil, toolName: String? = nil, toolInput: JSONValue? = nil, prompt: String? = nil, message: String? = nil, notificationType: String? = nil, source: String? = nil, permissionMode: String? = nil, agentType: String? = nil, error: String? = nil, lastAssistantMessage: String? = nil, reason: String? = nil, agent: AgentSession.Agent = .claudeCode, host: String? = nil, terminal: TerminalApp? = nil, tty: String? = nil, pid: Int32? = nil, title: String? = nil) {
         self.kind = kind
         self.sessionID = sessionID
         self.cwd = cwd
@@ -85,7 +85,7 @@ public struct HookEvent: Sendable, Equatable, Decodable {
         self.title = title
     }
 
-    public init(from decoder: any Decoder) throws {
+    init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         kind = try container.decode(Kind.self, forKey: .kind)
         sessionID = try container.decode(String.self, forKey: .sessionID)
@@ -105,7 +105,7 @@ public struct HookEvent: Sendable, Equatable, Decodable {
         title = (try? container.decodeIfPresent(String.self, forKey: .title)).flatMap { $0.isEmpty ? nil : $0 }
     }
 
-    public static func decode(_ data: Data, agent: String? = nil, host: String? = nil, terminal: String? = nil, tty: String? = nil, pid: String? = nil, title: String? = nil) throws -> HookEvent {
+    static func decode(_ data: Data, agent: String? = nil, host: String? = nil, terminal: String? = nil, tty: String? = nil, pid: String? = nil, title: String? = nil) throws -> HookEvent {
         var event = try JSONDecoder().decode(HookEvent.self, from: data)
         event.agent = agent.flatMap(AgentSession.Agent.init(rawValue:)) ?? .claudeCode
         event.host = host
@@ -122,11 +122,11 @@ public struct HookEvent: Sendable, Equatable, Decodable {
         !value.isEmpty && value.unicodeScalars.allSatisfy { identifierCharacters.contains($0) }
     }
 
-    public var isInAutoMode: Bool {
+    var isInAutoMode: Bool {
         permissionMode == "auto"
     }
 
-    public var failureDescription: String {
+    var failureDescription: String {
         switch error {
         case "rate_limit": "Rate limit reached"
         case "overloaded": "The API is overloaded"
@@ -138,11 +138,11 @@ public struct HookEvent: Sendable, Equatable, Decodable {
         }
     }
 
-    public var isTaskNotification: Bool {
+    var isTaskNotification: Bool {
         prompt?.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("<task-notification>") == true
     }
 
-    public var activityDescription: String? {
+    var activityDescription: String? {
         toolDescription.map { description in agentType.map { "\($0): \(description)" } ?? description }
     }
 

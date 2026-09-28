@@ -1,16 +1,16 @@
 import Foundation
 
-public struct ActivityEntry: Identifiable, Sendable, Equatable {
-    public static let limit = 10
+struct ActivityEntry: Identifiable, Sendable, Equatable {
+    static let limit = 10
 
-    public let id: UUID
-    public let toolName: String
-    public let toolInput: JSONValue?
-    public let title: String
-    public let detail: String?
-    public let startedAt: Date
-    public var isComplete: Bool
-    public var didFail: Bool
+    let id: UUID
+    let toolName: String
+    let toolInput: JSONValue?
+    let title: String
+    let detail: String?
+    let startedAt: Date
+    var isComplete: Bool
+    var didFail: Bool
 
     init(event: HookEvent, at timestamp: Date, isComplete: Bool, didFail: Bool = false) {
         id = UUID()
@@ -27,7 +27,7 @@ public struct ActivityEntry: Identifiable, Sendable, Equatable {
         event.toolName == toolName && event.toolInput == toolInput
     }
 
-    public var systemImage: String {
+    var systemImage: String {
         switch toolName {
         case "Read": "doc.text"
         case "Edit", "MultiEdit", "NotebookEdit": "pencil"

@@ -29,6 +29,12 @@ public final class AppSettings {
 
     private let defaults: UserDefaults?
 
+    private enum Defaults {
+        static let switchesToDropTargetOnDrag = true
+        static let drawsIdleNotchShape = false
+        static let showsMenuBarIcon = true
+    }
+
     private enum Keys {
         static let animation = "islet.settings.animation"
         static let switchesToDropTargetOnDrag = "islet.settings.switchesToDropTargetOnDrag"
@@ -42,11 +48,11 @@ public final class AppSettings {
     public init(defaults: UserDefaults? = nil) {
         self.defaults = defaults
         animation = Self.load(NotchAnimation.self, forKey: Keys.animation, from: defaults) ?? .default
-        switchesToDropTargetOnDrag = Self.load(Bool.self, forKey: Keys.switchesToDropTargetOnDrag, from: defaults) ?? true
-        drawsIdleNotchShape = Self.load(Bool.self, forKey: Keys.drawsIdleNotchShape, from: defaults) ?? false
+        switchesToDropTargetOnDrag = Self.load(Bool.self, forKey: Keys.switchesToDropTargetOnDrag, from: defaults) ?? Defaults.switchesToDropTargetOnDrag
+        drawsIdleNotchShape = Self.load(Bool.self, forKey: Keys.drawsIdleNotchShape, from: defaults) ?? Defaults.drawsIdleNotchShape
         notchSize = Self.load(NotchSize.self, forKey: Keys.notchSize, from: defaults) ?? .default
         displayPlacement = Self.load(NotchDisplayPlacement.self, forKey: Keys.displayPlacement, from: defaults) ?? .default
-        showsMenuBarIcon = Self.load(Bool.self, forKey: Keys.showsMenuBarIcon, from: defaults) ?? true
+        showsMenuBarIcon = Self.load(Bool.self, forKey: Keys.showsMenuBarIcon, from: defaults) ?? Defaults.showsMenuBarIcon
         pillSelection = Self.load(PillSelection.self, forKey: Keys.pillSelection, from: defaults) ?? .default
     }
 
@@ -56,11 +62,11 @@ public final class AppSettings {
 
     public func resetAll() {
         animation = .default
-        switchesToDropTargetOnDrag = true
-        drawsIdleNotchShape = false
+        switchesToDropTargetOnDrag = Defaults.switchesToDropTargetOnDrag
+        drawsIdleNotchShape = Defaults.drawsIdleNotchShape
         notchSize = .default
         displayPlacement = .default
-        showsMenuBarIcon = true
+        showsMenuBarIcon = Defaults.showsMenuBarIcon
         pillSelection = .default
     }
 

@@ -1,23 +1,23 @@
 import Foundation
 
-public struct PendingRequest: Sendable, Equatable, Identifiable {
-    public struct Question: Sendable, Equatable {
-        public struct Option: Sendable, Equatable {
-            public var label: String
-            public var description: String?
+struct PendingRequest: Sendable, Equatable, Identifiable {
+    struct Question: Sendable, Equatable {
+        struct Option: Sendable, Equatable {
+            var label: String
+            var description: String?
 
-            public init(label: String, description: String? = nil) {
+            init(label: String, description: String? = nil) {
                 self.label = label
                 self.description = description
             }
         }
 
-        public var text: String
-        public var header: String?
-        public var options: [Option]
-        public var multiSelect: Bool
+        var text: String
+        var header: String?
+        var options: [Option]
+        var multiSelect: Bool
 
-        public init(text: String, header: String? = nil, options: [Option], multiSelect: Bool = false) {
+        init(text: String, header: String? = nil, options: [Option], multiSelect: Bool = false) {
             self.text = text
             self.header = header
             self.options = options
@@ -25,18 +25,18 @@ public struct PendingRequest: Sendable, Equatable, Identifiable {
         }
     }
 
-    public enum Kind: Sendable, Equatable {
+    enum Kind: Sendable, Equatable {
         case permission(tool: String, detail: String?)
         case question([Question])
     }
 
-    public let id: UUID
-    public let toolName: String
-    public let toolInput: JSONValue?
-    public let agentType: String?
-    public let kind: Kind
+    let id: UUID
+    let toolName: String
+    let toolInput: JSONValue?
+    let agentType: String?
+    let kind: Kind
 
-    public init?(id: UUID = UUID(), toolName: String, toolInput: JSONValue?, agentType: String? = nil) {
+    init?(id: UUID = UUID(), toolName: String, toolInput: JSONValue?, agentType: String? = nil) {
         self.id = id
         self.toolName = toolName
         self.toolInput = toolInput
@@ -52,16 +52,16 @@ public struct PendingRequest: Sendable, Equatable, Identifiable {
         }
     }
 
-    public var isQuestion: Bool {
+    var isQuestion: Bool {
         if case .question = kind { return true }
         return false
     }
 
-    public var activityDescription: String? {
+    var activityDescription: String? {
         HookEvent(kind: .permissionRequest, sessionID: "", toolName: toolName, toolInput: toolInput).activityDescription
     }
 
-    public var title: String {
+    var title: String {
         switch kind {
         case .permission(let tool, _): "Allow \(tool)?"
         case .question(let questions): questions.count == 1 ? "Question" : "\(questions.count) questions"
@@ -92,7 +92,7 @@ public struct PendingRequest: Sendable, Equatable, Identifiable {
     }
 }
 
-public enum PermissionDecision: Sendable, Equatable {
+enum PermissionDecision: Sendable, Equatable {
     case allow
     case deny
     case answers([String: String])

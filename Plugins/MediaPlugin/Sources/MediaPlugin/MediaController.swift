@@ -3,23 +3,23 @@ import IsletCore
 import Observation
 import SwiftUI
 
-public typealias ArtworkLoader = @Sendable (URL) async throws -> Data
+typealias ArtworkLoader = @Sendable (URL) async throws -> Data
 
 @MainActor
 @Observable
-public final class MediaController {
-    public private(set) var source: any MediaSource
-    public private(set) var nowPlaying: NowPlaying?
-    public private(set) var artwork: CGImage?
-    public private(set) var tint: Color.Resolved?
-    public private(set) var isSourceRunning = false
-    public private(set) var errorMessage: String?
-    public private(set) var isBrowsingPlaylists = false
-    public private(set) var isLoadingPlaylists = false
-    public private(set) var playlists: [MediaPlaylist] = []
-    public private(set) var playlistError: String?
-    public var showsPill: Bool
-    public var isScreenVisible = false {
+final class MediaController {
+    private(set) var source: any MediaSource
+    private(set) var nowPlaying: NowPlaying?
+    private(set) var artwork: CGImage?
+    private(set) var tint: Color.Resolved?
+    private(set) var isSourceRunning = false
+    private(set) var errorMessage: String?
+    private(set) var isBrowsingPlaylists = false
+    private(set) var isLoadingPlaylists = false
+    private(set) var playlists: [MediaPlaylist] = []
+    private(set) var playlistError: String?
+    var showsPill: Bool
+    var isScreenVisible = false {
         didSet {
             guard isScreenVisible, !oldValue, pollTask != nil else { return }
             startPolling()
@@ -37,7 +37,7 @@ public final class MediaController {
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var browseGeneration = 0
 
-    public init(
+    init(
         source: any MediaSource,
         showsPill: Bool = true,
         playingInterval: Duration = .seconds(1),
@@ -53,7 +53,7 @@ public final class MediaController {
         self.loadArtwork = loadArtwork
     }
 
-    public var pillStatus: PillStatus? {
+    var pillStatus: PillStatus? {
         guard showsPill, let nowPlaying, nowPlaying.isPlaying else { return nil }
         return PillStatus(text: "\(nowPlaying.title) · \(nowPlaying.artist)", systemImage: "music.note", priority: .ambient, artwork: artwork, tint: tint)
     }
@@ -63,7 +63,7 @@ public final class MediaController {
         return nowPlaying?.isPlaying == true ? playingInterval : pausedInterval
     }
 
-    public func start() {
+    func start() {
         guard pollTask == nil else { return }
         startPolling()
         changeTask = Task { [weak self, source] in
@@ -85,7 +85,7 @@ public final class MediaController {
         }
     }
 
-    public func stop() {
+    func stop() {
         generation += 1
         pollTask?.cancel()
         changeTask?.cancel()
@@ -97,7 +97,7 @@ public final class MediaController {
         updateArtwork(for: nil)
     }
 
-    public func replaceSource(_ source: any MediaSource) {
+    func replaceSource(_ source: any MediaSource) {
         let wasStarted = pollTask != nil
         stop()
         self.source = source
@@ -108,7 +108,7 @@ public final class MediaController {
         }
     }
 
-    public func refresh() async {
+    func refresh() async {
         isSourceRunning = source.isRunning
         guard isSourceRunning else {
             hidePlaylists()
@@ -136,37 +136,37 @@ public final class MediaController {
         }
     }
 
-    public func playPause() async {
+    func playPause() async {
         await perform { try await $0.playPause() }
     }
 
-    public func nextTrack() async {
+    func nextTrack() async {
         await perform { try await $0.nextTrack() }
     }
 
-    public func previousTrack() async {
+    func previousTrack() async {
         await perform { try await $0.previousTrack() }
     }
 
-    public func seek(to position: TimeInterval) async {
+    func seek(to position: TimeInterval) async {
         await perform { try await $0.seek(to: position) }
     }
 
-    public var capabilities: MediaCapabilities {
+    var capabilities: MediaCapabilities {
         source.capabilities
     }
 
-    public func toggleShuffle() async {
+    func toggleShuffle() async {
         guard capabilities.canShuffle, let nowPlaying else { return }
         await perform { try await $0.setShuffling(!nowPlaying.isShuffling) }
     }
 
-    public func cycleRepeatMode() async {
+    func cycleRepeatMode() async {
         guard let nowPlaying, let next = capabilities.repeatMode(after: nowPlaying.repeatMode) else { return }
         await perform { try await $0.setRepeatMode(next) }
     }
 
-    public func togglePlaylists() async {
+    func togglePlaylists() async {
         if isBrowsingPlaylists {
             hidePlaylists()
         } else {
@@ -174,7 +174,7 @@ public final class MediaController {
         }
     }
 
-    public func showPlaylists() async {
+    func showPlaylists() async {
         guard capabilities.canBrowsePlaylists, source.isRunning else { return }
         browseGeneration += 1
         let requested = browseGeneration
@@ -198,7 +198,7 @@ public final class MediaController {
         }
     }
 
-    public func hidePlaylists() {
+    func hidePlaylists() {
         browseGeneration += 1
         isLoadingPlaylists = false
         playlistError = nil
@@ -206,7 +206,7 @@ public final class MediaController {
         isBrowsingPlaylists = false
     }
 
-    public func play(_ playlist: MediaPlaylist) async {
+    func play(_ playlist: MediaPlaylist) async {
         guard source.isRunning else {
             isSourceRunning = false
             hidePlaylists()
@@ -227,7 +227,7 @@ public final class MediaController {
         await refresh()
     }
 
-    public func launchSource() {
+    func launchSource() {
         source.launch()
     }
 

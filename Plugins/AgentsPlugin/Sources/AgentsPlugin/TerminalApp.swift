@@ -1,7 +1,7 @@
 import Foundation
 
-public struct TerminalApp: Sendable, Equatable, Hashable {
-    public enum Targeting: Sendable {
+struct TerminalApp: Sendable, Equatable, Hashable {
+    enum Targeting: Sendable {
         case terminalTab
         case iTermSession
         case editorFolder
@@ -29,15 +29,15 @@ public struct TerminalApp: Sendable, Equatable, Hashable {
         "com.todesktop.230313mzl4w4u92",
     ]
 
-    public let bundleIdentifier: String
+    let bundleIdentifier: String
 
-    public init?(identifier: String) {
+    init?(identifier: String) {
         let trimmed = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         bundleIdentifier = Self.programs[trimmed] ?? trimmed
     }
 
-    public var targeting: Targeting {
+    var targeting: Targeting {
         switch bundleIdentifier {
         case "com.apple.Terminal": .terminalTab
         case "com.googlecode.iterm2": .iTermSession

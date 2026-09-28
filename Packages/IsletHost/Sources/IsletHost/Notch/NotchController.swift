@@ -116,8 +116,8 @@ public final class NotchController {
             pillOwnerID = isExpanded ? nil : registry.pillOwner(settings.pillSelection, keeping: heldID)
             trackedExpandedShapeSize = expandedShapeSize
             announcements = registry.announcements
-        } onChange: {
-            Task { @MainActor [weak self] in
+        } onChange: { [weak self] in
+            Task { @MainActor in
                 guard let self else { return }
                 self.holdHoverRegionIfShapeLeftPointer(previousSize: self.trackedExpandedShapeSize)
                 self.observeRegistry()

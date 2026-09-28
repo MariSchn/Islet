@@ -1,11 +1,11 @@
 import Foundation
 
-public struct AgentSession: Identifiable, Sendable, Equatable {
-    public enum Agent: String, Sendable, CaseIterable {
+struct AgentSession: Identifiable, Sendable, Equatable {
+    enum Agent: String, Sendable, CaseIterable {
         case claudeCode = "claude-code"
         case codex
 
-        public var displayName: String {
+        var displayName: String {
             switch self {
             case .claudeCode: "Claude Code"
             case .codex: "Codex"
@@ -13,7 +13,7 @@ public struct AgentSession: Identifiable, Sendable, Equatable {
         }
     }
 
-    public enum State: Sendable, Equatable {
+    enum State: Sendable, Equatable {
         case starting
         case working
         case needsAttention(String)
@@ -21,7 +21,7 @@ public struct AgentSession: Identifiable, Sendable, Equatable {
         case interrupted
         case failed(String)
 
-        public var requiresAttention: Bool {
+        var requiresAttention: Bool {
             switch self {
             case .needsAttention, .failed: true
             case .starting, .working, .done, .interrupted: false
@@ -29,34 +29,34 @@ public struct AgentSession: Identifiable, Sendable, Equatable {
         }
     }
 
-    public let id: String
-    public var agent: Agent
-    public var host: String?
-    public var isRemote = false
-    public var isUnreachable = false
-    public var terminal: TerminalApp?
-    public var tty: String?
-    public var pid: Int32?
-    public var transcriptPath: String?
-    public var cwd: String?
-    public var title: String?
-    public var task: String?
-    public var activity: String?
-    public var state: State
-    public var pendingRequests: [PendingRequest] = []
-    public var activities: [ActivityEntry] = []
-    public var plan: String?
-    public var startedAt: Date
-    public var turnStartedAt: Date
-    public var updatedAt: Date
+    let id: String
+    var agent: Agent
+    var host: String?
+    var isRemote = false
+    var isUnreachable = false
+    var terminal: TerminalApp?
+    var tty: String?
+    var pid: Int32?
+    var transcriptPath: String?
+    var cwd: String?
+    var title: String?
+    var task: String?
+    var activity: String?
+    var state: State
+    var pendingRequests: [PendingRequest] = []
+    var activities: [ActivityEntry] = []
+    var plan: String?
+    var startedAt: Date
+    var turnStartedAt: Date
+    var updatedAt: Date
 
-    public var pendingRequest: PendingRequest? { pendingRequests.first }
+    var pendingRequest: PendingRequest? { pendingRequests.first }
 
-    public var displayName: String {
+    var displayName: String {
         title ?? projectName
     }
 
-    public var projectName: String {
+    var projectName: String {
         guard let cwd, !cwd.isEmpty else { return agent.displayName }
         return (cwd as NSString).lastPathComponent
     }

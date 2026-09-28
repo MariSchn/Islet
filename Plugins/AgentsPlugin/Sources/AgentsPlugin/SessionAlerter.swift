@@ -1,16 +1,16 @@
 import AppKit
 import UserNotifications
 
-public struct AlertSettings: Sendable, Equatable {
-    public var attentionSound = true
-    public var attentionNotification = false
-    public var finishedSound = true
-    public var finishedNotification = false
-    public var announcesInNotch = true
+struct AlertSettings: Sendable, Equatable {
+    var attentionSound = true
+    var attentionNotification = false
+    var finishedSound = true
+    var finishedNotification = false
+    var announcesInNotch = true
 
-    public init() {}
+    init() {}
 
-    public var usesNotifications: Bool { attentionNotification || finishedNotification }
+    var usesNotifications: Bool { attentionNotification || finishedNotification }
 }
 
 @MainActor

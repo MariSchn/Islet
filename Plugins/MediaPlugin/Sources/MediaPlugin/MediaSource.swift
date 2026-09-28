@@ -1,54 +1,54 @@
 import AppKit
 
-public enum RepeatMode: String, Sendable, Equatable, CaseIterable {
+enum RepeatMode: String, Sendable, Equatable, CaseIterable {
     case off
     case all
     case one
 }
 
-public struct MediaPlaylist: Sendable, Equatable, Identifiable {
-    public let id: String
-    public let name: String
+struct MediaPlaylist: Sendable, Equatable, Identifiable {
+    let id: String
+    let name: String
 
-    public init(id: String, name: String) {
+    init(id: String, name: String) {
         self.id = id
         self.name = name
     }
 }
 
-public struct MediaCapabilities: Sendable, Equatable {
-    public static let none = MediaCapabilities()
+struct MediaCapabilities: Sendable, Equatable {
+    static let none = MediaCapabilities()
 
-    public var canShuffle: Bool
-    public var repeatModes: [RepeatMode]
-    public var canBrowsePlaylists: Bool
+    var canShuffle: Bool
+    var repeatModes: [RepeatMode]
+    var canBrowsePlaylists: Bool
 
-    public init(canShuffle: Bool = false, repeatModes: [RepeatMode] = [], canBrowsePlaylists: Bool = false) {
+    init(canShuffle: Bool = false, repeatModes: [RepeatMode] = [], canBrowsePlaylists: Bool = false) {
         self.canShuffle = canShuffle
         self.repeatModes = repeatModes
         self.canBrowsePlaylists = canBrowsePlaylists
     }
 
-    public var canRepeat: Bool {
+    var canRepeat: Bool {
         repeatModes.count > 1
     }
 
-    public func repeatMode(after mode: RepeatMode) -> RepeatMode? {
+    func repeatMode(after mode: RepeatMode) -> RepeatMode? {
         guard canRepeat else { return nil }
         guard let index = repeatModes.firstIndex(of: mode) else { return repeatModes.first }
         return repeatModes[(index + 1) % repeatModes.count]
     }
 }
 
-public struct UnsupportedMediaCommand: LocalizedError {
-    public let sourceName: String
+struct UnsupportedMediaCommand: LocalizedError {
+    let sourceName: String
 
-    public var errorDescription: String? {
+    var errorDescription: String? {
         "\(sourceName) does not support this."
     }
 }
 
-public protocol MediaSource: Sendable {
+protocol MediaSource: Sendable {
     var displayName: String { get }
     var bundleIdentifier: String { get }
     var capabilities: MediaCapabilities { get }
@@ -69,7 +69,7 @@ public protocol MediaSource: Sendable {
     func artwork(at url: URL) async throws -> Data
 }
 
-public extension MediaSource {
+extension MediaSource {
     var capabilities: MediaCapabilities { .none }
 
     @MainActor

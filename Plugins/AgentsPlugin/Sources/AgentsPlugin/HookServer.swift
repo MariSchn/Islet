@@ -1,15 +1,15 @@
 import Foundation
 import Network
 
-public actor HookServer {
-    public typealias Handler = @Sendable (HookEvent) async -> HookReply
+actor HookServer {
+    typealias Handler = @Sendable (HookEvent) async -> HookReply
 
-    public static let defaultPort: UInt16 = 7365
-    public static let hookPath = "/hook"
-    public static let installPath = "/install"
-    public static let maxBodySize = 16 << 20
-    public static let requestTimeout: Duration = .seconds(10)
-    public static let replyTimeout: Duration = .seconds(600)
+    static let defaultPort: UInt16 = 7365
+    static let hookPath = "/hook"
+    static let installPath = "/install"
+    static let maxBodySize = 16 << 20
+    static let requestTimeout: Duration = .seconds(10)
+    static let replyTimeout: Duration = .seconds(600)
 
     private struct Client {
         let connection: NWConnection
@@ -17,22 +17,22 @@ public actor HookServer {
         var work: Task<Void, Never>?
     }
 
-    public let port: UInt16
-    public let token: String
-    public let installScript: String?
+    let port: UInt16
+    let token: String
+    let installScript: String?
     private let handler: Handler
     private var listener: NWListener?
     private var clients: [ObjectIdentifier: Client] = [:]
     private let queue = DispatchQueue(label: "islet.agents.hook-server")
 
-    public init(port: UInt16 = HookServer.defaultPort, token: String, installScript: String? = nil, handler: @escaping Handler) {
+    init(port: UInt16 = HookServer.defaultPort, token: String, installScript: String? = nil, handler: @escaping Handler) {
         self.port = port
         self.token = token
         self.installScript = installScript
         self.handler = handler
     }
 
-    public func start() async throws {
+    func start() async throws {
         guard listener == nil else { return }
         let parameters = NWParameters.tcp
         parameters.requiredInterfaceType = .loopback
@@ -79,11 +79,11 @@ public actor HookServer {
         listener = nil
     }
 
-    public var isListening: Bool {
+    var isListening: Bool {
         listener != nil
     }
 
-    public func stop() async {
+    func stop() async {
         for id in clients.keys {
             close(id)
         }
@@ -205,12 +205,12 @@ public actor HookServer {
     }
 }
 
-public struct HookReply: Sendable, Equatable {
-    public static let empty = HookReply(body: "{}")
+struct HookReply: Sendable, Equatable {
+    static let empty = HookReply(body: "{}")
 
-    public var body: String
+    var body: String
 
-    public init(body: String) {
+    init(body: String) {
         self.body = body
     }
 }

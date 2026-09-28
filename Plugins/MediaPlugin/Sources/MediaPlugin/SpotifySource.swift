@@ -1,15 +1,15 @@
 import Foundation
 
-public struct SpotifySource: MediaSource {
-    public let displayName = "Spotify"
-    public let bundleIdentifier = "com.spotify.client"
-    public let capabilities = MediaCapabilities(canShuffle: true, repeatModes: [.off, .all])
+struct SpotifySource: MediaSource {
+    let displayName = "Spotify"
+    let bundleIdentifier = "com.spotify.client"
+    let capabilities = MediaCapabilities(canShuffle: true, repeatModes: [.off, .all])
 
     private let runner = AppleScriptRunner()
 
-    public init() {}
+    init() {}
 
-    public func stateChanges() -> AsyncStream<Void> {
+    func stateChanges() -> AsyncStream<Void> {
         AsyncStream { continuation in
             let center = DistributedNotificationCenter.default()
             nonisolated(unsafe) let token = center.addObserver(
@@ -21,32 +21,32 @@ public struct SpotifySource: MediaSource {
         }
     }
 
-    public func nowPlaying() async throws -> NowPlaying? {
+    func nowPlaying() async throws -> NowPlaying? {
         try await runner.run(Self.nowPlayingScript) { Self.nowPlaying(from: $0) }
     }
 
-    public func playPause() async throws {
+    func playPause() async throws {
         try await runner.run(Self.playPauseScript)
     }
 
-    public func nextTrack() async throws {
+    func nextTrack() async throws {
         try await runner.run(Self.nextTrackScript)
     }
 
-    public func previousTrack() async throws {
+    func previousTrack() async throws {
         try await runner.run(Self.previousTrackScript)
     }
 
-    public func seek(to position: TimeInterval) async throws {
+    func seek(to position: TimeInterval) async throws {
         guard position.isFinite else { return }
         try await runner.run(Self.seekScript(to: position), cached: false)
     }
 
-    public func setShuffling(_ shuffling: Bool) async throws {
+    func setShuffling(_ shuffling: Bool) async throws {
         try await runner.run(Self.shuffleScript(shuffling))
     }
 
-    public func setRepeatMode(_ mode: RepeatMode) async throws {
+    func setRepeatMode(_ mode: RepeatMode) async throws {
         try await runner.run(Self.repeatScript(mode))
     }
 
@@ -72,14 +72,7 @@ public struct SpotifySource: MediaSource {
     }
 
     static func script(_ body: String) -> String {
-        """
-        if application "Spotify" is not running then error "Application isn't running." number -600
-        with timeout of 2 seconds
-            tell application "Spotify"
-                \(body)
-            end tell
-        end timeout
-        """
+        AppleScript.tell("Spotify", body)
     }
 
     static func nowPlaying(from result: NSAppleEventDescriptor) -> NowPlaying? {
