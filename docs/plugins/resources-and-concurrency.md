@@ -38,6 +38,22 @@ Files dragged over the notch expand it. If the user has "Switch to a plugin that
 }
 ```
 
+## Working only while visible
+
+`context.isScreenVisible` is `true` while the notch is open on your plugin. Observe it to slow down or pause work nobody can see. `MediaPlugin` polls the player every second while its screen is visible and every 15 seconds otherwise, relying on the player's change notifications in between:
+
+```swift
+context.observe({ [unowned context] in context.isScreenVisible }) { controller.isScreenVisible = $0 }
+```
+
+## Logging
+
+Log through `context.logger`, an `os.Logger` whose category is your plugin id. Mark values that are safe to show in Console with `privacy: .public`; everything else is redacted outside of debugging:
+
+```swift
+context.logger.error("Could not load \(url.path, privacy: .public): \(error, privacy: .public)")
+```
+
 ## Swift 6 concurrency
 
 The app and all packages build in the Swift 6 language mode with strict concurrency checking.
@@ -79,4 +95,4 @@ The app and all packages build in the Swift 6 language mode with strict concurre
 
   Controlling another app needs the user's permission under Privacy & Security › Automation. macOS asks the first time. The app's `NSAppleEventsUsageDescription` is set in `project.yml`; update its text if your plugin controls apps for a new reason.
 - **Dates:** static `ISO8601DateFormatter` instances are not `Sendable`. Parse with `try Date(string, strategy: .iso8601)` instead.
-- **Observation callbacks:** plain closure properties on an `@Observable` model, such as change callbacks, should be marked `@ObservationIgnored` so that setting them doesn't trigger view updates.
+- **Observation callbacks:** prefer `context.derive` and `context.observe` over change callbacks. If a model does need a plain closure property, mark it `@ObservationIgnored` so that setting it doesn't trigger view updates.

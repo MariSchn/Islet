@@ -60,7 +60,7 @@ struct CounterPluginTests {
         defer { try? FileManager.default.removeItem(at: root) }
 
         let registry = PluginRegistry(storageRoot: root, userDefaults: defaults)
-        let entry = try await registry.register(manifest: CounterPlugin.manifest) { CounterPlugin(context: $0) }
+        let entry = try await registry.register(CounterPlugin.self)
 
         #expect(entry.state.isActive)
         #expect(entry.context.contentSize == CGSize(width: 360, height: 120))
@@ -74,7 +74,8 @@ struct CounterPluginTests {
 
 The built-in plugins keep most logic out of the plugin class and the views, in models that are easy to test on their own:
 
-- **Models with injected dependencies.** `MediaController` takes a `MediaSource`, and the tests pass a stub source to check the published pill without Spotify. Pass an `onPillChange`-style callback instead of the context to make the model testable without a registry.
+- **Models with injected dependencies.** `MediaController` takes a `MediaSource`, and the tests pass a stub source to check the pill without Spotify. Exposing the pill as a computed property of the model and deriving the context's pill from it keeps the model testable without a registry.
+- **Derived values.** Values kept in sync with `derive` or `observe` update on the next turn of the main actor after the state changes. Wait for them in a loop with `await Task.yield()` and a deadline instead of checking right away, as `ShelfSizingTests` does.
 - **Storage.** `ShelfStoreTests` creates a `ShelfStore` on a temporary directory and checks saving, loading and handling of a corrupt file.
 - **Sizing.** `AgentsPluginTests` calls `AgentsPlugin.contentSize(for:expanded:showsUsage:)` with different states and checks the heights, which keeps the size calculation in sync with the layout constants.
 

@@ -1,12 +1,16 @@
 # API reference
 
-Everything below is in the `IsletCore` module (`Packages/IsletCore/Sources/IsletCore`). All plugin-facing types that hold state are `@MainActor`.
+Everything below is in the `IsletCore` module (`Packages/IsletCore/Sources/IsletCore`). All plugin-facing types that hold state are `@MainActor`. `IsletCore` contains only what plugins build against; the notch windows, views and settings window live in `IsletHost`, which plugins don't import.
 
 ## IsletPlugin
 
 ```swift
 @MainActor
 public protocol IsletPlugin: AnyObject {
+    static var manifest: PluginManifest { get }
+
+    init(context: PluginContext)
+
     func activate() async throws
     func deactivate() async
 
@@ -18,17 +22,17 @@ public protocol IsletPlugin: AnyObject {
 }
 ```
 
-Only `makeScreen()` is required. The defaults are: `activate()` and `deactivate()` do nothing, `acceptsFileDrops` is `false`, and `makeSettingsView()` returns `nil`.
+`manifest`, `init(context:)` and `makeScreen()` are required. The defaults for the rest are: `activate()` and `deactivate()` do nothing, `acceptsFileDrops` is `false`, and `makeSettingsView()` returns `nil`.
 
 | Member | Called | Purpose |
 | --- | --- | --- |
 | `activate()` | When the plugin is registered while enabled, and each time the user enables it again. | Start work: load state, start timers, servers or observers, set `contentSize` and `pillStatus`. Throwing puts the plugin in the failed state (see [Lifecycle](#lifecycle)). |
-| `deactivate()` | When the user disables the plugin. | Stop everything `activate()` started. Not called when the app quits. |
+| `deactivate()` | When the user disables the plugin, and when the app quits. | Stop everything `activate()` started. On quit, the host waits at most 2 seconds for all plugins together. |
 | `makeScreen()` | Once, the first time the host needs the screen. The result is cached for the lifetime of the app. | Return the expanded view. Because it is built only once, it has to observe your model rather than capture values. |
 | `acceptsFileDrops` | Whenever the user drags something over the notch. | `true` makes the notch switch to this plugin during a drag (see [File drops](resources-and-concurrency.md#file-drops)). |
 | `makeSettingsView()` | Once, when the settings window first lists plugin settings. Cached like the screen. | Return a view for the plugin's settings tab, or `nil` for no tab. |
 
-The plugin's initializer is not part of the protocol. By convention it is `public init(context: PluginContext)`, called from the factory closure you pass to `PluginRegistry.register(manifest:make:)`. The initializer runs at registration even for plugins the user has disabled, so keep it cheap and start work in `activate()`.
+`init(context:)` is called when the host registers the plugin with `PluginRegistry.register(_:)`. It runs even for plugins the user has disabled, so keep it cheap and start work in `activate()`. Setting up `derive` and `observe` in the initializer is fine: they only read your model.
 
 ### Lifecycle
 
@@ -81,11 +85,15 @@ public final class PluginContext {
     public let manifest: PluginManifest
     public let storageDirectory: URL
     public let settings: PluginSettings
+    public let logger: Logger
     public var pillStatus: PillStatus?
     public var contentSize: CGSize?
+    public internal(set) var isScreenVisible: Bool
     public private(set) var announcement: PillAnnouncement?
 
     public func announce(_ announcement: PillAnnouncement)
+    public func derive<Value: Equatable>(_ property: ReferenceWritableKeyPath<PluginContext, Value>, from value: @escaping @MainActor () -> Value)
+    public func observe<Value: Equatable>(_ value: @escaping @MainActor () -> Value, onChange: @escaping @MainActor (Value) -> Void)
 }
 ```
 
@@ -94,11 +102,32 @@ public final class PluginContext {
 | `manifest` | The manifest the plugin was registered with. |
 | `storageDirectory` | A directory the host created for this plugin: `~/Library/Application Support/Islet/Plugins/<id>/`. See [Settings and storage](settings-and-storage.md#storage-directory). |
 | `settings` | Key-value preferences, stored in `UserDefaults` under this plugin's prefix. See [Settings and storage](settings-and-storage.md). |
+| `logger` | An `os.Logger` with the app's subsystem and the plugin id as its category, so the plugin's messages can be filtered in Console. |
 | `pillStatus` | What the closed notch shows for this plugin, or `nil` for nothing. See [Collapsed pill](collapsed-pill.md). |
 | `contentSize` | The size the expanded notch should give your screen, or `nil` for the default. See [Sizing](sizing.md). |
+| `isScreenVisible` | `true` while the notch is open on this plugin. Use it to do expensive work, such as frequent polling, only while the screen is seen. |
 | `announcement`, `announce(_:)` | A short line shown once below the closed notch. See [Announcements](collapsed-pill.md#announcements). |
+| `derive(_:from:)` | Keeps `pillStatus` or `contentSize` equal to a value computed from observable state. See [Deriving state](#deriving-state). |
+| `observe(_:onChange:)` | Calls `onChange` with the current value, and again whenever the observed value changes. See [Deriving state](#deriving-state). |
 
 There is no public initializer. To get a context in tests, register the plugin with a `PluginRegistry` (see [Testing](testing.md)).
+
+### Deriving state
+
+Instead of assigning `pillStatus` and `contentSize` whenever your model changes, derive them from it:
+
+```swift
+public init(context: PluginContext) {
+    self.context = context
+    context.derive(\.pillStatus) { [model] in model.pillStatus }
+    context.derive(\.contentSize) { [model] in CGSize(width: 360, height: model.isExpanded ? 240 : 120) }
+    context.observe({ [model] in model.step }) { context.settings.set($0, forKey: "step") }
+}
+```
+
+The closure is evaluated right away and again whenever an `@Observable` property it read changes. The new value is applied on the next turn of the main actor and only when it differs from the current one. A derived property is also restored if something else overwrites it, for example the host clearing the pill after `deactivate()`. Values that don't come from observable state, such as the current time, are not tracked: read an observable property that you change when they should be recomputed, as `AgentSessionStore` does for finished sessions that expire.
+
+`observe(_:onChange:)` is for side effects, such as saving a setting or announcing a status change. `onChange` runs once with the initial value and then only when the value changes.
 
 ## PluginSettings
 
@@ -193,8 +222,8 @@ private struct AnimatedList: View {
 
 Plugins don't need these at runtime, but they are public and useful in tests:
 
-- `PluginRegistry(storageRoot: URL, userDefaults: UserDefaults = .standard)` owns all plugins. `register(manifest:make:) async throws -> PluginEntry` (discardable result) registers and activates a plugin. `setEnabled(_:for:) async`, `isEnabled(_:)`, `entry(for:)`, `entries`, `enabledEntries` and `selectedID` expose the rest of its state.
+- `PluginRegistry(storageRoot: URL, userDefaults: UserDefaults = .standard)` owns all plugins. `register(_:) async throws -> PluginEntry` (discardable result) registers and activates a plugin type; `register(manifest:make:)` does the same with a factory closure. `setEnabled(_:for:) async`, `isEnabled(_:)`, `entry(for:)`, `entries`, `enabledEntries` and `selectedID` expose the rest of its state. `deactivateAll()` deactivates every plugin, and `setNotchExpanded(_:by:)` is how the host reports an open notch.
 - `PluginEntry` exposes `manifest`, `context`, `plugin`, `state`, and the cached `screen` and `settingsView`.
 - `PluginState.isActive` is `true` only for `.active`.
 - `PillSelection` is the user's choice of how the collapsed pill is picked (see [Collapsed pill](collapsed-pill.md#which-plugins-pill-is-shown)).
-- `NotchGeometry` holds the sizing rules (see [Sizing](sizing.md)).
+- `NotchGeometry`, in `IsletHost`, holds the sizing rules (see [Sizing](sizing.md)).
