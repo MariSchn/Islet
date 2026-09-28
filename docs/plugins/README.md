@@ -32,6 +32,8 @@ All built-in plugins live in `Plugins/` and use only the public `IsletCore` API,
 
 ## Checklist for a new plugin
 
+With Claude Code, the `new-plugin` skill (`.claude/skills/new-plugin`) scaffolds the package, the plugin class, a test and the app wiring below, then builds and tests the result.
+
 - [ ] `Plugins/<Name>Plugin/Package.swift` with a library product and a dependency on `../../Packages/IsletCore`.
 - [ ] A `@MainActor public final class` conforming to `IsletPlugin`, with a `public static let manifest` and `public init(context: PluginContext)`.
 - [ ] A unique, valid manifest `id` (see [PluginManifest](api-reference.md#pluginmanifest)).
