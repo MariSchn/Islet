@@ -28,7 +28,7 @@ Clearing the pill matters: a plugin that keeps a stale pill can keep the notch s
 | Part | Source |
 | --- | --- |
 | Left of the notch (36 pt) | `systemImage` as an SF Symbol, or a small dot when it is `nil`. |
-| Right of the notch | `ring` if set, otherwise `artwork` if set (a rounded thumbnail), otherwise `text`. Ring and artwork take 36 points. Text takes as much width as it needs, up to 220 points and at most the width of the navigation row's side column, and is truncated with "…". |
+| Right of the notch | `ring` if set, otherwise `artwork` if set (a rounded thumbnail), otherwise `text`. Ring and artwork take a 36 point column; the ring is drawn at 18 points (`NotchGeometry.pillRingDiameter`) and the artwork at 20 points (`NotchGeometry.pillArtworkSide`). Text takes as much width as it needs, up to 220 points and at most the width of the navigation row's side column, and is truncated with "…". |
 | Color | Orange for `.attention` and `.urgent`, otherwise `tint` if set, otherwise white. |
 
 `text` is always used as the accessibility label, so fill it in even when you show a ring or artwork.

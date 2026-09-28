@@ -26,8 +26,8 @@ A plugin contributes up to four things:
 All built-in plugins live in `Plugins/` and use only the public `IsletCore` API, so they double as examples:
 
 - `HelloPlugin`: the minimal example. It covers a screen, a settings view, pill priorities and resizing at runtime.
-- `ShelfPlugin`: file drops (`acceptsFileDrops`), and state that persists as JSON in `context.storageDirectory`.
-- `MediaPlugin`: polling in `activate()`/`deactivate()`, a pill with artwork and tint, an injectable data source for tests.
+- `ShelfPlugin`: file drops (`acceptsFileDrops`), state that persists as JSON in `context.storageDirectory`, and a width that follows the number of items.
+- `MediaPlugin`: polling in `activate()`/`deactivate()`, a pill with artwork and tint, interchangeable data sources with per-source capabilities, a height that grows while a list is open, and stubbed sources in tests.
 - `AgentsPlugin`: a local server started in `activate()`, content size computed from state, a ring pill, announcements, bundled resources (`Bundle.module`) and a large settings pane.
 
 ## Checklist for a new plugin

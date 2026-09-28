@@ -48,10 +48,15 @@ Settings › Notch › Size scales the whole notch: Small 0.85, Default 1, Large
 When the height depends on your content (rows, expanded sections), derive it from the same constants the views use and keep both in one place. `AgentsPlugin` does this with a static function:
 
 ```swift
-static func contentSize(for sessions: [AgentSession], expanded: Set<String>, showsUsage: Bool) -> CGSize
+static func contentSize(for sessions: [AgentSession], expanded: Set<String>, showsUsage: Bool, historyLength: Int) -> CGSize
 ```
 
 It is called whenever the session store changes, its result is assigned to `context.contentSize`, and the views use the same `rowHeight`, `rowSpacing` and padding constants. A static function like this is easy to cover with unit tests (see [Testing](testing.md)).
+
+The other built-in plugins follow the same pattern:
+
+- `ShelfPlugin.contentSize(forItemCount:)` keeps a fixed height and grows the width with the number of files, between a minimum and a maximum after which the list scrolls. `ShelfStore` reports item changes through a callback, and the plugin only assigns a new size when it differs from the current one.
+- `MediaPlugin` keeps a fixed size while playing, so pausing or changing tracks doesn't move the notch, and grows the height by one row per playlist while the playlist browser is open.
 
 Use `@Environment(\.notchAnimation)` for animations inside your screen that go with a size change (see [API reference](api-reference.md#environment-notchanimation)).
 
