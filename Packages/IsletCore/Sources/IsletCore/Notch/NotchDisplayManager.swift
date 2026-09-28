@@ -52,7 +52,7 @@ public final class NotchDisplayManager {
         let wanted = settings.displayPlacement.displays(among: NotchDisplay.connected())
         let wantedIDs = Set(wanted.map(\.id))
         for panel in panels where !wantedIDs.contains(panel.display.id) {
-            panel.orderOut(nil)
+            panel.hide()
         }
         panels.removeAll { !wantedIDs.contains($0.display.id) }
         for display in wanted where !panels.contains(where: { $0.display.id == display.id }) {

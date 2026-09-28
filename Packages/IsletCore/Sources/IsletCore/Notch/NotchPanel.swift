@@ -80,6 +80,12 @@ public final class NotchPanel: NSPanel {
     public func show() {
         relayout()
         orderFrontRegardless()
+        NotchSpace.shared.add(self)
+    }
+
+    public func hide() {
+        NotchSpace.shared.remove(self)
+        orderOut(nil)
     }
 
     public func relayout() {
