@@ -1,18 +1,18 @@
 import Foundation
 import Observation
+import os
 
 @MainActor
 @Observable
 public final class ShelfStore {
-    public private(set) var items: [ShelfItem] = [] {
-        didSet { onItemsChange?(items.count) }
-    }
-    @ObservationIgnored var onItemsChange: ((Int) -> Void)?
+    public private(set) var items: [ShelfItem] = []
 
     private let fileURL: URL
+    private let logger: Logger
 
-    public init(directory: URL) {
+    public init(directory: URL, logger: Logger = Logger()) {
         fileURL = directory.appending(path: "shelf.json")
+        self.logger = logger
     }
 
     public func load() {
@@ -21,7 +21,7 @@ public final class ShelfStore {
         do {
             loaded = try JSONDecoder().decode([ShelfItem].self, from: data)
         } catch {
-            NSLog("Shelf: could not read \(fileURL.path), keeping it aside: \(error)")
+            logger.error("Could not read \(self.fileURL.path, privacy: .public), keeping it aside: \(error, privacy: .public)")
             try? FileManager.default.moveItem(at: fileURL, to: fileURL.appendingPathExtension("corrupt"))
             return
         }
@@ -84,7 +84,7 @@ public final class ShelfStore {
             let data = try JSONEncoder().encode(items)
             try data.write(to: fileURL, options: .atomic)
         } catch {
-            NSLog("Shelf: failed to save: \(error)")
+            logger.error("Failed to save: \(error, privacy: .public)")
         }
     }
 }

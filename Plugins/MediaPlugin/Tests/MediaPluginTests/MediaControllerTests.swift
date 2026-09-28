@@ -6,51 +6,58 @@ import Testing
 
 @MainActor
 struct MediaControllerTests {
-    @Test func publishesPillWhilePlayingAndClearsItWhenPaused() async {
+    @Test func showsPillWhilePlayingAndClearsItWhenPaused() async {
         let source = StubSource()
         let controller = MediaController(source: source)
-        var pills: [PillStatus?] = []
-        controller.onPillChange = { pills.append($0) }
 
         await source.set(NowPlaying(title: "Song", artist: "Band", isPlaying: true))
         await controller.refresh()
-        #expect(pills.last??.text == "Song · Band")
-        #expect(pills.last??.priority == .ambient)
+        #expect(controller.pillStatus?.text == "Song · Band")
+        #expect(controller.pillStatus?.priority == .ambient)
 
         await source.set(NowPlaying(title: "Song", artist: "Band", isPlaying: false))
         await controller.refresh()
-        #expect(pills.last == .some(nil))
+        #expect(controller.pillStatus == nil)
     }
 
-    @Test func unchangedStatusIsNotRepublished() async {
+    @Test func playbackPositionDoesNotChangeThePill() async {
         let source = StubSource()
         let controller = MediaController(source: source)
-        var publishCount = 0
-        controller.onPillChange = { _ in publishCount += 1 }
 
         await source.set(NowPlaying(title: "Song", artist: "Band", isPlaying: true, position: 1))
         await controller.refresh()
+        let first = controller.pillStatus
         await source.set(NowPlaying(title: "Song", artist: "Band", isPlaying: true, position: 2))
         await controller.refresh()
 
-        #expect(publishCount == 1)
+        #expect(controller.pillStatus == first)
     }
 
-    @Test func pillCanBeSwitchedOffAndPersists() async {
+    @Test func pillCanBeSwitchedOff() async {
         let source = StubSource()
         let controller = MediaController(source: source, showsPill: false)
-        var pills: [PillStatus?] = []
-        var persisted: [Bool] = []
-        controller.onPillChange = { pills.append($0) }
-        controller.onShowsPillChange = { persisted.append($0) }
 
         await source.set(NowPlaying(title: "Song", artist: "Band", isPlaying: true))
         await controller.refresh()
-        #expect(pills.isEmpty)
+        #expect(controller.pillStatus == nil)
 
         controller.showsPill = true
-        #expect(pills.last??.text == "Song · Band")
-        #expect(persisted == [true])
+        #expect(controller.pillStatus?.text == "Song · Band")
+    }
+
+    @Test func pollsSlowlyWhileTheScreenIsHiddenAndRefreshesWhenShown() async {
+        let source = StubSource()
+        let controller = MediaController(source: source, playingInterval: .milliseconds(10), pausedInterval: .milliseconds(10), hiddenInterval: .seconds(60))
+        await source.set(NowPlaying(title: "Song", artist: "Band", isPlaying: true))
+        controller.start()
+        await waitUntil { controller.nowPlaying != nil }
+        try? await Task.sleep(for: .milliseconds(100))
+        #expect(await source.reads == 1)
+
+        controller.isScreenVisible = true
+        try? await Task.sleep(for: .milliseconds(100))
+        #expect(await source.reads > 3)
+        controller.stop()
     }
 
     @Test func commandsAreForwardedAndFollowedByRefresh() async {
@@ -131,16 +138,13 @@ struct MediaControllerTests {
             #expect(requested == url)
             return solidImageData(red: 0.9, green: 0.1, blue: 0.1)
         }
-        var pills: [PillStatus?] = []
-        controller.onPillChange = { pills.append($0) }
-
         await source.set(NowPlaying(title: "Song", artist: "Band", artworkURL: url, isPlaying: true))
         await controller.refresh()
         await waitUntil { controller.artwork != nil }
 
         #expect(controller.artwork?.width == Artwork.thumbnailSide)
-        #expect(pills.last??.artwork != nil)
-        let tint = try? #require(pills.last??.tint)
+        #expect(controller.pillStatus?.artwork != nil)
+        let tint = try? #require(controller.pillStatus?.tint)
         #expect((tint?.red ?? 0) > (tint?.green ?? 0))
         #expect((tint?.red ?? 0) > 0.7)
     }
@@ -248,8 +252,6 @@ struct MediaControllerTests {
     @Test func browsingLoadsPlaylistsAndPlayingOneClosesTheBrowser() async {
         let source = StubSource(capabilities: MediaCapabilities(canBrowsePlaylists: true))
         let controller = MediaController(source: source)
-        var layoutChanges = 0
-        controller.onLayoutChange = { layoutChanges += 1 }
         let focus = MediaPlaylist(id: "AA11", name: "Focus")
         await source.setPlaylists([focus])
 
@@ -257,12 +259,10 @@ struct MediaControllerTests {
         #expect(controller.isBrowsingPlaylists)
         #expect(!controller.isLoadingPlaylists)
         #expect(controller.playlists == [focus])
-        #expect(layoutChanges == 2)
 
         await controller.play(focus)
         #expect(!controller.isBrowsingPlaylists)
         #expect(await source.commands == ["play(Focus)"])
-        #expect(layoutChanges == 3)
     }
 
     @Test func playlistErrorsAreShownInTheBrowser() async {
@@ -596,9 +596,27 @@ struct MediaPlayerSettingTests {
         #expect(restored.player == .music)
     }
 
+    @Test func pillSettingIsPersisted() async throws {
+        let suite = "MediaPlayerSettingTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set([MediaPlugin.manifest.id], forKey: "islet.disabledPlugins")
+        let storage = FileManager.default.temporaryDirectory.appending(path: suite, directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: storage) }
+
+        let plugin = try await makePlugin(defaults: defaults, storage: storage)
+        plugin.controller.showsPill = false
+        let key = "plugin.\(MediaPlugin.manifest.id).showsPill"
+        let deadline = ContinuousClock.now + .seconds(2)
+        while defaults.object(forKey: key) as? Bool != false {
+            try #require(ContinuousClock.now < deadline)
+            await Task.yield()
+        }
+    }
+
     private func makePlugin(defaults: UserDefaults, storage: URL) async throws -> MediaPlugin {
         let registry = PluginRegistry(storageRoot: storage, userDefaults: defaults)
-        let entry = try await registry.register(manifest: MediaPlugin.manifest) { MediaPlugin(context: $0) }
+        let entry = try await registry.register(MediaPlugin.self)
         return try #require(entry.plugin as? MediaPlugin)
     }
 }

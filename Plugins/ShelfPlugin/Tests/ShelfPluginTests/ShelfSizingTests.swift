@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import IsletCore
 import Testing
 @testable import ShelfPlugin
 
@@ -15,19 +16,27 @@ struct ShelfSizingTests {
         #expect(ShelfPlugin.contentSize(forItemCount: 50) == CGSize(width: 520, height: height))
     }
 
-    @Test func storeReportsItemChanges() throws {
-        let directory = FileManager.default.temporaryDirectory.appending(path: "ShelfSizingTests." + UUID().uuidString)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let file = directory.appending(path: "a.txt")
-        try Data("a".utf8).write(to: file)
-        let store = ShelfStore(directory: directory)
-        var counts: [Int] = []
-        store.onItemsChange = { counts.append($0) }
+    @Test func contentSizeFollowsTheItems() async throws {
+        let suite = "ShelfSizingTests." + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let root = FileManager.default.temporaryDirectory.appending(path: suite)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let registry = PluginRegistry(storageRoot: root, userDefaults: defaults)
+        let entry = try await registry.register(ShelfPlugin.self)
+        let plugin = try #require(entry.plugin as? ShelfPlugin)
+        #expect(entry.context.contentSize == ShelfPlugin.contentSize(forItemCount: 0))
 
-        store.add([file])
-        store.removeAll()
-
-        #expect(counts == [1, 0])
+        let files = try (0..<4).map { index in
+            let file = root.appending(path: "\(index).txt")
+            try Data("\(index)".utf8).write(to: file)
+            return file
+        }
+        plugin.store.add(files)
+        let deadline = ContinuousClock.now + .seconds(2)
+        while entry.context.contentSize != ShelfPlugin.contentSize(forItemCount: 4) {
+            try #require(ContinuousClock.now < deadline)
+            await Task.yield()
+        }
     }
 }

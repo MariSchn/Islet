@@ -25,19 +25,20 @@ public final class MediaPlugin: IsletPlugin {
     static let playerKey = "player"
 
     private let context: PluginContext
-    private let controller: MediaController
+    let controller: MediaController
     private(set) var player: MediaPlayer
 
     public init(context: PluginContext) {
         self.context = context
         player = MediaPlayer(setting: context.settings.value(forKey: Self.playerKey))
-        controller = MediaController(source: player.makeSource(), showsPill: context.settings.value(forKey: Self.showsPillKey) ?? true)
-        controller.onPillChange = { [context] status in context.pillStatus = status }
-        controller.onShowsPillChange = { [context] shows in context.settings.set(shows, forKey: Self.showsPillKey) }
-        controller.onLayoutChange = { [context, controller] in
-            context.contentSize = Self.contentSize(isBrowsing: controller.isBrowsingPlaylists, playlistCount: controller.playlists.count)
+        let controller = MediaController(source: player.makeSource(), showsPill: context.settings.value(forKey: Self.showsPillKey) ?? true)
+        self.controller = controller
+        context.derive(\.pillStatus) { controller.pillStatus }
+        context.derive(\.contentSize) {
+            Self.contentSize(isBrowsing: controller.isBrowsingPlaylists, playlistCount: controller.playlists.count)
         }
-        controller.onLayoutChange()
+        context.observe({ controller.showsPill }) { [settings = context.settings] in settings.set($0, forKey: Self.showsPillKey) }
+        context.observe({ [unowned context] in context.isScreenVisible }) { controller.isScreenVisible = $0 }
     }
 
     public func activate() async throws {

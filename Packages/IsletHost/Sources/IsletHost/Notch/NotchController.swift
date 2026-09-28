@@ -12,6 +12,9 @@ public final class NotchController {
     }
     public private(set) var isExpanded = false {
         didSet {
+            if isExpanded != oldValue {
+                registry?.setNotchExpanded(isExpanded, by: self)
+            }
             if !isExpanded {
                 hoverHoldSize = nil
             } else {

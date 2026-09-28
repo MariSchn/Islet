@@ -84,6 +84,7 @@ public final class NotchPanel: NSPanel {
     }
 
     public func hide() {
+        controller.collapse()
         NotchSpace.shared.remove(self)
         orderOut(nil)
     }

@@ -263,15 +263,12 @@ struct AgentSessionStoreTests {
         var clock = Date(timeIntervalSince1970: 1_000_000)
         let started = clock
         let store = AgentSessionStore(now: { clock })
-        var changes = 0
-        store.onChange = { changes += 1 }
         store.apply(HookEvent(kind: .sessionStart, sessionID: "s", cwd: "/p/proj", title: "Spare"))
         store.apply(HookEvent(kind: .notification, sessionID: "s", notificationType: "idle_prompt"))
         store.apply(HookEvent(kind: .notification, sessionID: "s", message: "Authentication successful", notificationType: "auth_success"))
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s", prompt: "<task-notification>done</task-notification>"))
         #expect(store.sessions.isEmpty)
         #expect(store.pillStatus(for: DisplaySettings()) == nil)
-        #expect(changes == 0)
 
         clock = clock.addingTimeInterval(30)
         store.apply(HookEvent(kind: .preToolUse, sessionID: "s", toolName: "Read"))
@@ -279,7 +276,6 @@ struct AgentSessionStoreTests {
         #expect(store.sessions[0].startedAt == started)
         #expect(store.sessions[0].displayName == "Spare")
         #expect(store.sessions[0].projectName == "proj")
-        #expect(changes == 1)
 
         store.apply(HookEvent(kind: .sessionStart, sessionID: "ended", cwd: "/p"))
         store.apply(HookEvent(kind: .sessionEnd, sessionID: "ended"))
@@ -855,17 +851,6 @@ struct AgentSessionStoreTests {
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "<task-notification>\n<task-id>abc</task-id>"))
         #expect(store.sessions.first?.task == "Review the plugin")
         #expect(store.sessions.first?.state == .working)
-    }
-
-    @Test func notifiesOnEveryChange() {
-        let store = AgentSessionStore()
-        var changes = 0
-        store.onChange = { changes += 1 }
-        store.apply(HookEvent(kind: .sessionStart, sessionID: "a"))
-        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "go"))
-        store.apply(HookEvent(kind: .sessionEnd, sessionID: "a"))
-        store.dismiss("nope")
-        #expect(changes == 2)
     }
 }
 
@@ -1610,19 +1595,31 @@ struct DisplaySettingsControllerTests {
         #expect(condition())
     }
 
-    @Test func changingTheDisplaySettingsSavesAndRefreshesOnlyOnRealChanges() {
-        let controller = makeController()
-        var saved: [DisplaySettings] = []
-        var refreshes = 0
-        controller.onDisplaySettingsChange = { saved.append($0) }
-        controller.store.onChange = { refreshes += 1 }
+    @Test func settingsArePersistedAndRestored() async throws {
+        let suite = "AgentsSettingsTests." + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set([AgentsPlugin.manifest.id], forKey: "islet.disabledPlugins")
+        let storage = FileManager.default.temporaryDirectory.appending(path: suite, directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: storage) }
+        func makePlugin() async throws -> AgentsPlugin {
+            let registry = PluginRegistry(storageRoot: storage, userDefaults: defaults)
+            return try #require(try await registry.register(AgentsPlugin.self).plugin as? AgentsPlugin)
+        }
 
-        controller.display.historyLength = 3
-        controller.display.historyLength = 3
-        controller.display = controller.display
+        let first = try await makePlugin()
+        first.controller.display.historyLength = 3
+        first.controller.display.pillContent = .summary
+        first.controller.display.showsResetTimes = false
+        first.controller.alerts.finishedSound = false
+        try await waitUntil { defaults.integer(forKey: "plugin.\(AgentsPlugin.manifest.id).historyLength") == 3 && defaults.object(forKey: "plugin.\(AgentsPlugin.manifest.id).finishedSound") as? Bool == false }
 
-        #expect(saved.map(\.historyLength) == [3])
-        #expect(refreshes == 1)
+        let restored = try await makePlugin()
+        #expect(restored.controller.display.historyLength == 3)
+        #expect(restored.controller.display.pillContent == .summary)
+        #expect(!restored.controller.display.showsResetTimes)
+        #expect(!restored.controller.alerts.finishedSound)
+        #expect(restored.controller.alerts.attentionSound)
     }
 
     @Test func hidingBothLimitsRemovesTheUsageBar() async throws {

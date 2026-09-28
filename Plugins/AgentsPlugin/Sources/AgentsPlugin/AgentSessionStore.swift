@@ -15,13 +15,13 @@ public final class AgentSessionStore {
     }
 
     public private(set) var sessions: [AgentSession] = []
-    public var onChange: (() -> Void)?
     public var onAlert: ((Alert) -> Void)?
 
     private let now: () -> Date
     private let localHost: () -> String
     private let lastPrompt: @Sendable (String) -> String?
     private var dismissedIDs: Set<String> = []
+    private var finishedExpiries = 0
     @ObservationIgnored private var hiddenSessions: [String: AgentSession] = [:]
     @ObservationIgnored private var expiryTask: Task<Void, Never>?
     @ObservationIgnored private var unreachableTask: Task<Void, Never>?
@@ -72,7 +72,6 @@ public final class AgentSessionStore {
             hiddenSessions[event.sessionID] = nil
             withdrawPendingRequest(for: event.sessionID)
             sessions.removeAll { $0.id == event.sessionID }
-            onChange?()
             return
         }
         if event.kind == .sessionStart, event.source == "compact" {
@@ -182,7 +181,6 @@ public final class AgentSessionStore {
             return
         }
 
-        var replacedVisibleSession = false
         if session.agent == .claudeCode, let pid = session.pid {
             let replacesAll = event.kind == .sessionStart
             let isReplaced = { (other: AgentSession) in
@@ -195,7 +193,6 @@ public final class AgentSessionStore {
             }
             sessions.removeAll { other in replaced.contains { $0.id == other.id } }
             hiddenSessions = hiddenSessions.filter { !isReplaced($0.value) }
-            replacedVisibleSession = !replaced.isEmpty
         }
         if let index = sessions.firstIndex(where: { $0.id == session.id }) {
             sessions[index] = session
@@ -204,10 +201,8 @@ public final class AgentSessionStore {
             sessions.insert(session, at: 0)
         } else {
             hiddenSessions[session.id] = session
-            if replacedVisibleSession { onChange?() }
             return
         }
-        onChange?()
         if let alert = Self.alert(from: previous?.state, to: session.state, in: session) {
             onAlert?(alert)
         }
@@ -236,7 +231,6 @@ public final class AgentSessionStore {
         dismissedIDs.insert(id)
         withdrawPendingRequest(for: id)
         sessions.removeAll { $0.id == id }
-        onChange?()
     }
 
     public func decide(_ requestID: UUID, _ decision: PermissionDecision) {
@@ -250,7 +244,6 @@ public final class AgentSessionStore {
             sessions[index].activity = "Denied \(request.toolName)"
         }
         settleState(at: index)
-        onChange?()
     }
 
     private func settleState(at index: Int) {
@@ -285,7 +278,6 @@ public final class AgentSessionStore {
             sessions[index].state = .interrupted
             sessions[index].activity = nil
         }
-        onChange?()
     }
 
     public func markInterrupted(_ sessionID: String) {
@@ -299,7 +291,6 @@ public final class AgentSessionStore {
         sessions[index].state = .interrupted
         sessions[index].activity = nil
         sessions[index].updatedAt = now()
-        onChange?()
     }
 
     private func loadLastPrompt(from path: String, for sessionID: String) {
@@ -310,7 +301,6 @@ public final class AgentSessionStore {
             if let index = sessions.firstIndex(where: { $0.id == sessionID }) {
                 guard sessions[index].task == nil else { return }
                 sessions[index].task = Self.summarize(prompt)
-                onChange?()
             } else if hiddenSessions[sessionID]?.task == nil {
                 hiddenSessions[sessionID]?.task = Self.summarize(prompt)
             }
@@ -331,7 +321,6 @@ public final class AgentSessionStore {
             withdrawPendingRequest(for: session.id)
         }
         sessions.removeAll { session in exited.contains { $0.id == session.id } }
-        onChange?()
     }
 
     private static func input(_ requested: JSONValue?, isContainedIn actual: JSONValue?) -> Bool {
@@ -410,13 +399,13 @@ public final class AgentSessionStore {
     }
 
     public var statusRing: PillStatus.Ring {
-        let finishedCutoff = now().addingTimeInterval(-Self.finishedPillDuration)
+        let cutoff = finishedCutoff
         var counts = (attention: 0, working: 0, finished: 0, idle: 0)
         for session in sessions {
             switch session.state {
             case .needsAttention, .failed: counts.attention += 1
             case .working where !session.isUnreachable: counts.working += 1
-            case .done where session.updatedAt > finishedCutoff: counts.finished += 1
+            case .done where session.updatedAt > cutoff: counts.finished += 1
             case .starting, .working, .done, .interrupted: counts.idle += 1
             }
         }
@@ -428,8 +417,13 @@ public final class AgentSessionStore {
         ].filter { $0.value > 0 })
     }
 
+    private var finishedCutoff: Date {
+        _ = finishedExpiries
+        return now().addingTimeInterval(-Self.finishedPillDuration)
+    }
+
     private var recentlyFinishedSessions: [AgentSession] {
-        let cutoff = now().addingTimeInterval(-Self.finishedPillDuration)
+        let cutoff = finishedCutoff
         return sessions.filter { $0.state == .done && $0.updatedAt > cutoff }
     }
 
@@ -440,7 +434,7 @@ public final class AgentSessionStore {
         expiryTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(max(delay, 0) + 1))
             guard !Task.isCancelled else { return }
-            self?.onChange?()
+            self?.finishedExpiries += 1
             self?.scheduleFinishedExpiry()
         }
     }
@@ -462,12 +456,9 @@ public final class AgentSessionStore {
 
     public func markUnreachableSessions() {
         let cutoff = now().addingTimeInterval(-Self.unreachableTimeout)
-        var changed = false
         for index in sessions.indices where sessions[index].isRemote && sessions[index].state == .working && !sessions[index].isUnreachable && sessions[index].updatedAt <= cutoff {
             sessions[index].isUnreachable = true
-            changed = true
         }
-        if changed { onChange?() }
         scheduleUnreachableCheck()
     }
 

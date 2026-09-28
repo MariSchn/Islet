@@ -18,26 +18,23 @@ public final class MediaController {
     public private(set) var isLoadingPlaylists = false
     public private(set) var playlists: [MediaPlaylist] = []
     public private(set) var playlistError: String?
-    public var showsPill: Bool {
+    public var showsPill: Bool
+    public var isScreenVisible = false {
         didSet {
-            guard showsPill != oldValue else { return }
-            updatePill()
-            onShowsPillChange(showsPill)
+            guard isScreenVisible, !oldValue, pollTask != nil else { return }
+            startPolling()
         }
     }
-    @ObservationIgnored public var onPillChange: (PillStatus?) -> Void = { _ in }
-    @ObservationIgnored public var onShowsPillChange: (Bool) -> Void = { _ in }
-    @ObservationIgnored public var onLayoutChange: () -> Void = {}
 
     @ObservationIgnored private let loadArtwork: ArtworkLoader?
     @ObservationIgnored private let playingInterval: Duration
     @ObservationIgnored private let pausedInterval: Duration
+    @ObservationIgnored private let hiddenInterval: Duration
     @ObservationIgnored private var pollTask: Task<Void, Never>?
     @ObservationIgnored private var changeTask: Task<Void, Never>?
     @ObservationIgnored private var artworkTask: Task<Void, Never>?
     @ObservationIgnored private var artworkURL: URL?
     @ObservationIgnored private var generation = 0
-    @ObservationIgnored private var publishedPill: PillStatus?
     @ObservationIgnored private var browseGeneration = 0
 
     public init(
@@ -45,29 +42,45 @@ public final class MediaController {
         showsPill: Bool = true,
         playingInterval: Duration = .seconds(1),
         pausedInterval: Duration = .seconds(3),
+        hiddenInterval: Duration = .seconds(15),
         loadArtwork: ArtworkLoader? = nil
     ) {
         self.source = source
         self.showsPill = showsPill
         self.playingInterval = playingInterval
         self.pausedInterval = pausedInterval
+        self.hiddenInterval = hiddenInterval
         self.loadArtwork = loadArtwork
+    }
+
+    public var pillStatus: PillStatus? {
+        guard showsPill, let nowPlaying, nowPlaying.isPlaying else { return nil }
+        return PillStatus(text: "\(nowPlaying.title) · \(nowPlaying.artist)", systemImage: "music.note", priority: .ambient, artwork: artwork, tint: tint)
+    }
+
+    private var pollInterval: Duration {
+        guard isScreenVisible else { return hiddenInterval }
+        return nowPlaying?.isPlaying == true ? playingInterval : pausedInterval
     }
 
     public func start() {
         guard pollTask == nil else { return }
-        pollTask = Task { [weak self] in
-            while !Task.isCancelled {
-                guard let self else { return }
-                await refresh()
-                let interval = nowPlaying?.isPlaying == true ? playingInterval : pausedInterval
-                try? await Task.sleep(for: interval)
-            }
-        }
+        startPolling()
         changeTask = Task { [weak self, source] in
             for await _ in source.stateChanges() {
                 guard let self else { return }
                 await refresh()
+            }
+        }
+    }
+
+    private func startPolling() {
+        pollTask?.cancel()
+        pollTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                await refresh()
+                try? await Task.sleep(for: pollInterval)
             }
         }
     }
@@ -82,7 +95,6 @@ public final class MediaController {
         errorMessage = nil
         hidePlaylists()
         updateArtwork(for: nil)
-        updatePill()
     }
 
     public func replaceSource(_ source: any MediaSource) {
@@ -169,7 +181,6 @@ public final class MediaController {
         isBrowsingPlaylists = true
         isLoadingPlaylists = playlists.isEmpty
         playlistError = nil
-        onLayoutChange()
         let outcome: Result<[MediaPlaylist], any Error>
         do {
             outcome = .success(try await source.playlists())
@@ -185,7 +196,6 @@ public final class MediaController {
             playlists = []
             playlistError = error.localizedDescription
         }
-        onLayoutChange()
     }
 
     public func hidePlaylists() {
@@ -194,7 +204,6 @@ public final class MediaController {
         playlistError = nil
         guard isBrowsingPlaylists else { return }
         isBrowsingPlaylists = false
-        onLayoutChange()
     }
 
     public func play(_ playlist: MediaPlaylist) async {
@@ -242,7 +251,6 @@ public final class MediaController {
         self.nowPlaying = nowPlaying
         errorMessage = error
         updateArtwork(for: nowPlaying?.artworkURL)
-        updatePill()
     }
 
     private func updateArtwork(for url: URL?) {
@@ -270,19 +278,6 @@ public final class MediaController {
             guard let self, !Task.isCancelled, artworkURL == url, let artwork else { return }
             self.artwork = artwork.image
             tint = artwork.tint
-            updatePill()
         }
-    }
-
-    private func updatePill() {
-        let pill: PillStatus?
-        if showsPill, let nowPlaying, nowPlaying.isPlaying {
-            pill = PillStatus(text: "\(nowPlaying.title) · \(nowPlaying.artist)", systemImage: "music.note", priority: .ambient, artwork: artwork, tint: tint)
-        } else {
-            pill = nil
-        }
-        guard pill != publishedPill else { return }
-        publishedPill = pill
-        onPillChange(pill)
     }
 }

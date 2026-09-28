@@ -87,11 +87,8 @@ public final class UsageMonitor {
     public static let minimumInterval: TimeInterval = 30
     public static let maximumStaleness: TimeInterval = 30 * 60
 
-    public private(set) var usage: ClaudeUsage? {
-        didSet { if usage != oldValue { onChange?() } }
-    }
+    public private(set) var usage: ClaudeUsage?
     public private(set) var error: String?
-    @ObservationIgnored public var onChange: (() -> Void)?
     public var isEnabled: Bool {
         didSet {
             guard isEnabled != oldValue else { return }

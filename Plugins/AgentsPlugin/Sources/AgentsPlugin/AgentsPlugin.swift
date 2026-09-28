@@ -58,80 +58,75 @@ public final class AgentsPlugin: IsletPlugin {
 
     private static let tokenKey = "hookToken"
     private static let usageKey = "showUsage"
-    private static let alertKeys = (attentionSound: "attentionSound", attentionNotification: "attentionNotification", finishedSound: "finishedSound", finishedNotification: "finishedNotification", announcesInNotch: "announcesInNotch")
-    private static let displayKeys = (showsFiveHourLimit: "showFiveHourLimit", showsWeeklyLimit: "showWeeklyLimit", showsResetTimes: "showUsageResetTimes", pillContent: "pillContent", pillShowsWorking: "pillShowsWorking", pillShowsFinished: "pillShowsFinished", historyLength: "historyLength")
+    private static let pillContentKey = "pillContent"
+    private static let historyLengthKey = "historyLength"
+    private static let alertKeys: [(key: String, value: WritableKeyPath<AlertSettings, Bool>)] = [
+        ("attentionSound", \.attentionSound),
+        ("attentionNotification", \.attentionNotification),
+        ("finishedSound", \.finishedSound),
+        ("finishedNotification", \.finishedNotification),
+        ("announcesInNotch", \.announcesInNotch),
+    ]
+    private static let displayKeys: [(key: String, value: WritableKeyPath<DisplaySettings, Bool>)] = [
+        ("showFiveHourLimit", \.showsFiveHourLimit),
+        ("showWeeklyLimit", \.showsWeeklyLimit),
+        ("showUsageResetTimes", \.showsResetTimes),
+        ("pillShowsWorking", \.pillShowsWorking),
+        ("pillShowsFinished", \.pillShowsFinished),
+    ]
 
     private let context: PluginContext
-    private let controller: AgentsController
+    let controller: AgentsController
 
     public init(context: PluginContext) {
         self.context = context
+        let settings = context.settings
         let token: String
-        if let stored: String = context.settings.value(forKey: Self.tokenKey) {
+        if let stored: String = settings.value(forKey: Self.tokenKey) {
             token = stored
         } else {
             token = Self.makeToken()
-            context.settings.set(token, forKey: Self.tokenKey)
+            settings.set(token, forKey: Self.tokenKey)
         }
-        var alerts = AlertSettings()
-        alerts.attentionSound = context.settings.value(forKey: Self.alertKeys.attentionSound) ?? alerts.attentionSound
-        alerts.attentionNotification = context.settings.value(forKey: Self.alertKeys.attentionNotification) ?? alerts.attentionNotification
-        alerts.finishedSound = context.settings.value(forKey: Self.alertKeys.finishedSound) ?? alerts.finishedSound
-        alerts.finishedNotification = context.settings.value(forKey: Self.alertKeys.finishedNotification) ?? alerts.finishedNotification
-        alerts.announcesInNotch = context.settings.value(forKey: Self.alertKeys.announcesInNotch) ?? alerts.announcesInNotch
-        var display = DisplaySettings()
-        display.showsFiveHourLimit = context.settings.value(forKey: Self.displayKeys.showsFiveHourLimit) ?? display.showsFiveHourLimit
-        display.showsWeeklyLimit = context.settings.value(forKey: Self.displayKeys.showsWeeklyLimit) ?? display.showsWeeklyLimit
-        display.showsResetTimes = context.settings.value(forKey: Self.displayKeys.showsResetTimes) ?? display.showsResetTimes
-        display.pillContent = context.settings.value(forKey: Self.displayKeys.pillContent).flatMap(DisplaySettings.PillContent.init(rawValue:)) ?? display.pillContent
-        display.pillShowsWorking = context.settings.value(forKey: Self.displayKeys.pillShowsWorking) ?? display.pillShowsWorking
-        display.pillShowsFinished = context.settings.value(forKey: Self.displayKeys.pillShowsFinished) ?? display.pillShowsFinished
-        display.historyLength = context.settings.value(forKey: Self.displayKeys.historyLength) ?? display.historyLength
-        controller = AgentsController(
+        var display = Self.load(DisplaySettings(), Self.displayKeys, from: settings)
+        display.pillContent = settings.value(forKey: Self.pillContentKey).flatMap(DisplaySettings.PillContent.init(rawValue:)) ?? display.pillContent
+        display.historyLength = settings.value(forKey: Self.historyLengthKey) ?? display.historyLength
+        let controller = AgentsController(
             token: token,
             claudeDirectory: URL.homeDirectory.appending(path: ".claude", directoryHint: .isDirectory),
             codexDirectory: URL.homeDirectory.appending(path: ".codex", directoryHint: .isDirectory),
-            alerts: alerts,
+            alerts: Self.load(AlertSettings(), Self.alertKeys, from: settings),
             display: display,
-            showsUsage: context.settings.value(forKey: Self.usageKey) ?? false
+            showsUsage: settings.value(forKey: Self.usageKey) ?? false
         )
-        controller.onUsageSettingChange = { [context] in context.settings.set($0, forKey: Self.usageKey) }
-        controller.onAlertSettingsChange = { [context] alerts in
-            context.settings.set(alerts.attentionSound, forKey: Self.alertKeys.attentionSound)
-            context.settings.set(alerts.attentionNotification, forKey: Self.alertKeys.attentionNotification)
-            context.settings.set(alerts.finishedSound, forKey: Self.alertKeys.finishedSound)
-            context.settings.set(alerts.finishedNotification, forKey: Self.alertKeys.finishedNotification)
-            context.settings.set(alerts.announcesInNotch, forKey: Self.alertKeys.announcesInNotch)
+        self.controller = controller
+
+        context.observe({ controller.showsUsage }) { settings.set($0, forKey: Self.usageKey) }
+        context.observe({ controller.alerts }) { Self.save($0, Self.alertKeys, to: settings) }
+        context.observe({ controller.display }) { display in
+            Self.save(display, Self.displayKeys, to: settings)
+            settings.set(display.pillContent.rawValue, forKey: Self.pillContentKey)
+            settings.set(display.historyLength, forKey: Self.historyLengthKey)
         }
-        controller.onDisplaySettingsChange = { [context] display in
-            context.settings.set(display.showsFiveHourLimit, forKey: Self.displayKeys.showsFiveHourLimit)
-            context.settings.set(display.showsWeeklyLimit, forKey: Self.displayKeys.showsWeeklyLimit)
-            context.settings.set(display.showsResetTimes, forKey: Self.displayKeys.showsResetTimes)
-            context.settings.set(display.pillContent.rawValue, forKey: Self.displayKeys.pillContent)
-            context.settings.set(display.pillShowsWorking, forKey: Self.displayKeys.pillShowsWorking)
-            context.settings.set(display.pillShowsFinished, forKey: Self.displayKeys.pillShowsFinished)
-            context.settings.set(display.historyLength, forKey: Self.displayKeys.historyLength)
+        context.derive(\.pillStatus) { controller.store.pillStatus(for: controller.display) }
+        context.derive(\.contentSize) {
+            Self.contentSize(for: controller.store.sessions, expanded: controller.expandedSessionIDs, showsUsage: controller.showsUsageBar, historyLength: controller.display.historyLength)
         }
         var announcer = StatusAnnouncer()
-        controller.store.onChange = { [context, controller] in
-            context.pillStatus = controller.store.pillStatus(for: controller.display)
-            if let announcement = announcer.announcement(for: controller.store.sessions), controller.shouldAnnounce(announcement) {
+        context.observe({ controller.store.sessions }) { [unowned context] sessions in
+            if let announcement = announcer.announcement(for: sessions), controller.shouldAnnounce(announcement) {
                 context.announce(announcement)
             }
-            context.contentSize = Self.contentSize(for: controller.store.sessions, expanded: controller.expandedSessionIDs, showsUsage: controller.showsUsageBar, historyLength: controller.display.historyLength)
-            controller.interruptions.track(controller.store.sessions)
+            controller.interruptions.track(sessions)
         }
-        controller.onUsageChange = controller.store.onChange
     }
 
     public func activate() async throws {
-        controller.store.onChange?()
         await controller.start()
     }
 
     public func deactivate() async {
         await controller.stop()
-        context.pillStatus = nil
     }
 
     public func makeScreen() -> AnyView {
@@ -140,6 +135,18 @@ public final class AgentsPlugin: IsletPlugin {
 
     public func makeSettingsView() -> AnyView? {
         AnyView(AgentsSettings(controller: controller))
+    }
+
+    private static func load<Settings>(_ defaults: Settings, _ keys: [(key: String, value: WritableKeyPath<Settings, Bool>)], from settings: PluginSettings) -> Settings {
+        keys.reduce(into: defaults) { loaded, entry in
+            loaded[keyPath: entry.value] = settings.value(forKey: entry.key) ?? loaded[keyPath: entry.value]
+        }
+    }
+
+    private static func save<Settings>(_ value: Settings, _ keys: [(key: String, value: WritableKeyPath<Settings, Bool>)], to settings: PluginSettings) {
+        for entry in keys {
+            settings.set(value[keyPath: entry.value], forKey: entry.key)
+        }
     }
 
     private static func makeToken() -> String {
@@ -158,17 +165,9 @@ public final class AgentsController {
     public private(set) var serverError: String?
     public private(set) var expandedSessionIDs: Set<String> = []
     public let usage: UsageMonitor
-    public var onAlertSettingsChange: ((AlertSettings) -> Void)?
-    public var onUsageSettingChange: ((Bool) -> Void)?
-    public var onDisplaySettingsChange: ((DisplaySettings) -> Void)?
-    public var onUsageChange: (() -> Void)?
     public var showsUsage: Bool {
         get { usage.isEnabled }
-        set {
-            usage.isEnabled = newValue
-            onUsageSettingChange?(newValue)
-            onUsageChange?()
-        }
+        set { usage.isEnabled = newValue }
     }
     public var visibleUsage: ClaudeUsage? {
         guard usage.isEnabled, let current = usage.usage else { return nil }
@@ -179,18 +178,9 @@ public final class AgentsController {
     func shouldAnnounce(_ announcement: PillAnnouncement) -> Bool {
         alerts.announcesInNotch && (announcement.priority == .attention || display.pillShowsFinished)
     }
-    public var display: DisplaySettings {
-        didSet {
-            guard display != oldValue else { return }
-            onDisplaySettingsChange?(display)
-            store.onChange?()
-        }
-    }
+    public var display: DisplaySettings
     public var alerts: AlertSettings {
-        didSet {
-            alerter.settings = alerts
-            onAlertSettingsChange?(alerts)
-        }
+        didSet { alerter.settings = alerts }
     }
 
     let interruptions: InterruptionMonitor
@@ -229,7 +219,6 @@ public final class AgentsController {
             try? installer.install()
         }
         refreshInstallState()
-        usage.onChange = { [weak self] in self?.onUsageChange?() }
         usage.start()
         interruptions.start()
         processes.start()
@@ -292,6 +281,5 @@ public final class AgentsController {
         if expandedSessionIDs.remove(sessionID) == nil {
             expandedSessionIDs.insert(sessionID)
         }
-        store.onChange?()
     }
 }

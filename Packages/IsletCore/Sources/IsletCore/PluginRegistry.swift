@@ -67,6 +67,7 @@ public final class PluginRegistry {
     public private(set) var disabledIDs: Set<String>
     public private(set) var selectedID: String?
 
+    private var expandedNotches: Set<ObjectIdentifier> = []
     private let storageRoot: URL
     private let userDefaults: UserDefaults
     private let disabledKey = "islet.disabledPlugins"
@@ -182,6 +183,16 @@ public final class PluginRegistry {
             entry.context.clearAnnouncement()
         }
         ensureSelection()
+        updateScreenVisibility()
+    }
+
+    public func setNotchExpanded(_ expanded: Bool, by notch: AnyObject) {
+        if expanded {
+            expandedNotches.insert(ObjectIdentifier(notch))
+        } else {
+            expandedNotches.remove(ObjectIdentifier(notch))
+        }
+        updateScreenVisibility()
     }
 
     public func deactivateAll() async {
@@ -194,6 +205,16 @@ public final class PluginRegistry {
         guard id == nil || (entry(for: id!) != nil && isEnabled(id!)) else { return }
         selectedID = id
         userDefaults.set(id, forKey: selectedKey)
+        updateScreenVisibility()
+    }
+
+    private func updateScreenVisibility() {
+        for entry in entries {
+            let visible = !expandedNotches.isEmpty && entry.id == selectedID && isEnabled(entry.id)
+            if entry.context.isScreenVisible != visible {
+                entry.context.isScreenVisible = visible
+            }
+        }
     }
 
     @discardableResult
