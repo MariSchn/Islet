@@ -10,8 +10,9 @@ public struct ActivityEntry: Identifiable, Sendable, Equatable {
     public let detail: String?
     public let startedAt: Date
     public var isComplete: Bool
+    public var didFail: Bool
 
-    init(event: HookEvent, at timestamp: Date, isComplete: Bool) {
+    init(event: HookEvent, at timestamp: Date, isComplete: Bool, didFail: Bool = false) {
         id = UUID()
         toolName = event.toolName ?? "Tool"
         toolInput = event.toolInput
@@ -19,6 +20,7 @@ public struct ActivityEntry: Identifiable, Sendable, Equatable {
         detail = Self.detail(for: event.toolName ?? "", input: event.toolInput)
         startedAt = timestamp
         self.isComplete = isComplete
+        self.didFail = didFail
     }
 
     func matches(_ event: HookEvent) -> Bool {

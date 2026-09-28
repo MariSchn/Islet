@@ -19,10 +19,13 @@ public struct AgentSession: Identifiable, Sendable, Equatable {
         case needsAttention(String)
         case done
         case interrupted
+        case failed(String)
 
         public var requiresAttention: Bool {
-            if case .needsAttention = self { return true }
-            return false
+            switch self {
+            case .needsAttention, .failed: true
+            case .starting, .working, .done, .interrupted: false
+            }
         }
     }
 

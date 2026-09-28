@@ -7,9 +7,17 @@ public struct HookEvent: Sendable, Equatable, Decodable {
         case userPromptSubmit = "UserPromptSubmit"
         case preToolUse = "PreToolUse"
         case postToolUse = "PostToolUse"
+        case postToolUseFailure = "PostToolUseFailure"
         case permissionRequest = "PermissionRequest"
+        case permissionDenied = "PermissionDenied"
         case notification = "Notification"
         case stop = "Stop"
+        case stopFailure = "StopFailure"
+        case other
+
+        public init(from decoder: any Decoder) throws {
+            self = Self(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .other
+        }
     }
 
     public var kind: Kind
@@ -24,6 +32,9 @@ public struct HookEvent: Sendable, Equatable, Decodable {
     public var source: String?
     public var permissionMode: String?
     public var agentType: String?
+    public var error: String?
+    public var lastAssistantMessage: String?
+    public var reason: String?
     public var agent: AgentSession.Agent = .claudeCode
     public var host: String?
     public var terminal: TerminalApp?
@@ -44,9 +55,13 @@ public struct HookEvent: Sendable, Equatable, Decodable {
         case source
         case permissionMode = "permission_mode"
         case agentType = "agent_type"
+        case error
+        case lastAssistantMessage = "last_assistant_message"
+        case reason
+        case title = "session_title"
     }
 
-    public init(kind: Kind, sessionID: String, cwd: String? = nil, transcriptPath: String? = nil, toolName: String? = nil, toolInput: JSONValue? = nil, prompt: String? = nil, message: String? = nil, notificationType: String? = nil, source: String? = nil, permissionMode: String? = nil, agentType: String? = nil, agent: AgentSession.Agent = .claudeCode, host: String? = nil, terminal: TerminalApp? = nil, tty: String? = nil, pid: Int32? = nil, title: String? = nil) {
+    public init(kind: Kind, sessionID: String, cwd: String? = nil, transcriptPath: String? = nil, toolName: String? = nil, toolInput: JSONValue? = nil, prompt: String? = nil, message: String? = nil, notificationType: String? = nil, source: String? = nil, permissionMode: String? = nil, agentType: String? = nil, error: String? = nil, lastAssistantMessage: String? = nil, reason: String? = nil, agent: AgentSession.Agent = .claudeCode, host: String? = nil, terminal: TerminalApp? = nil, tty: String? = nil, pid: Int32? = nil, title: String? = nil) {
         self.kind = kind
         self.sessionID = sessionID
         self.cwd = cwd
@@ -59,6 +74,9 @@ public struct HookEvent: Sendable, Equatable, Decodable {
         self.source = source
         self.permissionMode = permissionMode
         self.agentType = agentType
+        self.error = error
+        self.lastAssistantMessage = lastAssistantMessage
+        self.reason = reason
         self.agent = agent
         self.host = host
         self.terminal = terminal
@@ -81,6 +99,10 @@ public struct HookEvent: Sendable, Equatable, Decodable {
         source = try container.decodeIfPresent(String.self, forKey: .source)
         permissionMode = try container.decodeIfPresent(String.self, forKey: .permissionMode)
         agentType = try container.decodeIfPresent(String.self, forKey: .agentType)
+        error = try? container.decodeIfPresent(String.self, forKey: .error)
+        lastAssistantMessage = try? container.decodeIfPresent(String.self, forKey: .lastAssistantMessage)
+        reason = try? container.decodeIfPresent(String.self, forKey: .reason)
+        title = (try? container.decodeIfPresent(String.self, forKey: .title)).flatMap { $0.isEmpty ? nil : $0 }
     }
 
     public static func decode(_ data: Data, agent: String? = nil, host: String? = nil, terminal: String? = nil, tty: String? = nil, pid: String? = nil, title: String? = nil) throws -> HookEvent {
@@ -90,7 +112,7 @@ public struct HookEvent: Sendable, Equatable, Decodable {
         event.terminal = terminal.flatMap { Self.isSafeIdentifier($0) ? TerminalApp(identifier: $0) : nil }
         event.tty = tty.flatMap { $0.hasPrefix("/dev/") && Self.isSafeIdentifier($0) ? $0 : nil }
         event.pid = pid.flatMap { Int32($0) }.flatMap { $0 > 1 ? $0 : nil }
-        event.title = title.flatMap { $0.isEmpty ? nil : $0 }
+        event.title = title.flatMap { $0.isEmpty ? nil : $0 } ?? event.title
         return event
     }
 
@@ -102,6 +124,18 @@ public struct HookEvent: Sendable, Equatable, Decodable {
 
     public var isInAutoMode: Bool {
         permissionMode == "auto"
+    }
+
+    public var failureDescription: String {
+        switch error {
+        case "rate_limit": "Rate limit reached"
+        case "overloaded": "The API is overloaded"
+        case "authentication_failed", "oauth_org_not_allowed": "Not logged in"
+        case "account_on_hold", "billing_error": "Billing problem"
+        case "max_output_tokens": "Response hit the output limit"
+        case "model_not_found": "Model not available"
+        default: lastAssistantMessage.flatMap { $0.isEmpty ? nil : $0 } ?? "The request failed"
+        }
     }
 
     public var isTaskNotification: Bool {

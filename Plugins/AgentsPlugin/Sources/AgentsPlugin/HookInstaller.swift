@@ -18,7 +18,7 @@ public struct HookInstaller: Sendable {
 
     public var events: [String] {
         switch agent {
-        case .claudeCode: ["SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PermissionRequest", "Notification", "Stop"]
+        case .claudeCode: ["SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest", "PermissionDenied", "Notification", "Stop", "StopFailure"]
         case .codex: ["SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PermissionRequest", "Stop"]
         }
     }
@@ -50,8 +50,12 @@ public struct HookInstaller: Sendable {
         timeout="${1:-5}"
         payload=$(cat)
         title=""
-        transcript=$(printf '%s' "$payload" | sed -n 's/.*"transcript_path":"\\([^"]*\\)".*/\\1/p')
-        if [ -f "$transcript" ]; then
+        transcript=""
+        case "$(printf '%s' "$payload" | sed -n 's/.*"hook_event_name":"\\([A-Za-z]*\\)".*/\\1/p')" in
+          PreToolUse|PostToolUse|PostToolUseFailure|PermissionDenied) ;;
+          *) transcript=$(printf '%s' "$payload" | sed -n 's/.*"transcript_path":"\\([^"]*\\)".*/\\1/p') ;;
+        esac
+        if [ -n "$transcript" ] && [ -f "$transcript" ]; then
           titles=$(grep -oE '"(customTitle|aiTitle)":"([^"\\\\]|\\\\.)*"' "$transcript" 2>/dev/null)
           title=$(printf '%s\\n' "$titles" | grep '^"customTitle"' | tail -n 1)
           [ -n "$title" ] || title=$(printf '%s\\n' "$titles" | grep '^"aiTitle"' | tail -n 1)

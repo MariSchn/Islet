@@ -181,6 +181,7 @@ private struct SessionRow: View {
         case .needsAttention: return AnyShapeStyle(.orange)
         case .done: return AnyShapeStyle(.green)
         case .interrupted: return AnyShapeStyle(.secondary)
+        case .failed: return AnyShapeStyle(.red)
         }
     }
 
@@ -192,6 +193,7 @@ private struct SessionRow: View {
         case .needsAttention(let reason): return reason
         case .done: return "Finished"
         case .interrupted: return "Interrupted"
+        case .failed(let reason): return reason
         }
     }
 }
@@ -237,7 +239,11 @@ private struct ActivityView: View {
                             .foregroundStyle(.tertiary)
                             .lineLimit(1)
                     }
-                    if !entry.isComplete {
+                    if entry.didFail {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.red)
+                    } else if !entry.isComplete {
                         ProgressView()
                             .controlSize(.mini)
                     }
@@ -413,6 +419,10 @@ private struct StateLabel: View {
             Text("Needs you")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.orange)
+        case .failed:
+            Text("Failed")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.red)
         case .working, .done, .interrupted:
             Text(Self.duration(session.updatedAt.timeIntervalSince(session.turnStartedAt)))
                 .font(.system(size: 11, design: .monospaced))
@@ -456,6 +466,7 @@ enum SessionColors {
     static let attentionTint = Color.Resolved(red: 1, green: 0.62, blue: 0.04)
     static let finishedTint = Color.Resolved(red: 0.2, green: 0.78, blue: 0.35)
     static let idleTint = Color.Resolved(red: 0.56, green: 0.56, blue: 0.58)
+    static let failedTint = Color.Resolved(red: 1, green: 0.27, blue: 0.23)
     static let working = Color(workingTint)
 }
 
@@ -575,6 +586,10 @@ private struct StateIndicator: View {
             Image(systemName: "stop.circle.fill")
                 .font(.system(size: 16))
                 .foregroundStyle(.secondary)
+        case .failed:
+            Image(systemName: "xmark.octagon.fill")
+                .font(.system(size: 16))
+                .foregroundStyle(.red)
         }
     }
 }

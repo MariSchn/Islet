@@ -66,10 +66,23 @@ struct HookEventTests {
         #expect(try HookEvent.decode(payload, pid: "12; rm").pid == nil)
     }
 
-    @Test func rejectsUnknownEvents() {
-        #expect(throws: (any Error).self) {
-            try HookEvent.decode(Data(#"{"session_id":"a","hook_event_name":"Nope"}"#.utf8))
-        }
+    @Test func decodesUnknownEventsAsOther() throws {
+        #expect(try HookEvent.decode(Data(#"{"session_id":"a","hook_event_name":"Nope"}"#.utf8)).kind == .other)
+    }
+
+    @Test func takesTheSessionTitleFromThePayloadUnlessTheScriptFoundOne() throws {
+        let payload = Data(#"{"session_id":"a","hook_event_name":"SessionStart","session_title":"from payload"}"#.utf8)
+        #expect(try HookEvent.decode(payload).title == "from payload")
+        #expect(try HookEvent.decode(payload, title: "from transcript").title == "from transcript")
+        #expect(try HookEvent.decode(Data(#"{"session_id":"a","hook_event_name":"SessionStart","session_title":""}"#.utf8)).title == nil)
+    }
+
+    @Test func describesFailedTurns() throws {
+        let rateLimit = try HookEvent.decode(Data(#"{"session_id":"a","hook_event_name":"StopFailure","error":"rate_limit","last_assistant_message":"API Error: Rate limit reached"}"#.utf8))
+        #expect(rateLimit.kind == .stopFailure)
+        #expect(rateLimit.failureDescription == "Rate limit reached")
+        #expect(HookEvent(kind: .stopFailure, sessionID: "a", error: "unknown", lastAssistantMessage: "API Error: boom").failureDescription == "API Error: boom")
+        #expect(HookEvent(kind: .stopFailure, sessionID: "a").failureDescription == "The request failed")
     }
 }
 
@@ -100,6 +113,51 @@ struct AgentSessionStoreTests {
         #expect(store.sessions[0].plan == "# Do it\n- step")
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s1", prompt: "go"))
         #expect(store.sessions[0].plan == "# Do it\n- step")
+    }
+
+    @Test func failedTurnsNeedAttentionUntilTheNextPrompt() async {
+        let store = AgentSessionStore()
+        var alerts: [AgentSessionStore.Alert] = []
+        store.onAlert = { alerts.append($0) }
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s1", cwd: "/tmp/proj", prompt: "go"))
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "s1", toolName: "Read", toolInput: .object(["file_path": .string("/a")])))
+        store.apply(HookEvent(kind: .stopFailure, sessionID: "s1", error: "rate_limit"))
+        #expect(store.sessions[0].state == .failed("Rate limit reached"))
+        #expect(store.sessions[0].activity == nil)
+        #expect(store.pillStatus(for: DisplaySettings())?.priority == .attention)
+        #expect(alerts.count == 1)
+
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s1", prompt: "try again"))
+        #expect(store.sessions[0].state == .working)
+    }
+
+    @Test func failedToolCallsAndDenialsAreRecorded() async throws {
+        let store = AgentSessionStore()
+        let command = JSONValue.object(["command": .string("npm test")])
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s1", prompt: "go"))
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "s1", toolName: "Bash", toolInput: command))
+        store.apply(HookEvent(kind: .postToolUseFailure, sessionID: "s1", toolName: "Bash", toolInput: command, error: "Exit code 1"))
+        #expect(store.sessions[0].activities.count == 1)
+        #expect(store.sessions[0].activities[0].isComplete)
+        #expect(store.sessions[0].activities[0].didFail)
+        #expect(store.sessions[0].state == .working)
+
+        let remove = JSONValue.object(["command": .string("rm -rf /tmp/build")])
+        store.apply(HookEvent(kind: .permissionDenied, sessionID: "s1", toolName: "Bash", toolInput: remove, reason: "[Irreversible Local Destruction]"))
+        #expect(store.sessions[0].activity == "Denied: $ rm -rf /tmp/build")
+        #expect(store.sessions[0].activities.last?.didFail == true)
+
+        let reply = Task { await store.handle(HookEvent(kind: .permissionRequest, sessionID: "s1", toolName: "Bash", toolInput: command)) }
+        try await waitUntil { store.sessions[0].pendingRequest != nil }
+        store.apply(HookEvent(kind: .postToolUseFailure, sessionID: "s1", toolName: "Bash", toolInput: command, error: "Exit code 1"))
+        #expect(await reply.value == .empty)
+        #expect(store.sessions[0].pendingRequest == nil)
+    }
+
+    @Test func unknownEventsAreIgnored() async {
+        let store = AgentSessionStore()
+        #expect(await store.handle(HookEvent(kind: .other, sessionID: "s1")) == .empty)
+        #expect(store.sessions.isEmpty)
     }
 
     @Test func walksThroughSessionLifecycle() {
@@ -1144,6 +1202,31 @@ struct HookInstallerTests {
             #expect(call.filter { $0.contains("deadbeef") } == ["header = \"Authorization: Bearer deadbeef\""])
             #expect(call.contains { $0.hasPrefix("X-Islet-TTY: ") && !$0.contains("/dev/db") })
             #expect(call.last == payload)
+        }
+    }
+
+    @Test func scriptSkipsTheTranscriptOnToolEvents() throws {
+        let installer = try makeInstaller()
+        try installer.install()
+        let transcript = installer.directory.appending(path: "transcript.jsonl")
+        try #"{"type":"custom-title","customTitle":"named","sessionId":"a"}"#.write(to: transcript, atomically: true, encoding: .utf8)
+        let capture = installer.directory.appending(path: "curl-call")
+        let fakeCurl = installer.directory.appending(path: "curl")
+        try "#!/bin/sh\nprintf '%s\\n' \"$@\" > '\(capture.path)'\n".write(to: fakeCurl, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeCurl.path)
+        for (event, expectedTitle) in [("PreToolUse", ""), ("PostToolUseFailure", ""), ("UserPromptSubmit", "named")] {
+            let process = Process()
+            process.executableURL = URL(filePath: "/bin/sh")
+            process.arguments = [installer.scriptURL.path]
+            process.environment = ["PATH": installer.directory.path + ":/usr/bin:/bin"]
+            let input = Pipe()
+            process.standardInput = input
+            try process.run()
+            input.fileHandleForWriting.write(Data(#"{"session_id":"a","hook_event_name":"\#(event)","transcript_path":"\#(transcript.path)"}"#.utf8))
+            try input.fileHandleForWriting.close()
+            process.waitUntilExit()
+            let call = try String(contentsOf: capture, encoding: .utf8).components(separatedBy: "\n")
+            #expect(call.contains("X-Islet-Title: \(expectedTitle)"), "\(event)")
         }
     }
 

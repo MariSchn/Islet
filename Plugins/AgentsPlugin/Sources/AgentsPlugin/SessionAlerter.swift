@@ -45,8 +45,10 @@ final class SessionAlerter {
     }
 
     private static func reason(for session: AgentSession) -> String {
-        if case .needsAttention(let reason) = session.state { return reason }
-        return session.task ?? session.agent.displayName
+        switch session.state {
+        case .needsAttention(let reason), .failed(let reason): reason
+        case .starting, .working, .done, .interrupted: session.task ?? session.agent.displayName
+        }
     }
 
     private func play(_ name: String) {
