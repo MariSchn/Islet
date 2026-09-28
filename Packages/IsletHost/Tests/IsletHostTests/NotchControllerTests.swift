@@ -1,6 +1,8 @@
 import CoreGraphics
 import Testing
 import IsletCore
+import IsletHost
+import IsletTestSupport
 
 @Suite(.serialized)
 @MainActor

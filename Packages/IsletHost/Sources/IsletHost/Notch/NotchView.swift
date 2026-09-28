@@ -1,3 +1,4 @@
+import IsletCore
 import SwiftUI
 
 public struct NotchView<Content: View>: View {

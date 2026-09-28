@@ -1,4 +1,5 @@
 import AppKit
+import IsletCore
 import SwiftUI
 
 public struct SettingsView: View {

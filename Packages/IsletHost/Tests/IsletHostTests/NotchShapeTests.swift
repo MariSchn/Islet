@@ -1,6 +1,7 @@
 import SwiftUI
 import Testing
 import IsletCore
+import IsletHost
 
 struct NotchShapeTests {
     @Test func pathFlaresOutwardAtTheTopByTopRadius() {

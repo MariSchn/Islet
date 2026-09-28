@@ -1,6 +1,7 @@
 import CoreGraphics
 import Testing
 import IsletCore
+import IsletHost
 
 struct NotchGeometryTests {
     let screen = CGRect(x: 0, y: 0, width: 1512, height: 982)

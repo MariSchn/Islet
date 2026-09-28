@@ -1,4 +1,5 @@
 import CoreGraphics
+import IsletCore
 
 public struct HorizontalSwipeRecognizer: Sendable, Equatable {
     public enum Phase: Sendable, Equatable {

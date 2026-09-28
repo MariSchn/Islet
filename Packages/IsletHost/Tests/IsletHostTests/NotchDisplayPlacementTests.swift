@@ -1,5 +1,6 @@
 import Testing
 import IsletCore
+import IsletHost
 
 struct NotchDisplayPlacementTests {
     let builtIn = NotchDisplay(id: "1", name: "Built-in Retina Display", hasHardwareNotch: true, isPrimary: false)

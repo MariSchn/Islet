@@ -135,6 +135,11 @@ public final class PluginRegistry {
     }
 
     @discardableResult
+    public func register(_ type: any IsletPlugin.Type) async throws -> PluginEntry {
+        try await register(manifest: type.manifest) { type.init(context: $0) }
+    }
+
+    @discardableResult
     public func register(
         manifest: PluginManifest,
         make: (PluginContext) -> any IsletPlugin
@@ -177,6 +182,12 @@ public final class PluginRegistry {
             entry.context.clearAnnouncement()
         }
         ensureSelection()
+    }
+
+    public func deactivateAll() async {
+        for entry in entries {
+            await transition(entry, toActive: false)
+        }
     }
 
     public func select(_ id: String?) {

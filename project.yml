@@ -7,6 +7,8 @@ options:
 packages:
   IsletCore:
     path: Packages/IsletCore
+  IsletHost:
+    path: Packages/IsletHost
   HelloPlugin:
     path: Plugins/HelloPlugin
   ShelfPlugin:
@@ -23,6 +25,7 @@ targets:
       - App
     dependencies:
       - package: IsletCore
+      - package: IsletHost
       - package: HelloPlugin
       - package: ShelfPlugin
       - package: MediaPlugin
@@ -54,6 +57,7 @@ schemes:
       config: Debug
       targets:
         - package: IsletCore/IsletCoreTests
+        - package: IsletHost/IsletHostTests
         - package: ShelfPlugin/ShelfPluginTests
         - package: MediaPlugin/MediaPluginTests
         - package: AgentsPlugin/AgentsPluginTests

@@ -1,4 +1,5 @@
 import AppKit
+import IsletCore
 
 public struct NotchGeometry: Sendable, Equatable {
     public static let fallbackNotchWidth: CGFloat = 200

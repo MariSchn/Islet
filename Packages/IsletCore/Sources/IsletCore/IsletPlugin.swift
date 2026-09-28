@@ -2,6 +2,10 @@ import SwiftUI
 
 @MainActor
 public protocol IsletPlugin: AnyObject {
+    static var manifest: PluginManifest { get }
+
+    init(context: PluginContext)
+
     func activate() async throws
     func deactivate() async
 

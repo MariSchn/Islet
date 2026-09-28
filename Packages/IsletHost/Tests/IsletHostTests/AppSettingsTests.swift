@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 import IsletCore
+import IsletHost
 
 @MainActor
 struct AppSettingsTests {

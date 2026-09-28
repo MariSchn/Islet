@@ -1,4 +1,5 @@
 import AppKit
+import IsletCore
 import SwiftUI
 
 @MainActor
