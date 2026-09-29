@@ -4,8 +4,8 @@ import Testing
 @testable import AgentsPlugin
 
 struct StatusLineInstallerTests {
-    func makeInstaller(settings: String? = nil) throws -> StatusLineInstaller {
-        let directory = FileManager.default.temporaryDirectory.appending(path: "StatusLineInstallerTests." + UUID().uuidString)
+    func makeInstaller(settings: String? = nil, name: String = "StatusLineInstallerTests") throws -> StatusLineInstaller {
+        let directory = FileManager.default.temporaryDirectory.appending(path: name + "." + UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         if let settings {
             try settings.write(to: directory.appending(path: "settings.json"), atomically: true, encoding: .utf8)
@@ -18,7 +18,7 @@ struct StatusLineInstallerTests {
     }
 
     func ownCommand(_ installer: StatusLineInstaller) -> String {
-        "'\(installer.scriptURL.path)'"
+        "'" + installer.scriptURL.path.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
     @Test func installsWithoutAnExistingStatusLineAndRemovesItAgain() throws {
@@ -41,7 +41,7 @@ struct StatusLineInstallerTests {
     }
 
     @Test func wrapsAnExistingStatusLineAndRestoresIt() throws {
-        let installer = try makeInstaller(settings: #"{"statusLine":{"type":"command","command":"~/.claude/statusline.sh","padding":2}}"#)
+        let installer = try makeInstaller(settings: #"{"statusLine":{"type":"command","command":"~/.claude/statusline.sh","padding":2,"refreshInterval":5}}"#)
 
         try installer.install()
         #expect(installer.state == .installed)
@@ -49,6 +49,7 @@ struct StatusLineInstallerTests {
         var statusLine = try settings(of: installer)["statusLine"] as? [String: Any]
         #expect(statusLine?["command"] as? String == ownCommand(installer))
         #expect(statusLine?["padding"] as? Int == 2)
+        #expect(statusLine?["refreshInterval"] as? Int == 5)
 
         try installer.install()
         #expect(installer.originalCommand == "~/.claude/statusline.sh")
@@ -80,6 +81,38 @@ struct StatusLineInstallerTests {
     @Test func refusesToOverwriteSettingsThatAreNotAnObject() throws {
         let installer = try makeInstaller(settings: "[]")
         #expect(throws: SettingsFile.Unreadable.self) { try installer.install() }
+        let statusLine = try makeInstaller(settings: #"{"statusLine":"~/bin/line"}"#)
+        #expect(throws: StatusLineInstaller.InvalidStatusLine.self) { try statusLine.install() }
+    }
+
+    @Test func otherSpellingsOfItsOwnScriptAreNeverWrapped() throws {
+        let installer = try makeInstaller()
+        try installer.install()
+        var settings = try settings(of: installer)
+        settings["statusLine"] = ["type": "command", "command": "sh \(installer.scriptURL.path)"]
+        try JSONSerialization.data(withJSONObject: settings).write(to: installer.directory.appending(path: "settings.json"))
+        #expect(installer.state == .outdated)
+
+        try installer.install()
+        #expect(installer.state == .installed)
+        #expect(installer.originalCommand == nil)
+        try installer.uninstall()
+        #expect(try self.settings(of: installer)["statusLine"] == nil)
+    }
+
+    @Test func aRemovedStatusLineCountsAsNotInstalled() throws {
+        let installer = try makeInstaller()
+        try installer.install()
+        var settings = try settings(of: installer)
+        settings["statusLine"] = nil
+        try JSONSerialization.data(withJSONObject: settings).write(to: installer.directory.appending(path: "settings.json"))
+        #expect(installer.state == .notInstalled)
+    }
+
+    @Test func scriptWorksFromADirectoryWithSpacesAndQuotes() throws {
+        let installer = try makeInstaller(settings: #"{"statusLine":{"type":"command","command":"printf ok"}}"#, name: "status line's dir")
+        try installer.install()
+        #expect(try run(installer, input: #"{"session_id":"s1"}"#, path: "/nonexistent:/usr/bin:/bin") == "ok")
     }
 
     @Test func scriptForwardsTheInputAndShowsTheOriginalStatusLine() throws {
@@ -87,7 +120,7 @@ struct StatusLineInstallerTests {
         try installer.install()
         let capture = installer.directory.appending(path: "curl-call")
         let fakeCurl = installer.directory.appending(path: "curl")
-        try "#!/bin/sh\nprintf '%s\\n' \"$@\" > '\(capture.path).partial'\ncat >> '\(capture.path).partial'\nfor a in \"$@\"; do case \"$a\" in @*) cat \"${a#@}\" >> '\(capture.path).partial';; esac; done\nmv '\(capture.path).partial' '\(capture.path)'\n".write(to: fakeCurl, atomically: true, encoding: .utf8)
+        try "#!/bin/sh\nprintf '%s\\n' \"$@\" > '\(capture.path).partial'\ncat /dev/fd/3 >> '\(capture.path).partial'\ncat >> '\(capture.path).partial'\nmv '\(capture.path).partial' '\(capture.path)'\n".write(to: fakeCurl, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeCurl.path)
         let payload = #"{"session_id":"s1","session_name":"islet"}"#
 
@@ -114,7 +147,7 @@ struct StatusLineInstallerTests {
     private func run(_ installer: StatusLineInstaller, input: String, path: String) throws -> String {
         let process = Process()
         process.executableURL = URL(filePath: "/bin/sh")
-        process.arguments = ["-c", "'\(installer.scriptURL.path)'"]
+        process.arguments = ["-c", ownCommand(installer)]
         process.environment = ["PATH": path]
         let stdin = Pipe()
         let stdout = Pipe()

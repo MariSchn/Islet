@@ -11,10 +11,18 @@ struct UsageWindow: Sendable, Equatable {
     }
 
     static let unused = UsageWindow(utilization: 0, resetsAt: nil)
+    static let resetTolerance: TimeInterval = 60
 
     func current(at date: Date) -> UsageWindow {
         guard let resetsAt, resetsAt <= date else { return self }
         return Self.unused
+    }
+
+    func merged(with newer: UsageWindow) -> UsageWindow {
+        guard let current = resetsAt, let next = newer.resetsAt else { return newer }
+        if next > current.addingTimeInterval(Self.resetTolerance) { return newer }
+        if next < current.addingTimeInterval(-Self.resetTolerance) { return self }
+        return newer.utilization >= utilization ? newer : self
     }
 }
 
@@ -57,10 +65,19 @@ final class UsageMonitor {
 
     func receive(_ usage: ClaudeUsage) {
         guard !usage.isEmpty else { return }
-        let complete = ClaudeUsage(fiveHour: usage.fiveHour ?? .unused, sevenDay: usage.sevenDay ?? .unused)
-        guard complete != latest else { return }
-        latest = complete
+        let merged = ClaudeUsage(fiveHour: Self.merge(latest?.fiveHour, usage.fiveHour), sevenDay: Self.merge(latest?.sevenDay, usage.sevenDay))
+        guard merged != latest else { return }
+        latest = merged
         scheduleExpiry()
+    }
+
+    private static func merge(_ known: UsageWindow?, _ reported: UsageWindow?) -> UsageWindow {
+        switch (known, reported) {
+        case let (known?, reported?): known.merged(with: reported)
+        case let (known?, nil): known
+        case let (nil, reported?): reported
+        case (nil, nil): .unused
+        }
     }
 
     private func scheduleExpiry() {

@@ -122,7 +122,7 @@ struct AgentsSettings: View {
                             .foregroundStyle(.orange)
                     case .installed, .outdated:
                         if controller.usage.usage == nil {
-                            Text("Appears after your next message in Claude Code. Usage limits are only reported for Claude Pro and Max plans.")
+                            Text("Appears after your next message in Claude Code. Usage limits are only reported for Claude Pro and Max plans, and not by sessions in projects that set their own status line.")
                                 .foregroundStyle(.secondary)
                         }
                     }

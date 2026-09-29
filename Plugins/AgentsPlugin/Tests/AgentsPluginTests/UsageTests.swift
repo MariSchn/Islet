@@ -35,6 +35,28 @@ struct UsageTests {
     }
 
     @MainActor
+    @Test func olderReportsFromIdleSessionsNeverWinOverNewerOnes() {
+        let clock = Date(timeIntervalSince1970: 1_000_000)
+        let monitor = UsageMonitor(isEnabled: true, now: { clock })
+        let current = clock.addingTimeInterval(3600)
+        let weekly = UsageWindow(utilization: 40, resetsAt: clock.addingTimeInterval(86_400))
+        monitor.receive(ClaudeUsage(fiveHour: UsageWindow(utilization: 60, resetsAt: current), sevenDay: weekly))
+
+        monitor.receive(ClaudeUsage(fiveHour: UsageWindow(utilization: 10, resetsAt: current.addingTimeInterval(-5 * 3600)), sevenDay: weekly))
+        #expect(monitor.usage?.fiveHour?.utilization == 60)
+
+        monitor.receive(ClaudeUsage(fiveHour: UsageWindow(utilization: 55, resetsAt: current.addingTimeInterval(1)), sevenDay: weekly))
+        #expect(monitor.usage?.fiveHour?.utilization == 60)
+
+        monitor.receive(ClaudeUsage(fiveHour: nil, sevenDay: weekly))
+        #expect(monitor.usage?.fiveHour?.utilization == 60)
+
+        let next = UsageWindow(utilization: 3, resetsAt: current.addingTimeInterval(5 * 3600))
+        monitor.receive(ClaudeUsage(fiveHour: next, sevenDay: weekly))
+        #expect(monitor.usage?.fiveHour == next)
+    }
+
+    @MainActor
     @Test func theMonitorShowsResetWindowsAsUnusedUntilTheNextReport() {
         var clock = Date(timeIntervalSince1970: 1_000_000)
         let monitor = UsageMonitor(isEnabled: true, now: { clock })

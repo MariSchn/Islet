@@ -40,6 +40,7 @@ struct AgentSession: Identifiable, Sendable, Equatable {
     var transcriptPath: String?
     var cwd: String?
     var title: String?
+    var hasStatusLineTitle = false
     var task: String?
     var activity: String?
     var state: State

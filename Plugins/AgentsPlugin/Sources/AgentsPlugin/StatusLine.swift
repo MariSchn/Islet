@@ -33,6 +33,10 @@ struct StatusLineInstaller: Sendable {
         case replaced
     }
 
+    struct InvalidStatusLine: Error, LocalizedError {
+        var errorDescription: String? { "The statusLine setting in ~/.claude/settings.json is not an object" }
+    }
+
     static let scriptName = "islet-statusline.sh"
     static let originalName = "islet-statusline.original"
 
@@ -54,30 +58,31 @@ struct StatusLineInstaller: Sendable {
         #!/bin/sh
         input=$(cat)
         dir=$(dirname "$0")
-        {
-          body=$(mktemp) || exit 0
-          printf '%s' "$input" > "$body"
-          curl -sf --connect-timeout 1 -m 2 -K - -X POST "http://127.0.0.1:\(port)\(HookServer.statusLinePath)" \\
-            -H "Content-Type: application/json" \\
-            -H "Expect:" \\
-            -H "X-Islet-Agent: \(AgentSession.Agent.claudeCode.rawValue)" \\
-            --data-binary "@$body" <<'ISLET_CONFIG'
+        printf '%s' "$input" | curl -sf --connect-timeout 1 -m 2 -K /dev/fd/3 -X POST "http://127.0.0.1:\(port)\(HookServer.statusLinePath)" \\
+          -H "Content-Type: application/json" \\
+          -H "Expect:" \\
+          -H "X-Islet-Agent: \(AgentSession.Agent.claudeCode.rawValue)" \\
+          --data-binary @- >/dev/null 2>&1 3<<'ISLET_CONFIG' &
         header = "Authorization: Bearer \(token)"
         ISLET_CONFIG
-          rm -f "$body"
-        } >/dev/null 2>&1 &
         if [ -f "$dir/\(Self.originalName)" ]; then
-          printf '%s' "$input" | sh -c "$(cat "$dir/\(Self.originalName)")"
+          shell=$(command -v bash || echo sh)
+          printf '%s' "$input" | "$shell" -c "$(cat "$dir/\(Self.originalName)")"
         fi
 
         """
     }
 
     var state: State {
-        if configuredCommand == command {
-            return (try? String(contentsOf: scriptURL, encoding: .utf8)) == script ? .installed : .outdated
+        guard let configured = configuredCommand else { return .notInstalled }
+        if Self.isOwn(configured) {
+            return configured == command && (try? String(contentsOf: scriptURL, encoding: .utf8)) == script ? .installed : .outdated
         }
         return FileManager.default.fileExists(atPath: scriptURL.path) ? .replaced : .notInstalled
+    }
+
+    static func isOwn(_ command: String) -> Bool {
+        command.contains(scriptName)
     }
 
     var originalCommand: String? {
@@ -90,9 +95,10 @@ struct StatusLineInstaller: Sendable {
 
     func install() throws {
         var settings = try settingsFile.read() ?? [:]
+        guard settings["statusLine"] == nil || settings["statusLine"] is [String: Any] else { throw InvalidStatusLine() }
         var statusLine = settings["statusLine"] as? [String: Any] ?? [:]
         switch statusLine["command"] as? String {
-        case command?:
+        case let existing? where Self.isOwn(existing):
             break
         case let existing?:
             try Data(existing.utf8).write(to: originalURL, options: .atomic)
@@ -110,7 +116,7 @@ struct StatusLineInstaller: Sendable {
     }
 
     func uninstall() throws {
-        if var settings = try settingsFile.read(), var statusLine = settings["statusLine"] as? [String: Any], statusLine["command"] as? String == command {
+        if var settings = try settingsFile.read(), var statusLine = settings["statusLine"] as? [String: Any], (statusLine["command"] as? String).map(Self.isOwn) == true {
             if let original = originalCommand {
                 statusLine["command"] = original
                 settings["statusLine"] = statusLine

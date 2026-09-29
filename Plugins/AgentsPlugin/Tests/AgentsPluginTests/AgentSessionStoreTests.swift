@@ -93,6 +93,9 @@ struct AgentSessionStoreTests {
 
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "hidden", prompt: "go"))
         #expect(store.sessions.first { $0.id == "hidden" }?.displayName == "named early")
+
+        store.apply(HookEvent(kind: .stop, sessionID: "shown", title: "from transcript"))
+        #expect(store.sessions.first { $0.id == "shown" }?.displayName == "renamed")
     }
 
     @Test func walksThroughSessionLifecycle() {
