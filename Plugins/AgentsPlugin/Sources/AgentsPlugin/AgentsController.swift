@@ -1,6 +1,7 @@
 import Foundation
 import IsletCore
 import Observation
+import os
 
 @MainActor
 @Observable
@@ -38,7 +39,7 @@ final class AgentsController {
     private let server: HookServer
     private let alerter: SessionAlerter
 
-    init(token: String, claudeDirectory: URL, codexDirectory: URL, port: UInt16 = HookServer.defaultPort, alerts: AlertSettings = AlertSettings(), display: DisplaySettings = DisplaySettings(), showsUsage: Bool = false, usage: UsageMonitor? = nil) {
+    init(token: String, claudeDirectory: URL, codexDirectory: URL, port: UInt16 = HookServer.defaultPort, alerts: AlertSettings = AlertSettings(), display: DisplaySettings = DisplaySettings(), showsUsage: Bool = false, usage: UsageMonitor? = nil, logger: Logger = Logger()) {
         let store = AgentSessionStore()
         self.store = store
         self.usage = usage ?? UsageMonitor(isEnabled: showsUsage)
@@ -50,6 +51,7 @@ final class AgentsController {
         statusLineState = statusLineInstaller.state
         let usage = self.usage
         server = HookServer(port: port, token: token, installScript: HookInstaller.remoteInstallScript(for: [installer, codexInstaller])) { update in
+            logger.debug("Status line update for \(update.sessionID, privacy: .public): 5h \(update.usage?.fiveHour.map { "\($0.utilization)%" } ?? "absent", privacy: .public), 7d \(update.usage?.sevenDay.map { "\($0.utilization)%" } ?? "absent", privacy: .public)")
             await store.applyStatusLine(update)
             if let limits = update.usage {
                 await usage.receive(limits)

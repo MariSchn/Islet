@@ -10,8 +10,11 @@ struct UsageWindow: Sendable, Equatable {
         self.resetsAt = resetsAt
     }
 
-    func isCurrent(at date: Date) -> Bool {
-        resetsAt.map { $0 > date } ?? true
+    static let unused = UsageWindow(utilization: 0, resetsAt: nil)
+
+    func current(at date: Date) -> UsageWindow {
+        guard let resetsAt, resetsAt <= date else { return self }
+        return Self.unused
     }
 }
 
@@ -27,8 +30,9 @@ struct ClaudeUsage: Sendable, Equatable {
     var isEmpty: Bool { fiveHour == nil && sevenDay == nil }
 
     func current(at date: Date) -> ClaudeUsage {
-        ClaudeUsage(fiveHour: fiveHour.flatMap { $0.isCurrent(at: date) ? $0 : nil }, sevenDay: sevenDay.flatMap { $0.isCurrent(at: date) ? $0 : nil })
+        ClaudeUsage(fiveHour: fiveHour?.current(at: date), sevenDay: sevenDay?.current(at: date))
     }
+
 }
 
 @MainActor
@@ -52,8 +56,10 @@ final class UsageMonitor {
     }
 
     func receive(_ usage: ClaudeUsage) {
-        guard usage != latest else { return }
-        latest = usage
+        guard !usage.isEmpty else { return }
+        let complete = ClaudeUsage(fiveHour: usage.fiveHour ?? .unused, sevenDay: usage.sevenDay ?? .unused)
+        guard complete != latest else { return }
+        latest = complete
         scheduleExpiry()
     }
 

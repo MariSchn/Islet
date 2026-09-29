@@ -46,6 +46,13 @@ struct DisplaySettingsControllerTests {
         #expect(restored.controller.alerts.attentionSound)
     }
 
+    @Test func aWindowMissingFromAReportCountsAsUnused() {
+        let monitor = UsageMonitor(isEnabled: true)
+        let weekly = UsageWindow(utilization: 41, resetsAt: nil)
+        monitor.receive(ClaudeUsage(fiveHour: nil, sevenDay: weekly))
+        #expect(monitor.usage == ClaudeUsage(fiveHour: .unused, sevenDay: weekly))
+    }
+
     @Test func hidingBothLimitsRemovesTheUsageBar() async throws {
         let controller = makeController()
         #expect(controller.showsUsageBar)

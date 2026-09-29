@@ -35,9 +35,11 @@ struct UsageTests {
     }
 
     @MainActor
-    @Test func theMonitorKeepsTheLatestLimitsUntilTheyReset() {
+    @Test func theMonitorShowsResetWindowsAsUnusedUntilTheNextReport() {
         var clock = Date(timeIntervalSince1970: 1_000_000)
         let monitor = UsageMonitor(isEnabled: true, now: { clock })
+        #expect(monitor.usage == nil)
+        monitor.receive(ClaudeUsage(fiveHour: nil, sevenDay: nil))
         #expect(monitor.usage == nil)
 
         let fiveHour = UsageWindow(utilization: 30, resetsAt: clock.addingTimeInterval(60))
@@ -46,12 +48,17 @@ struct UsageTests {
         #expect(monitor.usage == ClaudeUsage(fiveHour: fiveHour, sevenDay: sevenDay))
 
         clock = clock.addingTimeInterval(120)
-        #expect(monitor.usage == ClaudeUsage(fiveHour: nil, sevenDay: sevenDay))
+        let unused = UsageWindow.unused
+        #expect(monitor.usage == ClaudeUsage(fiveHour: unused, sevenDay: sevenDay))
+
+        monitor.receive(ClaudeUsage(fiveHour: nil, sevenDay: sevenDay))
+        #expect(monitor.usage == ClaudeUsage(fiveHour: unused, sevenDay: sevenDay))
 
         clock = clock.addingTimeInterval(3600)
-        #expect(monitor.usage == nil)
+        #expect(monitor.usage == ClaudeUsage(fiveHour: unused, sevenDay: unused))
 
-        monitor.receive(ClaudeUsage(fiveHour: UsageWindow(utilization: 5, resetsAt: nil), sevenDay: nil))
-        #expect(monitor.usage?.fiveHour?.utilization == 5)
+        let fresh = UsageWindow(utilization: 5, resetsAt: clock.addingTimeInterval(5 * 3600))
+        monitor.receive(ClaudeUsage(fiveHour: fresh, sevenDay: nil))
+        #expect(monitor.usage == ClaudeUsage(fiveHour: fresh, sevenDay: unused))
     }
 }
