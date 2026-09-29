@@ -8,13 +8,16 @@
 
 A dynamic island for macOS that keeps an eye on your AI coding agents, controls your music and holds your files, and runs any screen you build for it in SwiftUI.
 
-[![macOS 15+](https://img.shields.io/badge/macOS_15+-111?style=flat&logo=apple&logoColor=white)](#-getting-started) [![Swift 6](https://img.shields.io/badge/Swift_6-111?style=flat&logo=swift&logoColor=F05138)](https://www.swift.org) [![Claude Code & Codex](https://img.shields.io/badge/Claude_Code_%26_Codex-111?style=flat&logo=claude&logoColor=D97757)](#-agents) [![100% local](https://img.shields.io/badge/100%25_local-111?style=flat&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHBhdGggZmlsbD0iIzMyRDc0QiIgZD0iTTEyIDEuNWE1LjUgNS41IDAgMCAwLTUuNSA1LjV2M0g1LjhBMS44IDEuOCAwIDAgMCA0IDExLjh2OS40QTEuOCAxLjggMCAwIDAgNS44IDIzaDEyLjRhMS44IDEuOCAwIDAgMCAxLjgtMS44di05LjRhMS44IDEuOCAwIDAgMC0xLjgtMS44aC0uN1Y3QTUuNSA1LjUgMCAwIDAgMTIgMS41Wm0wIDIuNWEzIDMgMCAwIDEgMyAzdjNIOVY3YTMgMyAwIDAgMSAzLTNaIi8%2BPC9zdmc%2B)](#-private-by-design)
+<a href="#-getting-started"><img src="https://img.shields.io/badge/macOS_15+-111?style=flat&logo=apple&logoColor=white" width="133" alt="macOS 15+"></a>
+<a href="https://www.swift.org"><img src="https://img.shields.io/badge/Swift_6-111?style=flat&logo=swift&logoColor=F05138" width="94" alt="Swift 6"></a>
+<a href="#-agents"><img src="https://img.shields.io/badge/Claude_Code_%26_Codex-111?style=flat&logo=claude&logoColor=D97757" width="206" alt="Claude Code &amp; Codex"></a>
+<a href="#-private-by-design"><img src="https://img.shields.io/badge/100%25_local-111?style=flat&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHBhdGggZmlsbD0iIzMyRDc0QiIgZD0iTTEyIDEuNWE1LjUgNS41IDAgMCAwLTUuNSA1LjV2M0g1LjhBMS44IDEuOCAwIDAgMCA0IDExLjh2OS40QTEuOCAxLjggMCAwIDAgNS44IDIzaDEyLjRhMS44IDEuOCAwIDAgMCAxLjgtMS44di05LjRhMS44IDEuOCAwIDAgMC0xLjgtMS44aC0uN1Y3QTUuNSA1LjUgMCAwIDAgMTIgMS41Wm0wIDIuNWEzIDMgMCAwIDEgMyAzdjNIOVY3YTMgMyAwIDAgMSAzLTNaIi8%2BPC9zdmc%2B" width="125" alt="100% local"></a>
 
 [Features](#-features) · [Getting started](#-getting-started) · [Build a plugin](#-build-your-own-plugin) · [Architecture](#-architecture) · [FAQ](#-faq)
 
 <br>
 
-<img src="docs/assets/demo.gif" width="880" alt="Islet in action: the collapsed notch announces that an agent needs you, expands on hover, the permission is approved from the notch, and the notch switches to the music player">
+<img src="docs/assets/islet-demo.gif" width="880" alt="Islet in action: the collapsed notch announces that an agent needs you, expands on hover, the permission is approved from the notch, and the notch switches to the music player">
 
 </div>
 
