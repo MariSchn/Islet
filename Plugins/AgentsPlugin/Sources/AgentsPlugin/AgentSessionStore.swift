@@ -109,7 +109,7 @@ final class AgentSessionStore {
         if let tty = event.tty { session.tty = tty }
         if let pid = event.pid { session.pid = pid }
         if let transcriptPath = event.transcriptPath { session.transcriptPath = transcriptPath }
-        if let title = event.title { session.title = title }
+        if let title = event.title, !session.hasStatusLineTitle { session.title = title }
         session.updatedAt = timestamp
         if event.toolName == "ExitPlanMode", let plan = event.toolInput?["plan"]?.stringValue {
             session.plan = plan
@@ -225,6 +225,19 @@ final class AgentSessionStore {
             return previous?.requiresAttention == true ? nil : .needsAttention(session)
         }
         return current == .done && previous != .done ? .finished(session) : nil
+    }
+
+    func applyStatusLine(_ update: StatusLineUpdate) {
+        guard let name = update.sessionName else { return }
+        if let index = sessions.firstIndex(where: { $0.id == update.sessionID }) {
+            if sessions[index].title != name || !sessions[index].hasStatusLineTitle {
+                sessions[index].title = name
+                sessions[index].hasStatusLineTitle = true
+            }
+        } else if hiddenSessions[update.sessionID] != nil {
+            hiddenSessions[update.sessionID]?.title = name
+            hiddenSessions[update.sessionID]?.hasStatusLineTitle = true
+        }
     }
 
     func dismiss(_ id: String) {

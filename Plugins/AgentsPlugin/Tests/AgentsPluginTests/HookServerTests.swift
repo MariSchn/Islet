@@ -103,6 +103,41 @@ struct HookServerTests {
         #expect(await gate.cancelled == 2)
     }
 
+    @Test func forwardsStatusLineUpdates() async throws {
+        let received = ReceivedUpdates()
+        let port = try freePort()
+        let server = HookServer(port: port, token: "secret") { update in
+            await received.add(update)
+        } handler: { _ in .empty }
+        try await server.start()
+        defer { Task { await server.stop() } }
+
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/statusline")!)
+        request.httpMethod = "POST"
+        request.setValue("Bearer secret", forHTTPHeaderField: "Authorization")
+        request.httpBody = Data(#"{"session_id":"s","session_name":"named","rate_limits":{"five_hour":{"used_percentage":12}}}"#.utf8)
+        let (_, response) = try await URLSession.shared.data(for: request)
+        #expect((response as? HTTPURLResponse)?.statusCode == 200)
+        #expect(await received.updates == [StatusLineUpdate(sessionID: "s", sessionName: "named", usage: ClaudeUsage(fiveHour: UsageWindow(utilization: 12, resetsAt: nil), sevenDay: nil))])
+
+        request.httpBody = Data("{}".utf8)
+        let (_, invalid) = try await URLSession.shared.data(for: request)
+        #expect((invalid as? HTTPURLResponse)?.statusCode == 400)
+
+        request.setValue("Bearer wrong", forHTTPHeaderField: "Authorization")
+        let (_, unauthorized) = try await URLSession.shared.data(for: request)
+        #expect((unauthorized as? HTTPURLResponse)?.statusCode == 401)
+        #expect(await received.updates.count == 1)
+    }
+
+    actor ReceivedUpdates {
+        var updates: [StatusLineUpdate] = []
+
+        func add(_ update: StatusLineUpdate) {
+            updates.append(update)
+        }
+    }
+
     func freePort() throws -> UInt16 {
         let socket = Darwin.socket(AF_INET, SOCK_STREAM, 0)
         defer { Darwin.close(socket) }

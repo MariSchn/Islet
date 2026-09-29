@@ -1,6 +1,7 @@
 import Foundation
 import IsletCore
 import Observation
+import os
 
 @MainActor
 @Observable
@@ -8,8 +9,10 @@ final class AgentsController {
     let store: AgentSessionStore
     let installer: HookInstaller
     let codexInstaller: HookInstaller
+    let statusLineInstaller: StatusLineInstaller
     private(set) var isHookInstalled: Bool
     private(set) var isCodexHookInstalled: Bool
+    private(set) var statusLineState: StatusLineInstaller.State
     private(set) var serverError: String?
     private(set) var expandedSessionIDs: Set<String> = []
     let usage: UsageMonitor
@@ -36,15 +39,24 @@ final class AgentsController {
     private let server: HookServer
     private let alerter: SessionAlerter
 
-    init(token: String, claudeDirectory: URL, codexDirectory: URL, port: UInt16 = HookServer.defaultPort, alerts: AlertSettings = AlertSettings(), display: DisplaySettings = DisplaySettings(), showsUsage: Bool = false, usage: UsageMonitor? = nil) {
+    init(token: String, claudeDirectory: URL, codexDirectory: URL, port: UInt16 = HookServer.defaultPort, alerts: AlertSettings = AlertSettings(), display: DisplaySettings = DisplaySettings(), showsUsage: Bool = false, usage: UsageMonitor? = nil, logger: Logger = Logger()) {
         let store = AgentSessionStore()
         self.store = store
         self.usage = usage ?? UsageMonitor(isEnabled: showsUsage)
         installer = HookInstaller(agent: .claudeCode, directory: claudeDirectory, port: port, token: token)
         codexInstaller = HookInstaller(agent: .codex, directory: codexDirectory, port: port, token: token)
+        statusLineInstaller = StatusLineInstaller(directory: claudeDirectory, port: port, token: token)
         isHookInstalled = installer.isInstalled
         isCodexHookInstalled = codexInstaller.isInstalled
-        server = HookServer(port: port, token: token, installScript: HookInstaller.remoteInstallScript(for: [installer, codexInstaller])) { event in
+        statusLineState = statusLineInstaller.state
+        let usage = self.usage
+        server = HookServer(port: port, token: token, installScript: HookInstaller.remoteInstallScript(for: [installer, codexInstaller])) { update in
+            logger.debug("Status line update for \(update.sessionID, privacy: .public): 5h \(update.usage?.fiveHour.map { "\($0.utilization)%" } ?? "absent", privacy: .public), 7d \(update.usage?.sevenDay.map { "\($0.utilization)%" } ?? "absent", privacy: .public)")
+            await store.applyStatusLine(update)
+            if let limits = update.usage {
+                await usage.receive(limits)
+            }
+        } handler: { event in
             await store.handle(event)
         }
         let alerter = SessionAlerter(settings: alerts)
@@ -66,8 +78,10 @@ final class AgentsController {
         for installer in [installer, codexInstaller] where installer.needsUpgrade {
             try? installer.install()
         }
+        if statusLineInstaller.state == .outdated {
+            try? statusLineInstaller.install()
+        }
         refreshInstallState()
-        usage.start()
         interruptions.start()
         processes.start()
     }
@@ -78,7 +92,6 @@ final class AgentsController {
 
     func stop() async {
         await server.stop()
-        usage.stop()
         interruptions.stop()
         processes.stop()
     }
@@ -86,6 +99,7 @@ final class AgentsController {
     func refreshInstallState() {
         isHookInstalled = installer.isInstalled
         isCodexHookInstalled = codexInstaller.isInstalled
+        statusLineState = statusLineInstaller.state
         Task { [server] in
             if await !server.isListening, serverError == nil {
                 serverError = "The hook server stopped listening on 127.0.0.1:\(server.port). Restart Islet."
@@ -104,6 +118,16 @@ final class AgentsController {
 
     func uninstallHooks(for agent: AgentSession.Agent = .claudeCode) throws {
         try installer(for: agent).uninstall()
+        refreshInstallState()
+    }
+
+    func installStatusLine() throws {
+        try statusLineInstaller.install()
+        refreshInstallState()
+    }
+
+    func uninstallStatusLine() throws {
+        try statusLineInstaller.uninstall()
         refreshInstallState()
     }
 

@@ -98,7 +98,8 @@ public final class AgentsPlugin: IsletPlugin {
             codexDirectory: URL.homeDirectory.appending(path: ".codex", directoryHint: .isDirectory),
             alerts: Self.load(AlertSettings(), Self.alertKeys, from: settings),
             display: display,
-            showsUsage: settings.value(forKey: Self.usageKey) ?? false
+            showsUsage: settings.value(forKey: Self.usageKey) ?? false,
+            logger: context.logger
         )
         self.controller = controller
 

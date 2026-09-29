@@ -14,7 +14,6 @@ struct AgentsScreen: View {
             }
             content
         }
-        .task { controller.usage.refresh() }
     }
 
     @ViewBuilder
