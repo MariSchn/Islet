@@ -1,5 +1,9 @@
 import Foundation
 
+enum ShelfItemKind: String, Codable, Sendable {
+    case file, text, link, image
+}
+
 struct ShelfItem: Identifiable, Codable, Equatable, Sendable {
     let id: UUID
     private(set) var url: URL
@@ -7,19 +11,30 @@ struct ShelfItem: Identifiable, Codable, Equatable, Sendable {
     var isReachable: Bool
     let ownsFile: Bool
     let sourceURL: URL?
+    let kind: ShelfItemKind
+    let title: String?
     private var bookmark: Data?
 
-    init(id: UUID = UUID(), url: URL, addedAt: Date = .now, ownsFile: Bool = false, sourceURL: URL? = nil) {
+    init(id: UUID = UUID(), url: URL, addedAt: Date = .now, ownsFile: Bool = false, sourceURL: URL? = nil, kind: ShelfItemKind = .file, title: String? = nil) {
         self.id = id
         self.url = Self.canonical(url)
         self.addedAt = addedAt
         self.isReachable = Self.checkReachable(self.url)
         self.ownsFile = ownsFile
         self.sourceURL = sourceURL.map(Self.canonical)
+        self.kind = kind
+        self.title = title
         self.bookmark = try? url.bookmarkData(options: .minimalBookmark)
     }
 
     var name: String { url.lastPathComponent }
+
+    var label: String {
+        switch kind {
+        case .text, .link: title ?? name
+        case .file, .image: name
+        }
+    }
 
     static func canonical(_ url: URL) -> URL {
         url.standardizedFileURL.resolvingSymlinksInPath()
@@ -30,7 +45,7 @@ struct ShelfItem: Identifiable, Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, url, addedAt, isReachable, bookmark, ownsFile, sourceURL
+        case id, url, addedAt, isReachable, bookmark, ownsFile, sourceURL, kind, title
     }
 
     init(from decoder: Decoder) throws {
@@ -42,6 +57,8 @@ struct ShelfItem: Identifiable, Codable, Equatable, Sendable {
         bookmark = try container.decodeIfPresent(Data.self, forKey: .bookmark)
         ownsFile = try container.decodeIfPresent(Bool.self, forKey: .ownsFile) ?? false
         sourceURL = try container.decodeIfPresent(URL.self, forKey: .sourceURL)
+        kind = try container.decodeIfPresent(ShelfItemKind.self, forKey: .kind) ?? .file
+        title = try container.decodeIfPresent(String.self, forKey: .title)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -53,6 +70,8 @@ struct ShelfItem: Identifiable, Codable, Equatable, Sendable {
         try container.encode(bookmark, forKey: .bookmark)
         try container.encode(ownsFile, forKey: .ownsFile)
         try container.encodeIfPresent(sourceURL, forKey: .sourceURL)
+        try container.encode(kind, forKey: .kind)
+        try container.encodeIfPresent(title, forKey: .title)
     }
 
     @discardableResult

@@ -79,10 +79,9 @@ struct ShelfScreen: View {
                 .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6]))
                 .foregroundStyle(isTargeted ? .white : .white.opacity(0.15))
         )
-        .onDrop(of: [.fileURL], isTargeted: $isTargeted) { providers in
+        .onDrop(of: ShelfPlugin.acceptedTypes, isTargeted: $isTargeted) { providers in
             Task { @MainActor in
-                let urls = await loadFileURLs(from: providers)
-                await store.add(urls)
+                await handleDrop(providers)
             }
             return true
         }
@@ -140,19 +139,53 @@ struct ShelfScreen: View {
         }
     }
 
-    private func loadFileURLs(from providers: [NSItemProvider]) async -> [URL] {
-        var urls: [URL] = []
+    private func handleDrop(_ providers: [NSItemProvider]) async {
+        var fileURLs: [URL] = []
         for provider in providers {
-            let url: URL? = await withCheckedContinuation { continuation in
-                _ = provider.loadObject(ofClass: URL.self) { url, _ in
-                    continuation.resume(returning: url)
+            if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+                if let url = await loadURL(from: provider) {
+                    fileURLs.append(url)
                 }
-            }
-            if let url {
-                urls.append(url)
+            } else if let png = await loadPNG(from: provider) {
+                store.addImage(pngData: png)
+            } else if provider.hasItemConformingToTypeIdentifier(UTType.url.identifier),
+                      let url = await loadURL(from: provider),
+                      let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" {
+                store.addLink(url)
+            } else if provider.canLoadObject(ofClass: String.self), let text = await loadText(from: provider) {
+                store.addText(text)
             }
         }
-        return urls
+        await store.add(fileURLs)
+    }
+
+    private func loadURL(from provider: NSItemProvider) async -> URL? {
+        await withCheckedContinuation { continuation in
+            _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                continuation.resume(returning: url)
+            }
+        }
+    }
+
+    private func loadText(from provider: NSItemProvider) async -> String? {
+        await withCheckedContinuation { continuation in
+            _ = provider.loadObject(ofClass: String.self) { text, _ in
+                continuation.resume(returning: text)
+            }
+        }
+    }
+
+    private func loadPNG(from provider: NSItemProvider) async -> Data? {
+        guard let identifier = provider.registeredTypeIdentifiers.first(where: { UTType($0)?.conforms(to: .image) == true }) else {
+            return nil
+        }
+        let data: Data? = await withCheckedContinuation { continuation in
+            _ = provider.loadDataRepresentation(forTypeIdentifier: identifier) { data, _ in
+                continuation.resume(returning: data)
+            }
+        }
+        guard let data else { return nil }
+        return NSBitmapImageRep(data: data)?.representation(using: .png, properties: [:])
     }
 }
 
@@ -183,7 +216,7 @@ private struct ShelfItemView: View {
                 let url = item.url
                 icon = await Task.detached { NSWorkspace.shared.icon(forFile: url.path) }.value
             }
-            Text(item.name)
+            Text(item.label)
                 .font(.caption)
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
