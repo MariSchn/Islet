@@ -177,10 +177,22 @@ private struct SessionRow: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                Text(detail)
-                    .font(.system(size: 11))
-                    .foregroundStyle(detailStyle)
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(detail)
+                        .font(.system(size: 11))
+                        .foregroundStyle(detailStyle)
+                        .lineLimit(1)
+                        .layoutPriority(-1)
+                    if session.details.worktree != nil || session.details.pullRequest != nil {
+                        Spacer(minLength: 4)
+                        if let worktree = session.details.worktree {
+                            DetailChip(systemImage: "arrow.triangle.branch", text: worktree, style: AnyShapeStyle(.secondary))
+                        }
+                        if let pullRequest = session.details.pullRequest {
+                            PullRequestChip(pullRequest: pullRequest)
+                        }
+                    }
+                }
             }
         }
     }
@@ -520,6 +532,53 @@ private struct AgentBadge: View {
                 .help(agent.displayName)
         case .codex:
             Chip(agent.displayName)
+        }
+    }
+}
+
+private struct DetailChip: View {
+    var systemImage: String?
+    var text: String
+    var style: AnyShapeStyle
+
+    var body: some View {
+        HStack(spacing: 3) {
+            if let systemImage {
+                Image(systemName: systemImage)
+            }
+            Text(text)
+        }
+        .font(.system(size: 10, weight: .medium))
+        .foregroundStyle(style)
+        .lineLimit(1)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(.white.opacity(0.12)))
+        .fixedSize()
+    }
+}
+
+private struct PullRequestChip: View {
+    let pullRequest: SessionDetails.PullRequest
+
+    var body: some View {
+        Button {
+            if let url = pullRequest.url.flatMap(URL.init(string:)) {
+                NSWorkspace.shared.open(url)
+            }
+        } label: {
+            DetailChip(text: pullRequest.label, style: reviewStyle)
+        }
+        .buttonStyle(.plain)
+        .help(pullRequest.help)
+    }
+
+    private var reviewStyle: AnyShapeStyle {
+        switch pullRequest.reviewState {
+        case "approved": AnyShapeStyle(.green)
+        case "changes_requested": AnyShapeStyle(.orange)
+        case "draft": AnyShapeStyle(.tertiary)
+        default: AnyShapeStyle(.secondary)
         }
     }
 }

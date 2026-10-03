@@ -27,8 +27,30 @@ struct StatusLineUpdate: Sendable, Equatable {
             contextPercentage: double(context?["used_percentage"]),
             model: string(model?["display_name"]),
             effort: string(effort?["level"]),
-            fastMode: object["fast_mode"] as? Bool
+            fastMode: object["fast_mode"] as? Bool,
+            worktree: worktree(from: object),
+            pullRequest: pullRequest(from: object)
         )
+    }
+
+    private static func worktree(from object: [String: Any]) -> String? {
+        if let name = string((object["worktree"] as? [String: Any])?["name"]) { return name }
+        return string((object["workspace"] as? [String: Any])?["git_worktree"])
+    }
+
+    private static func pullRequest(from object: [String: Any]) -> SessionDetails.PullRequest? {
+        guard let pr = object["pr"] as? [String: Any], let number = integer(pr["number"]) else { return nil }
+        return SessionDetails.PullRequest(
+            number: number,
+            url: string(pr["url"]),
+            reviewState: string(pr["review_state"]),
+            isMergeRequest: (pr["kind"] as? String) == "mr"
+        )
+    }
+
+    private static func integer(_ value: Any?) -> Int? {
+        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        return number.intValue
     }
 
     private static func string(_ value: Any?) -> String? {

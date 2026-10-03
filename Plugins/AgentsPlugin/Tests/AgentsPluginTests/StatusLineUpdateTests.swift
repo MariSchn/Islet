@@ -7,8 +7,16 @@ struct StatusLineUpdateTests {
         let update = try StatusLineUpdate.decode(Data(Self.documentedExample.utf8))
         #expect(update.sessionID == "abc123...")
         #expect(update.sessionName == "my-session")
-        #expect(update.details == SessionDetails(contextPercentage: 8, model: "Opus", effort: "high", fastMode: false))
+        #expect(update.details == SessionDetails(
+            contextPercentage: 8,
+            model: "Opus",
+            effort: "high",
+            fastMode: false,
+            worktree: "my-feature",
+            pullRequest: SessionDetails.PullRequest(number: 1234, url: "https://github.com/anthropics/claude-code/pull/1234", reviewState: "pending", isMergeRequest: false)
+        ))
         #expect(update.details.badgeText == "Opus · high")
+        #expect(update.details.pullRequest?.help == "Pull request #1234: pending")
         #expect(update.usage?.fiveHour?.utilization == 23.5)
         #expect(update.usage?.sevenDay?.utilization == 41.2)
     }
@@ -30,6 +38,25 @@ struct StatusLineUpdateTests {
         #expect(one.details.contextPercentage == 1)
         #expect(onePoint.details.contextPercentage == 1)
         #expect(flag.details.contextPercentage == nil)
+    }
+
+    @Test func decodesWorktreesAndPullRequests() throws {
+        let linked = try StatusLineUpdate.decode(Data(#"{"session_id":"s","workspace":{"git_worktree":"feature-xyz"}}"#.utf8))
+        #expect(linked.details.worktree == "feature-xyz")
+        #expect(linked.details.pullRequest == nil)
+
+        let named = try StatusLineUpdate.decode(Data(#"{"session_id":"s","worktree":{"name":"my-feature"},"workspace":{"git_worktree":"feature-xyz"},"pr":{"number":12,"url":"https://example.com/12","review_state":"approved"}}"#.utf8))
+        #expect(named.details.worktree == "my-feature")
+        #expect(named.details.pullRequest == SessionDetails.PullRequest(number: 12, url: "https://example.com/12", reviewState: "approved", isMergeRequest: false))
+
+        let mergeRequest = try StatusLineUpdate.decode(Data(#"{"session_id":"s","pr":{"number":7,"url":"https://gitlab.com/group/proj/-/merge_requests/7","kind":"mr"}}"#.utf8))
+        #expect(mergeRequest.details.pullRequest == SessionDetails.PullRequest(number: 7, url: "https://gitlab.com/group/proj/-/merge_requests/7", reviewState: nil, isMergeRequest: true))
+        #expect(mergeRequest.details.pullRequest?.label == "!7")
+        #expect(mergeRequest.details.pullRequest?.help == "Merge request !7")
+
+        let absent = try StatusLineUpdate.decode(Data(#"{"session_id":"s"}"#.utf8))
+        #expect(absent.details.worktree == nil)
+        #expect(absent.details.pullRequest == nil)
     }
 
     private static let documentedExample = """

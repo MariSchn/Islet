@@ -65,10 +65,39 @@ struct AgentSession: Identifiable, Sendable, Equatable {
 }
 
 struct SessionDetails: Sendable, Equatable {
+    struct PullRequest: Sendable, Equatable {
+        var number: Int
+        var url: String?
+        var reviewState: String?
+        var isMergeRequest: Bool
+
+        var label: String { isMergeRequest ? "!\(number)" : "#\(number)" }
+
+        var reviewWords: String? {
+            switch reviewState {
+            case nil: nil
+            case "changes_requested": "changes requested"
+            case let state?: state.replacingOccurrences(of: "_", with: " ")
+            }
+        }
+
+        var help: String {
+            let kind = isMergeRequest ? "Merge request" : "Pull request"
+            guard let reviewWords else { return "\(kind) \(label)" }
+            return "\(kind) \(label): \(reviewWords)"
+        }
+
+        var announcementMark: String {
+            isMergeRequest ? "MR \(label)" : "PR \(label)"
+        }
+    }
+
     var contextPercentage: Double?
     var model: String?
     var effort: String?
     var fastMode: Bool?
+    var worktree: String?
+    var pullRequest: PullRequest?
 
     var badgeText: String? {
         let parts = [model, effort, fastMode == true ? "fast" : nil].compactMap { $0 }
@@ -81,7 +110,9 @@ struct SessionDetails: Sendable, Equatable {
             contextPercentage: update.contextPercentage ?? contextPercentage,
             model: update.model ?? model,
             effort: update.effort ?? effort,
-            fastMode: update.fastMode ?? fastMode
+            fastMode: update.fastMode ?? fastMode,
+            worktree: update.worktree,
+            pullRequest: update.pullRequest
         )
     }
 

@@ -121,6 +121,22 @@ struct AgentSessionStoreTests {
         #expect(store.sessions.first { $0.id == "hidden" }?.displayName == "early")
     }
 
+    @Test func aMissingPullRequestClearsThePreviousOne() throws {
+        let store = AgentSessionStore()
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s", cwd: "/tmp/proj", prompt: "go"))
+        let open = try StatusLineUpdate.decode(Data(#"{"session_id":"s","model":{"display_name":"Opus"},"worktree":{"name":"my-feature"},"pr":{"number":42,"url":"https://example.com/42","review_state":"pending"}}"#.utf8))
+        store.applyStatusLine(open)
+        #expect(store.sessions[0].details.worktree == "my-feature")
+        #expect(store.sessions[0].details.pullRequest?.number == 42)
+        #expect(store.sessions[0].details.model == "Opus")
+
+        let closed = try StatusLineUpdate.decode(Data(#"{"session_id":"s"}"#.utf8))
+        store.applyStatusLine(closed)
+        #expect(store.sessions[0].details.worktree == nil)
+        #expect(store.sessions[0].details.pullRequest == nil)
+        #expect(store.sessions[0].details.model == "Opus")
+    }
+
     @Test func walksThroughSessionLifecycle() {
         let store = AgentSessionStore()
         store.apply(HookEvent(kind: .sessionStart, sessionID: "s1", cwd: "/tmp/proj"))
