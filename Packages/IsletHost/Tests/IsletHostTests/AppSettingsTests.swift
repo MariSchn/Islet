@@ -100,10 +100,12 @@ struct AppSettingsTests {
         }
         defaults.set("garbage", forKey: "islet.settings.animation")
         defaults.set(Data("{\"expandDuration\": 0.9, \"curve\": {\"wobble\": {}}}".utf8), forKey: "islet.settings.switchesToDropTargetOnDrag")
+        defaults.set(Data(#"{"named":{"_0":"Studio Display"}}"#.utf8), forKey: "islet.settings.displayPlacement")
 
         let settings = AppSettings(defaults: defaults)
         #expect(settings.animation == .default)
         #expect(settings.switchesToDropTargetOnDrag)
+        #expect(settings.displayPlacement == .builtIn)
     }
 
     @Test func partialAnimationDataKeepsKnownFieldsAndDefaultsTheRest() throws {

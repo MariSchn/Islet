@@ -16,6 +16,9 @@ public final class LoginItem {
         let status = SMAppService.mainApp.status
         isEnabled = status == .enabled
         requiresApproval = status == .requiresApproval
+        if requiresApproval {
+            error = nil
+        }
     }
 
     public func setEnabled(_ enabled: Bool) {

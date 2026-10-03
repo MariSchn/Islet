@@ -115,7 +115,9 @@ private final class NotchHostingView<Content: View>: NSHostingView<Content> {
     required init(rootView: Content) { fatalError("use init(controller:rootView:)") }
 
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
-        guard controller.acceptsFileDrops else { return [] }
+        guard controller.acceptsFileDrops,
+              sender.draggingPasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true])
+        else { return [] }
         controller.isDragTargeted = true
         return super.draggingEntered(sender)
     }

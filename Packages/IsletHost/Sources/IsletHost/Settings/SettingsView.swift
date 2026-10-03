@@ -225,18 +225,24 @@ struct NotchSettingsView: View {
 
     private var placementOptions: [NotchDisplayPlacement] {
         var options: [NotchDisplayPlacement] = [.builtIn, .primary, .all]
-        options += displays.map { .display(id: $0.id, name: $0.name) }
-        if case .display(let id, _) = settings.displayPlacement, !displays.contains(where: { $0.id == id }) {
+        options += displays.map { display in
+            if case .display(let id, _) = settings.displayPlacement, id == display.persistentID {
+                return settings.displayPlacement
+            }
+            return .display(id: display.persistentID, name: display.name)
+        }
+        if case .display(let id, _) = settings.displayPlacement, !displays.contains(where: { $0.persistentID == id }) {
             options.append(settings.displayPlacement)
         }
         return options
     }
 
     private func label(for placement: NotchDisplayPlacement) -> String {
-        guard case .display(let id, let name) = placement else { return placement.displayName }
-        let namesakes = displays.filter { $0.name == name }
-        guard namesakes.count > 1, let index = namesakes.firstIndex(where: { $0.id == id }) else { return name }
-        return "\(name) (\(index + 1))"
+        guard case .display(let id, let storedName) = placement else { return placement.displayName }
+        guard let display = displays.first(where: { $0.persistentID == id }) else { return storedName }
+        let namesakes = displays.filter { $0.name == display.name }
+        guard namesakes.count > 1, let index = namesakes.firstIndex(of: display) else { return display.name }
+        return "\(display.name) (\(index + 1))"
     }
 
     private var placementSummary: String {
