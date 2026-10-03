@@ -1,4 +1,5 @@
 import Foundation
+import IsletCore
 import Observation
 
 enum SystemRow: String, CaseIterable, Identifiable, Sendable {
@@ -44,7 +45,13 @@ final class SystemMonitor {
     private(set) var memoryHistory = RingBuffer<Double>(capacity: historyLength)
     private(set) var networkInHistory = RingBuffer<Double>(capacity: historyLength)
     private(set) var networkOutHistory = RingBuffer<Double>(capacity: historyLength)
+    private(set) var conditions: [SystemCondition] = []
+    private(set) var announcement: PillAnnouncement?
     var enabledRows: Set<SystemRow>
+    var alwaysShowsCPU: Bool
+    var thresholds: AlertThresholds {
+        didSet { evaluator.thresholds = thresholds }
+    }
     var isScreenVisible = false {
         didSet {
             guard isScreenVisible, !oldValue, sampleTask != nil else { return }
@@ -56,10 +63,21 @@ final class SystemMonitor {
     @ObservationIgnored private let visibleInterval: Duration
     @ObservationIgnored private let hiddenInterval: Duration
     @ObservationIgnored private var sampleTask: Task<Void, Never>?
+    @ObservationIgnored private var evaluator: ConditionEvaluator
 
-    init(sampler: SystemSampler, enabledRows: Set<SystemRow> = Set(SystemRow.allCases), visibleInterval: Duration = .seconds(1), hiddenInterval: Duration = .seconds(5)) {
+    init(
+        sampler: SystemSampler,
+        enabledRows: Set<SystemRow> = Set(SystemRow.allCases),
+        thresholds: AlertThresholds = AlertThresholds(),
+        alwaysShowsCPU: Bool = false,
+        visibleInterval: Duration = .seconds(1),
+        hiddenInterval: Duration = .seconds(5)
+    ) {
         self.sampler = sampler
         self.enabledRows = enabledRows
+        self.thresholds = thresholds
+        self.alwaysShowsCPU = alwaysShowsCPU
+        evaluator = ConditionEvaluator(thresholds: thresholds)
         self.visibleInterval = visibleInterval
         self.hiddenInterval = hiddenInterval
     }
@@ -72,6 +90,10 @@ final class SystemMonitor {
 
     var isRunning: Bool { sampleTask != nil }
 
+    var pillStatus: PillStatus? {
+        ConditionEvaluator.pillStatus(for: conditions, cpuPercent: sample?.cpuPercent, alwaysShowsCPU: alwaysShowsCPU)
+    }
+
     func start() {
         guard sampleTask == nil else { return }
         startSampling()
@@ -81,6 +103,9 @@ final class SystemMonitor {
         sampleTask?.cancel()
         sampleTask = nil
         sample = nil
+        conditions = []
+        announcement = nil
+        evaluator = ConditionEvaluator(thresholds: thresholds)
         cpuHistory.removeAll()
         memoryHistory.removeAll()
         networkInHistory.removeAll()
@@ -100,8 +125,15 @@ final class SystemMonitor {
         }
     }
 
-    func apply(_ sample: SystemSample) {
+    func apply(_ sample: SystemSample, at now: ContinuousClock.Instant = .now) {
         self.sample = sample
+        let evaluation = evaluator.evaluate(sample, at: now)
+        if evaluation.conditions != conditions {
+            conditions = evaluation.conditions
+        }
+        if let started = evaluation.announcement {
+            announcement = started.announcement
+        }
         cpuHistory.append(sample.cpuPercent)
         memoryHistory.append(Double(sample.memoryUsed))
         if let received = sample.networkIn, let sent = sample.networkOut {

@@ -11,7 +11,8 @@ struct LiveSystemReaderTests {
         #expect(hidden.cpuTicks.count == ProcessInfo.processInfo.processorCount)
         #expect(hidden.memoryTotal == ProcessInfo.processInfo.physicalMemory)
         #expect(hidden.memoryUsed > 0 && hidden.memoryUsed <= hidden.memoryTotal)
-        #expect(hidden.network == nil && hidden.disk == nil && hidden.processes == nil)
+        #expect(hidden.network == nil && hidden.processes == nil)
+        #expect((hidden.disk?.total ?? 0) > 0)
 
         let visible = reader.readCounters(includingDetails: true)
         #expect(visible.uptimeNanoseconds > hidden.uptimeNanoseconds)
