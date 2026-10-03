@@ -275,7 +275,77 @@ final class ShelfStoreTests {
         #expect(store.items.count == 1)
         #expect(store.items[0].id == id)
         #expect(store.items[0].ownsFile == false)
+        #expect(store.items[0].kind == .file)
         #expect(store.items[0].url == canonical(fileA))
+    }
+
+    @Test func addingTextCreatesAnOwnedTextFile() throws {
+        let store = ShelfStore(directory: directory)
+        let item = try #require(store.addText("  Hello world\nsecond line"))
+
+        #expect(item.kind == .text)
+        #expect(item.ownsFile)
+        #expect(item.name == "Hello world.txt")
+        #expect(item.label == "Hello world")
+        #expect(try String(contentsOf: item.url, encoding: .utf8) == "  Hello world\nsecond line")
+        #expect(store.items == [item])
+    }
+
+    @Test func addingALinkCreatesAWeblocFile() throws {
+        let store = ShelfStore(directory: directory)
+        let item = try #require(store.addLink(URL(string: "https://github.com/MariSchn/Islet?tab=readme")!))
+
+        #expect(item.kind == .link)
+        #expect(item.ownsFile)
+        #expect(item.name == "github.com.webloc")
+        #expect(item.label == "github.com")
+        let plist = try PropertyListSerialization.propertyList(from: Data(contentsOf: item.url), format: nil)
+        #expect((plist as? [String: String]) == ["URL": "https://github.com/MariSchn/Islet?tab=readme"])
+    }
+
+    @Test func addingPNGDataCreatesAnOwnedImage() throws {
+        let store = ShelfStore(directory: directory)
+        let png = Data([0x89, 0x50, 0x4E, 0x47])
+        let date = Date(timeIntervalSince1970: 0)
+        let item = try #require(store.addImage(pngData: png, date: date))
+
+        #expect(item.kind == .image)
+        #expect(item.ownsFile)
+        #expect(item.name == ShelfItemNaming.imageFileName(date: date))
+        #expect(item.name.hasPrefix("Image "))
+        #expect(item.name.hasSuffix(".png"))
+        #expect(try Data(contentsOf: item.url) == png)
+    }
+
+    @Test func removingCreatedItemsDeletesTheirFolders() throws {
+        let store = ShelfStore(directory: directory)
+        let text = try #require(store.addText("hi"))
+        let link = try #require(store.addLink(URL(string: "https://example.com")!))
+        let image = try #require(store.addImage(pngData: Data([1])))
+        let folders = [text, link, image].map { $0.url.deletingLastPathComponent() }
+        for folder in folders {
+            #expect(FileManager.default.fileExists(atPath: folder.path))
+        }
+
+        store.remove(text.id)
+        store.remove(link.id)
+        store.removeAll()
+
+        for folder in folders {
+            #expect(!FileManager.default.fileExists(atPath: folder.path))
+        }
+    }
+
+    @Test func createdItemsPersistTheirKindAndTitle() throws {
+        let store = ShelfStore(directory: directory)
+        store.addText("Note\nbody")
+        store.addLink(URL(string: "https://example.com/a")!)
+
+        let reloaded = ShelfStore(directory: directory)
+        reloaded.load()
+
+        #expect(reloaded.items.map(\.kind) == [.link, .text])
+        #expect(reloaded.items.map(\.label) == ["example.com", "Note"])
     }
 
     @Test func savesCopyModeWhenItChangesAndLeavesTheDefaultUnwritten() async throws {

@@ -97,6 +97,12 @@ public struct NotchView<Content: View>: View {
             }
             .frame(width: shapeSize.width, height: shapeSize.height)
             .clipShape(shape)
+            .overlay {
+                if controller.highlightsHoveredShape {
+                    shape.stroke(.white.opacity(0.25), lineWidth: 1)
+                        .allowsHitTesting(false)
+                }
+            }
             .contentShape(hitShape)
             .onHover { isInside in
                 if isInside {
@@ -111,6 +117,7 @@ public struct NotchView<Content: View>: View {
             .contentShape(hitShape)
             .offset(x: shapeOffset)
             .onHover { controller.isHovering = $0 }
+            .gesture(TapGesture().onEnded { controller.clicked() }, including: controller.isExpanded ? .subviews : .all)
             .animation(controller.animation.animation(expanding: controller.isExpanded), value: controller.isExpanded)
             .animation(controller.animation.animation(expanding: controller.pill != nil), value: controller.pill)
             .animation(controller.animation.animation(expanding: controller.announcement != nil), value: controller.announcement)

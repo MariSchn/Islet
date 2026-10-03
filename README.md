@@ -82,7 +82,7 @@ Every plugin receives a `PluginContext`, its single connection to the host:
 | 💊 **`pillStatus`** | Show text, an icon, a status ring or artwork in the collapsed notch, with a priority so urgent things always get through. |
 | 📣 **`announce(_:)`** | Flash a short message below the collapsed notch. |
 | ⚙️ **`settings`** + **`makeSettingsView()`** | Persist preferences and get your own tab in the settings window. |
-| 📥 **`acceptsFileDrops`** | Let the notch react when files are dragged onto it and switch to your plugin; your view handles the drop. |
+| 📥 **`acceptedDropTypes`** | Declare which dragged content (files, links, text, images) the notch reacts to and switches to your plugin for; your view handles the drop. |
 | 🔄 **`derive`**, **`observe`**, **`isScreenVisible`** | Keep the size and pill in sync with your model, react to changes, and pause work while your screen is hidden. |
 | 🗂 **`storageDirectory`**, **`logger`** | A private folder for your data and an `os.Logger` scoped to your plugin. |
 
@@ -146,7 +146,7 @@ While collapsed, the notch grows a small pill next to the camera housing. Any pl
 
 ### 🍎 Feels like part of macOS
 
-- **Hover to open**, move away to close, with an adjustable delay. Swipe with two fingers to switch plugins.
+- **Hover, click or a keyboard shortcut to open**, move away to close, with an adjustable delay. Swipe with two fingers or use the arrow keys to switch plugins.
 - **Smooth ease-out animations** by default, or springs with adjustable bounce.
 - **Four sizes** for the expanded notch.
 - **Every display.** The built-in screen, the primary display, all displays or a specific monitor. Displays without a notch get a virtual one.
