@@ -1,6 +1,7 @@
 import Foundation
 import IsletCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor
 public final class StubPlugin: IsletPlugin {
@@ -35,7 +36,7 @@ public final class StubPlugin: IsletPlugin {
         }
     }
     public var screenBuilds = 0
-    public var acceptsFileDrops = false
+    public var acceptedDropTypes: [UTType] = []
 
     public func makeScreen() -> AnyView {
         screenBuilds += 1

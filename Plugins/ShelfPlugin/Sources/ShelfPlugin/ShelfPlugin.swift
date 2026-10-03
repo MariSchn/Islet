@@ -1,5 +1,6 @@
 import IsletCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor
 public final class ShelfPlugin: IsletPlugin {
@@ -65,7 +66,7 @@ public final class ShelfPlugin: IsletPlugin {
         AnyView(ShelfSettings(store: store))
     }
 
-    public var acceptsFileDrops: Bool { true }
+    public var acceptedDropTypes: [UTType] { [.fileURL] }
 }
 
 private struct ShelfSettings: View {
