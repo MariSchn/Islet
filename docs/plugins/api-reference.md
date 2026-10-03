@@ -222,7 +222,7 @@ private struct AnimatedList: View {
 
 Plugins don't need these at runtime, but they are public and useful in tests:
 
-- `PluginRegistry(storageRoot: URL, userDefaults: UserDefaults = .standard)` owns all plugins. `register(_:) async throws -> PluginEntry` (discardable result) registers and activates a plugin type; `register(manifest:make:)` does the same with a factory closure. `setEnabled(_:for:) async`, `isEnabled(_:)`, `entry(for:)`, `entries`, `enabledEntries` and `selectedID` expose the rest of its state. `deactivateAll()` deactivates every plugin, and `setNotchExpanded(_:by:)` is how the host reports an open notch.
+- `PluginRegistry(storageRoot: URL, userDefaults: UserDefaults = .standard)` owns all plugins. `register(_:) async throws -> PluginEntry` (discardable result) registers and activates a plugin type; `register(manifest:make:)` does the same with a factory closure. `setEnabled(_:for:) async`, `isEnabled(_:)`, `entry(for:)`, `entries` (registration order), `orderedEntries` (the user's order from Settings › Plugins, stored under `islet.pluginOrder`, then any remaining entries in registration order), `enabledEntries` (`orderedEntries` without disabled plugins) and `selectedID` expose the rest of its state. `move(_:by:)` moves an entry within `orderedEntries`, clamped to the ends, and stores the order. `deactivateAll()` deactivates every plugin, and `setNotchExpanded(_:by:)` is how the host reports an open notch.
 - `PluginEntry` exposes `manifest`, `context`, `plugin`, `state`, and the cached `screen` and `settingsView`.
 - `PluginState.isActive` is `true` only for `.active`.
 - `PillSelection` is the user's choice of how the collapsed pill is picked (see [Collapsed pill](collapsed-pill.md#which-plugins-pill-is-shown)).
