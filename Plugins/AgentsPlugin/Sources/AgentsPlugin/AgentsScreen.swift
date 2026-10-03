@@ -539,7 +539,7 @@ private struct UsageWindowView: View {
         HStack(spacing: 4) {
             Text(label)
                 .fontWeight(.semibold)
-            Text("\(Int(window.utilization.rounded()))%")
+            Text(window.utilization / 100, format: .percent.precision(.fractionLength(0)))
                 .fontWeight(.medium)
                 .foregroundStyle(color)
             if showsResetTime, let resetsAt = window.resetsAt, resetsAt > .now {

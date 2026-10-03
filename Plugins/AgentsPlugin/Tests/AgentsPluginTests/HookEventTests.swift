@@ -54,6 +54,8 @@ struct HookEventTests {
         #expect(ActivityEntry.detail(for: "Write", input: .object(["content": .string("x\ny\n")])) == "3 lines")
         #expect(ActivityEntry.detail(for: "Read", input: .object(["offset": .number(10), "limit": .number(20)])) == "lines 10–29")
         #expect(ActivityEntry.detail(for: "Read", input: .object(["file_path": .string("/a")])) == nil)
+        #expect(ActivityEntry.detail(for: "Read", input: .object(["offset": .number(1e300), "limit": .number(20)])) == nil)
+        #expect(ActivityEntry.detail(for: "Read", input: .object(["offset": .number(10), "limit": .number(-1e300)])) == "from line 10")
         #expect(ActivityEntry.detail(for: "Grep", input: .object(["path": .string("/Users/me/repo/Sources")])) == "Sources")
         #expect(ActivityEntry.detail(for: "Bash", input: .object(["command": .string("ls")])) == nil)
     }
