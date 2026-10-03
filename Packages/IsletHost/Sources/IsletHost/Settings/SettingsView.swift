@@ -166,9 +166,17 @@ struct GeneralSettingsView: View {
         Form {
             Section {
                 Toggle("Open at login", isOn: Binding(
-                    get: { loginItem.isEnabled },
+                    get: { loginItem.isEnabled || loginItem.requiresApproval },
                     set: { loginItem.setEnabled($0) }
                 ))
+                if loginItem.requiresApproval {
+                    HStack {
+                        Text("macOS needs your approval before Islet can open at login.")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Open Login Items") { loginItem.openSystemSettings() }
+                    }
+                }
                 if let error = loginItem.error {
                     Text(error).foregroundStyle(.red)
                 }
@@ -200,6 +208,9 @@ struct GeneralSettingsView: View {
             }
         }
         .onAppear { loginItem.refresh() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            loginItem.refresh()
+        }
         .confirmationDialog("Reset all settings?", isPresented: $confirmsReset) {
             Button("Reset", role: .destructive) { settings.resetAll() }
         } message: {
