@@ -381,8 +381,8 @@ struct NotchControllerTests {
     @Test func keepsPreviousHoverRegionWhenShapeShrinksAwayFromPointer() async throws {
         let harness = Harness()
         let registry = harness.makeRegistry()
-        var pointer = CGPoint(x: 10_000, y: 10_000)
-        let controller = NotchController(settings: AppSettings()) { pointer }
+        let pointer = PointerLocation(CGPoint(x: 10_000, y: 10_000))
+        let controller = NotchController(settings: AppSettings()) { pointer.value }
         controller.attach(registry)
         let stub = try await harness.registerStub(in: registry)
         let second = try await harness.registerSecond(in: registry)
@@ -413,7 +413,7 @@ struct NotchControllerTests {
         controller.pointerEnteredShape()
         #expect(controller.hoverHoldSize != nil)
 
-        pointer = CGPoint(x: 0, y: -10)
+        pointer.value = CGPoint(x: 0, y: -10)
         controller.pointerEnteredShape()
         #expect(controller.hoverHoldSize == nil)
 
@@ -424,7 +424,7 @@ struct NotchControllerTests {
         await Task.yield()
         #expect(controller.hoverHoldSize == nil)
 
-        pointer = CGPoint(x: 10_000, y: 10_000)
+        pointer.value = CGPoint(x: 10_000, y: 10_000)
         registry.select("test.stub")
         await Task.yield()
         registry.select("test.second")
@@ -482,3 +482,11 @@ struct NotchControllerTests {
     }
 }
 
+@MainActor
+private final class PointerLocation {
+    var value: CGPoint
+
+    init(_ value: CGPoint) {
+        self.value = value
+    }
+}
