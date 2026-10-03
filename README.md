@@ -102,7 +102,7 @@ Pomodoro timer · next meeting from your calendar · CI and pull request status 
 
 ## 🎁 Built-in plugins
 
-Islet comes with three ready-made plugins, plus the minimal Hello example in Debug builds. They are ordinary plugins built on the same API as yours: use them as they are, switch off the ones you don't need, or read their source as examples.
+Islet comes with four ready-made plugins, plus the minimal Hello example in Debug builds. They are ordinary plugins built on the same API as yours: use them as they are, switch off the ones you don't need, or read their source as examples.
 
 ### 🤖 Agents
 
@@ -133,6 +133,13 @@ A control centre for your coding agents. Islet installs lightweight hooks for **
 - Drag files onto the notch and Islet switches to the Shelf automatically.
 - Drag them back out into any app, open them or reveal them in Finder.
 - The Shelf survives restarts and dims files that were moved or deleted.
+
+### ⏱️ Timer
+
+- Start countdown timers from presets (1, 5, 10 and 25 minutes) or any number of minutes, and pause, resume or cancel each one.
+- The collapsed notch shows the timer ending soonest as a shrinking ring.
+- When a timer ends, Islet plays a sound, announces it and shows an orange pill for a minute or until you open the Timer.
+- Timers keep running across restarts. A stopwatch is there too.
 
 <br>
 
@@ -197,6 +204,7 @@ flowchart LR
         agents["Agents"]
         media["Media"]
         shelf["Shelf"]
+        timer["Timer"]
     end
     core["<b>IsletCore</b><br/>plugin API · registry<br/>pill · settings store"]
     host["<b>IsletHost</b><br/>notch windows · animations<br/>settings · displays"]
