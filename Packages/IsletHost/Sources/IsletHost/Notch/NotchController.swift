@@ -2,6 +2,7 @@ import AppKit
 import IsletCore
 import Observation
 import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor
 @Observable
@@ -61,8 +62,10 @@ public final class NotchController {
         }
     }
 
-    public var acceptsFileDrops: Bool {
-        registry?.preferredDropTarget != nil
+    public var draggedTypes: [UTType] = []
+
+    public func acceptsDrag(of types: [UTType]) -> Bool {
+        registry?.dropTarget(for: types) != nil
     }
 
     public var switchesToDropTargetOnDrag: Bool {
@@ -144,7 +147,7 @@ public final class NotchController {
     }
 
     private func switchToDropTargetIfWanted() {
-        guard switchesToDropTargetOnDrag, let target = registry?.preferredDropTarget else { return }
+        guard switchesToDropTargetOnDrag, let target = registry?.dropTarget(for: draggedTypes) else { return }
         registry?.select(target.id)
     }
 

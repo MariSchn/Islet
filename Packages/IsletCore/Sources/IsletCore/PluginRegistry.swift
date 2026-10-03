@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import SwiftUI
+import UniformTypeIdentifiers
 
 public enum PluginState: Sendable {
     case inactive
@@ -147,8 +148,12 @@ public final class PluginRegistry {
         enabledEntries.first { $0.id == selectedID }?.context.contentSize
     }
 
-    public var preferredDropTarget: PluginEntry? {
-        enabledEntries.first { $0.plugin.acceptsFileDrops }
+    public func dropTarget(for draggedTypes: [UTType]) -> PluginEntry? {
+        enabledEntries.first { entry in
+            entry.plugin.acceptedDropTypes.contains { accepted in
+                draggedTypes.contains { $0.conforms(to: accepted) }
+            }
+        }
     }
 
     public func entry(for id: String) -> PluginEntry? {

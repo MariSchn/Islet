@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor
 public protocol IsletPlugin: AnyObject {
@@ -11,7 +12,7 @@ public protocol IsletPlugin: AnyObject {
 
     func makeScreen() -> AnyView
 
-    var acceptsFileDrops: Bool { get }
+    var acceptedDropTypes: [UTType] { get }
 
     func makeSettingsView() -> AnyView?
 }
@@ -19,6 +20,6 @@ public protocol IsletPlugin: AnyObject {
 public extension IsletPlugin {
     func activate() async throws {}
     func deactivate() async {}
-    var acceptsFileDrops: Bool { false }
+    var acceptedDropTypes: [UTType] { [] }
     func makeSettingsView() -> AnyView? { nil }
 }

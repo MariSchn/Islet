@@ -1,5 +1,6 @@
 import CoreGraphics
 import Testing
+import UniformTypeIdentifiers
 import IsletCore
 import IsletHost
 import IsletTestSupport
@@ -582,19 +583,20 @@ struct NotchControllerTests {
         #expect(!controller.navigate(.forward))
     }
 
-    @Test func acceptsFileDropsOnlyWhileAnEnabledPluginTakesThem() async throws {
+    @Test func acceptsDragOnlyWhileAnEnabledPluginTakesItsTypes() async throws {
         let harness = Harness()
         let registry = harness.makeRegistry()
         let controller = makeController()
         controller.attach(registry)
         try await harness.registerStub(in: registry)
-        #expect(!controller.acceptsFileDrops)
+        #expect(!controller.acceptsDrag(of: [.fileURL]))
 
-        try await harness.registerSecond(in: registry) { $0.acceptsFileDrops = true }
-        #expect(controller.acceptsFileDrops)
+        try await harness.registerSecond(in: registry) { $0.acceptedDropTypes = [.fileURL] }
+        #expect(controller.acceptsDrag(of: [.fileURL]))
+        #expect(!controller.acceptsDrag(of: [.plainText]))
 
         await registry.setEnabled(false, for: "test.second")
-        #expect(!controller.acceptsFileDrops)
+        #expect(!controller.acceptsDrag(of: [.fileURL]))
     }
 
     @Test func dragSwitchesToFirstDropAcceptingPluginUnlessDisabled() async throws {
@@ -603,9 +605,15 @@ struct NotchControllerTests {
         let controller = makeController()
         controller.attach(registry)
         let stub = try await harness.registerStub(in: registry)
-        try await harness.registerSecond(in: registry) { $0.acceptsFileDrops = true }
+        try await harness.registerSecond(in: registry) { $0.acceptedDropTypes = [.fileURL] }
         #expect(registry.selectedID == "test.stub")
 
+        controller.draggedTypes = [.plainText]
+        controller.isDragTargeted = true
+        #expect(registry.selectedID == "test.stub")
+
+        controller.isDragTargeted = false
+        controller.draggedTypes = [.fileURL]
         controller.isDragTargeted = true
         #expect(registry.selectedID == "test.second")
 

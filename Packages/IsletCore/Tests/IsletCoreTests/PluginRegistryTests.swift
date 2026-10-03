@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Testing
+import UniformTypeIdentifiers
 import IsletCore
 import IsletTestSupport
 
@@ -394,16 +395,31 @@ struct PluginRegistryTests {
         #expect(stub.screenBuilds == 1)
     }
 
-    @Test func preferredDropTargetIsFirstEnabledPluginAcceptingDrops() async throws {
+    @Test func dropTargetIsFirstEnabledPluginAcceptingADraggedType() async throws {
         let registry = harness.makeRegistry()
         try await harness.registerStub(in: registry)
-        #expect(registry.preferredDropTarget == nil)
+        #expect(registry.dropTarget(for: [.fileURL]) == nil)
 
-        try await harness.registerSecond(in: registry) { $0.acceptsFileDrops = true }
-        #expect(registry.preferredDropTarget?.id == "test.second")
+        try await harness.registerSecond(in: registry) { $0.acceptedDropTypes = [.fileURL] }
+        #expect(registry.dropTarget(for: [.fileURL])?.id == "test.second")
+        #expect(registry.dropTarget(for: []) == nil)
 
         await registry.setEnabled(false, for: "test.second")
-        #expect(registry.preferredDropTarget == nil)
+        #expect(registry.dropTarget(for: [.fileURL]) == nil)
+    }
+
+    @Test func dropTargetMatchesByConformance() async throws {
+        let registry = harness.makeRegistry()
+        try await harness.registerStub(in: registry)
+        try await harness.registerSecond(in: registry) { $0.acceptedDropTypes = [.image] }
+        #expect(registry.dropTarget(for: [.png])?.id == "test.second")
+        #expect(registry.dropTarget(for: [.plainText, .png])?.id == "test.second")
+        #expect(registry.dropTarget(for: [.plainText]) == nil)
+
+        let other = harness.makeRegistry()
+        try await harness.registerStub(in: other)
+        try await harness.registerSecond(in: other) { $0.acceptedDropTypes = [.plainText] }
+        #expect(other.dropTarget(for: [.fileURL]) == nil)
     }
 
     private let thirdManifest = PluginManifest(id: "test.third", displayName: "Third", systemImage: "triangle")
@@ -477,12 +493,12 @@ struct PluginRegistryTests {
     @Test func neighborsAndDropTargetFollowTheOrder() async throws {
         let registry = harness.makeRegistry()
         try await harness.registerStub(in: registry)
-        try await harness.registerSecond(in: registry) { $0.acceptsFileDrops = true }
-        try await registerThird(in: registry) { $0.acceptsFileDrops = true }
-        #expect(registry.preferredDropTarget?.id == "test.second")
+        try await harness.registerSecond(in: registry) { $0.acceptedDropTypes = [.fileURL] }
+        try await registerThird(in: registry) { $0.acceptedDropTypes = [.fileURL] }
+        #expect(registry.dropTarget(for: [.fileURL])?.id == "test.second")
 
         registry.move("test.third", by: -2)
-        #expect(registry.preferredDropTarget?.id == "test.third")
+        #expect(registry.dropTarget(for: [.fileURL])?.id == "test.third")
 
         registry.select("test.third")
         #expect(!registry.selectNeighbor(.backward))

@@ -6,13 +6,27 @@ import os
 @Observable
 final class ShelfStore {
     private(set) var items: [ShelfItem] = []
+    var copyMode: ShelfCopyMode = .never
+    var showsCountPill = false
 
+    private let directory: URL
     private let fileURL: URL
     private let logger: Logger
+    private let homeDirectory: URL
+    private let temporaryDirectory: URL
+    @ObservationIgnored private var copying: Set<URL> = []
 
-    init(directory: URL, logger: Logger = Logger()) {
+    init(
+        directory: URL,
+        logger: Logger = Logger(),
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        temporaryDirectory: URL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+    ) {
+        self.directory = directory
         fileURL = directory.appending(path: "shelf.json")
         self.logger = logger
+        self.homeDirectory = homeDirectory
+        self.temporaryDirectory = temporaryDirectory
     }
 
     func load() {
@@ -37,24 +51,107 @@ final class ShelfStore {
     }
 
     @discardableResult
-    func add(_ urls: [URL]) -> [ShelfItem] {
-        let existing = Set(items.map(\.url))
+    func add(_ urls: [URL]) async -> [ShelfItem] {
+        let existing = Set(items.map(\.url)).union(items.compactMap(\.sourceURL)).union(copying)
         var seen = Set<URL>()
-        let added = urls
+        let sources = urls
             .filter(\.isFileURL)
             .map(ShelfItem.canonical)
             .filter { !existing.contains($0) && seen.insert($0).inserted }
-            .map { ShelfItem(url: $0) }
+        guard !sources.isEmpty else { return [] }
+
+        let pending = sources.map { source in
+            let id = UUID()
+            return PendingAdd(
+                id: id,
+                source: source,
+                folder: shouldCopy(source) ? ownedFolder(for: id) : nil
+            )
+        }
+        let reserved = Set(pending.compactMap { $0.folder == nil ? nil : $0.source })
+        copying.formUnion(reserved)
+        defer { copying.subtract(reserved) }
+
+        let logger = logger
+        let copied: [URL?]
+        if pending.contains(where: { $0.folder != nil }) {
+            copied = await Task.detached {
+                pending.map { item in
+                    guard let folder = item.folder else { return nil }
+                    return Self.copyItem(from: item.source, to: folder, logger: logger)
+                }
+            }.value
+        } else {
+            copied = Array(repeating: nil, count: pending.count)
+        }
+
+        let added = zip(pending, copied).map { item, copy in
+            if let copy {
+                ShelfItem(id: item.id, url: copy, ownsFile: true, sourceURL: item.source)
+            } else {
+                ShelfItem(url: item.source)
+            }
+        }
         guard !added.isEmpty else { return [] }
         items.insert(contentsOf: added, at: 0)
         save()
         return added
     }
 
+    @discardableResult
+    func addText(_ text: String) -> ShelfItem? {
+        guard let data = text.data(using: .utf8) else { return nil }
+        return addOwned(
+            data: data,
+            fileName: ShelfItemNaming.textFileName(for: text),
+            kind: .text,
+            title: ShelfItemNaming.firstLine(of: text)
+        )
+    }
+
+    @discardableResult
+    func addLink(_ url: URL) -> ShelfItem? {
+        guard let data = try? PropertyListSerialization.data(
+            fromPropertyList: ["URL": url.absoluteString],
+            format: .xml,
+            options: 0
+        ) else { return nil }
+        return addOwned(
+            data: data,
+            fileName: ShelfItemNaming.linkFileName(for: url),
+            kind: .link,
+            title: ShelfItemNaming.linkTitle(for: url)
+        )
+    }
+
+    @discardableResult
+    func addImage(pngData: Data, date: Date = .now) -> ShelfItem? {
+        addOwned(data: pngData, fileName: ShelfItemNaming.imageFileName(date: date), kind: .image, title: nil)
+    }
+
+    private func addOwned(data: Data, fileName: String, kind: ShelfItemKind, title: String?) -> ShelfItem? {
+        let id = UUID()
+        let folder = ownedFolder(for: id)
+        let file = folder.appending(path: fileName)
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try data.write(to: file)
+        } catch {
+            logger.error("Failed to write \(file.path, privacy: .public): \(error, privacy: .public)")
+            try? FileManager.default.removeItem(at: folder)
+            return nil
+        }
+        let item = ShelfItem(id: id, url: file, ownsFile: true, kind: kind, title: title)
+        items.insert(item, at: 0)
+        save()
+        return item
+    }
+
     func remove(_ id: ShelfItem.ID) {
-        guard items.contains(where: { $0.id == id }) else { return }
+        guard let item = items.first(where: { $0.id == id }) else { return }
         items.removeAll { $0.id == id }
         save()
+        deleteOwnedCopy(of: item)
     }
 
     func refreshReachability() {
@@ -75,8 +172,50 @@ final class ShelfStore {
     }
 
     func removeAll() {
+        let owned = items.filter(\.ownsFile)
         items.removeAll()
         save()
+        for item in owned {
+            deleteOwnedCopy(of: item)
+        }
+    }
+
+    private func shouldCopy(_ url: URL) -> Bool {
+        switch copyMode {
+        case .never:
+            false
+        case .always:
+            true
+        case .temporary:
+            ShelfFileLocation.isTemporary(url, homeDirectory: homeDirectory, temporaryDirectory: temporaryDirectory)
+        }
+    }
+
+    private func ownedFolder(for id: UUID) -> URL {
+        directory.appending(path: "Items").appending(path: id.uuidString)
+    }
+
+    private func deleteOwnedCopy(of item: ShelfItem) {
+        guard item.ownsFile else { return }
+        let folder = ownedFolder(for: item.id)
+        do {
+            try FileManager.default.removeItem(at: folder)
+        } catch {
+            logger.error("Failed to delete \(folder.path, privacy: .public): \(error, privacy: .public)")
+        }
+    }
+
+    private nonisolated static func copyItem(from source: URL, to folder: URL, logger: Logger) -> URL? {
+        let destination = folder.appending(path: source.lastPathComponent)
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try FileManager.default.copyItem(at: source, to: destination)
+            return destination
+        } catch {
+            logger.error("Failed to copy \(source.path, privacy: .public): \(error, privacy: .public)")
+            try? FileManager.default.removeItem(at: folder)
+            return nil
+        }
     }
 
     private func save() {
@@ -87,4 +226,10 @@ final class ShelfStore {
             logger.error("Failed to save: \(error, privacy: .public)")
         }
     }
+}
+
+private struct PendingAdd: Sendable {
+    let id: UUID
+    let source: URL
+    let folder: URL?
 }

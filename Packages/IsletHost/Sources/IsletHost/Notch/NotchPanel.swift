@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor
 public final class NotchPanel: NSPanel {
@@ -163,7 +164,7 @@ private final class NotchHostingView<Content: View>: NSHostingView<Content> {
     init(controller: NotchController, rootView: Content) {
         self.controller = controller
         super.init(rootView: rootView)
-        registerForDraggedTypes([.fileURL])
+        registerForDraggedTypes([.fileURL, .URL, .string, .tiff, .png])
     }
 
     @available(*, unavailable)
@@ -173,9 +174,9 @@ private final class NotchHostingView<Content: View>: NSHostingView<Content> {
     required init(rootView: Content) { fatalError("use init(controller:rootView:)") }
 
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
-        guard controller.acceptsFileDrops,
-              sender.draggingPasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true])
-        else { return [] }
+        let types = (sender.draggingPasteboard.types ?? []).compactMap { UTType($0.rawValue) }
+        guard controller.acceptsDrag(of: types) else { return [] }
+        controller.draggedTypes = types
         controller.isDragTargeted = true
         return super.draggingEntered(sender)
     }
