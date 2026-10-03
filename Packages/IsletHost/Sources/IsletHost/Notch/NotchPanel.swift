@@ -57,7 +57,8 @@ public final class NotchPanel: NSPanel {
             swipeRecognizer.handle(phase: .ended, deltaX: 0, deltaY: 0)
             return
         }
-        if let direction = swipeRecognizer.handle(phase: phase, deltaX: event.scrollingDeltaX, deltaY: event.scrollingDeltaY) {
+        let fingerDirection: CGFloat = event.isDirectionInvertedFromDevice ? 1 : -1
+        if let direction = swipeRecognizer.handle(phase: phase, deltaX: event.scrollingDeltaX * fingerDirection, deltaY: event.scrollingDeltaY * fingerDirection) {
             controller.navigate(direction)
         }
     }
