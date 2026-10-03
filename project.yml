@@ -17,6 +17,8 @@ packages:
     path: Plugins/MediaPlugin
   AgentsPlugin:
     path: Plugins/AgentsPlugin
+  GitHubPlugin:
+    path: Plugins/GitHubPlugin
 targets:
   Islet:
     type: application
@@ -30,6 +32,7 @@ targets:
       - package: ShelfPlugin
       - package: MediaPlugin
       - package: AgentsPlugin
+      - package: GitHubPlugin
     info:
       path: App/Info.plist
       properties:
@@ -62,3 +65,4 @@ schemes:
         - package: ShelfPlugin/ShelfPluginTests
         - package: MediaPlugin/MediaPluginTests
         - package: AgentsPlugin/AgentsPluginTests
+        - package: GitHubPlugin/GitHubPluginTests
