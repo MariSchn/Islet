@@ -15,10 +15,10 @@ struct SystemMonitorTests {
             try await Task.sleep(for: .milliseconds(5))
         }
         #expect(!reader.detailRequests.contains(true))
-        #expect(monitor.sample?.disk == nil)
+        #expect(monitor.sample?.networkIn == nil)
 
         monitor.isScreenVisible = true
-        while monitor.sample?.disk == nil {
+        while monitor.sample?.networkIn == nil {
             try #require(ContinuousClock.now < deadline)
             try await Task.sleep(for: .milliseconds(5))
         }

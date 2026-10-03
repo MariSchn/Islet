@@ -32,7 +32,7 @@ final class LiveSystemReader: SystemReading {
             battery: battery(),
             thermalState: ProcessInfo.processInfo.thermalState,
             network: includingDetails ? networkBytes() : nil,
-            disk: includingDetails ? disk() : nil,
+            disk: disk(),
             processes: includingDetails ? processTimes() : nil
         )
     }

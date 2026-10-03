@@ -138,6 +138,7 @@ A control centre for your coding agents. Islet installs lightweight hooks for **
 
 - CPU, memory (with memory pressure) and network at a glance, each with a graph of its recent values, plus free disk space and the battery.
 - The three processes using the most CPU right now.
+- The closed notch stays quiet until something needs attention: sustained high CPU, memory pressure, a low battery, a hot Mac or an almost full startup disk, each announced once. Optionally shows a CPU ring all the time.
 - Choose which rows to show under **Settings › System**. Samples every second while the screen is open and every five seconds otherwise.
 
 <br>

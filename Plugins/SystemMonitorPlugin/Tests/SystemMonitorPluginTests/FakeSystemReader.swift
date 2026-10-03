@@ -25,7 +25,7 @@ final class FakeSystemReader: SystemReading {
         return SystemCounters.fake(
             uptime: uptime,
             network: includingDetails ? [:] : nil,
-            disk: includingDetails ? DiskSpace(free: 1, total: 2) : nil,
+            disk: DiskSpace(free: 1, total: 2),
             processes: includingDetails ? [] : nil
         )
     }
