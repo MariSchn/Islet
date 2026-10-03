@@ -22,11 +22,18 @@ public final class ShelfPlugin: IsletPlugin {
         )
     }
 
+    static let copyModeKey = "copyMode"
+
     let store: ShelfStore
 
     public init(context: PluginContext) {
-        store = ShelfStore(directory: context.storageDirectory, logger: context.logger)
+        let store = ShelfStore(directory: context.storageDirectory, logger: context.logger)
+        store.copyMode = ShelfCopyMode(stored: context.settings.value(forKey: Self.copyModeKey))
+        self.store = store
         context.derive(\.contentSize) { [store] in Self.contentSize(forItemCount: store.items.count) }
+        context.observe({ [store] in store.copyMode }) { [settings = context.settings] mode in
+            settings.set(mode.rawValue, forKey: Self.copyModeKey)
+        }
     }
 
     public func activate() async throws {
@@ -37,5 +44,25 @@ public final class ShelfPlugin: IsletPlugin {
         AnyView(ShelfScreen(store: store))
     }
 
+    public func makeSettingsView() -> AnyView? {
+        AnyView(ShelfSettings(store: store))
+    }
+
     public var acceptsFileDrops: Bool { true }
+}
+
+private struct ShelfSettings: View {
+    @Bindable var store: ShelfStore
+
+    var body: some View {
+        Form {
+            Section {
+                Picker("Keep a copy of dropped files", selection: $store.copyMode) {
+                    ForEach(ShelfCopyMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+            }
+        }
+    }
 }

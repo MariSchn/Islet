@@ -32,7 +32,7 @@ Files dragged over the notch expand it while at least one enabled plugin has `ac
 .onDrop(of: [.fileURL], isTargeted: $isTargeted) { providers in
     Task { @MainActor in
         let urls = await loadFileURLs(from: providers)
-        store.add(urls)
+        await store.add(urls)
     }
     return true
 }
@@ -77,7 +77,7 @@ The app and all packages build in the Swift 6 language mode with strict concurre
   }
   ```
 
-- Move blocking work (file IO, parsing, image decoding) off the main actor with `Task.detached` or an `actor`, and hop back to the main actor to update state. `MediaController` decodes artwork with `await Task.detached { ... }.value`. `ShelfStore` checks file reachability in a detached task.
+- Move blocking work (file IO, parsing, image decoding) off the main actor with `Task.detached` or an `actor`, and hop back to the main actor to update state. `MediaController` decodes artwork with `await Task.detached { ... }.value`. `ShelfStore` checks file reachability in a detached task, and copies a dropped file there before inserting the item.
 - Values that cross actors must be `Sendable`. `PillStatus` and `PillAnnouncement` are, which is why their colors are `Color.Resolved` instead of `Color`.
 - For dependencies you want to replace in tests, use a `Sendable` protocol, as `MediaSource` does in `MediaPlugin`.
 

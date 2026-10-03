@@ -37,7 +37,7 @@ struct ShelfScreen: View {
         .onDrop(of: [.fileURL], isTargeted: $isTargeted) { providers in
             Task { @MainActor in
                 let urls = await loadFileURLs(from: providers)
-                store.add(urls)
+                await store.add(urls)
             }
             return true
         }
