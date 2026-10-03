@@ -25,6 +25,8 @@ public final class GitHubPlugin: IsletPlugin {
         return CGSize(width: contentWidth, height: height)
     }
 
+    static let showsPillKey = "showsPill"
+
     let controller: GitHubController
 
     public convenience init(context: PluginContext) {
@@ -32,9 +34,25 @@ public final class GitHubPlugin: IsletPlugin {
     }
 
     init(context: PluginContext, client: any GitHubClient, networkUpdates: @escaping NetworkUpdates = NetworkStatus.updates) {
-        let controller = GitHubController(client: client, networkUpdates: networkUpdates, logger: context.logger)
+        let settings = context.settings
+        let controller = GitHubController(
+            client: client,
+            showsPill: settings.value(forKey: Self.showsPillKey) ?? true,
+            networkUpdates: networkUpdates,
+            logger: context.logger
+        )
         self.controller = controller
         context.derive(\.contentSize) { Self.contentSize(for: controller.phase.snapshot) }
+        context.derive(\.pillStatus) { controller.pillStatus }
+        context.observe({ controller.showsPill }) { settings.set($0, forKey: Self.showsPillKey) }
+        var previous: GitHubSnapshot?
+        context.observe({ controller.phase }) { [unowned context] phase in
+            let current = phase.snapshot
+            defer { previous = current }
+            if let current, let announcement = GitHubChanges.announcement(from: previous, to: current) {
+                context.announce(announcement)
+            }
+        }
         context.observe({ [unowned context] in context.isScreenVisible }) { controller.isScreenVisible = $0 }
     }
 
@@ -48,5 +66,23 @@ public final class GitHubPlugin: IsletPlugin {
 
     public func makeScreen() -> AnyView {
         AnyView(GitHubScreen(controller: controller))
+    }
+
+    public func makeSettingsView() -> AnyView? {
+        AnyView(GitHubSettings(controller: controller))
+    }
+}
+
+private struct GitHubSettings: View {
+    @Bindable var controller: GitHubController
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Show the closed-notch status", isOn: $controller.showsPill)
+            } footer: {
+                Text("A ring with the CI state of your pull requests. It turns orange when checks fail or someone requests your review.")
+            }
+        }
     }
 }

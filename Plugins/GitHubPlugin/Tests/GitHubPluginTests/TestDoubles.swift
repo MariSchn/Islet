@@ -41,7 +41,7 @@ final class StubRunner: CommandRunning {
     }
 }
 
-func pullRequest(_ number: Int, repository: String = "acme/app", updatedAt: Date = Date(timeIntervalSince1970: 1_790_000_000), isDraft: Bool = false, reviewDecision: ReviewDecision? = nil, author: String? = nil) -> PullRequest {
+func pullRequest(_ number: Int, repository: String = "acme/app", updatedAt: Date = Date(timeIntervalSince1970: 1_790_000_000), isDraft: Bool = false, reviewDecision: ReviewDecision? = nil, author: String? = nil, checks: CheckStatus? = nil) -> PullRequest {
     PullRequest(
         number: number,
         title: "Pull request \(number)",
@@ -50,7 +50,8 @@ func pullRequest(_ number: Int, repository: String = "acme/app", updatedAt: Date
         isDraft: isDraft,
         reviewDecision: reviewDecision,
         author: author,
-        updatedAt: updatedAt
+        updatedAt: updatedAt,
+        checks: checks
     )
 }
 

@@ -25,7 +25,7 @@ struct GhClient: GitHubClient {
     static let query = """
         query {
           mine: search(query: "is:open is:pr author:@me archived:false", type: ISSUE, first: 20) {
-            nodes { ... on PullRequest { number title url isDraft reviewDecision updatedAt repository { nameWithOwner } } }
+            nodes { ... on PullRequest { number title url isDraft reviewDecision updatedAt repository { nameWithOwner } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } } }
           }
           review: search(query: "is:open is:pr review-requested:@me archived:false", type: ISSUE, first: 20) {
             nodes { ... on PullRequest { number title url isDraft updatedAt author { login } repository { nameWithOwner } } }
