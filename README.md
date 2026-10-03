@@ -96,7 +96,7 @@ Every plugin receives a `PluginContext`, its single connection to the host:
 
 ### 💡 Ideas for your notch
 
-Pomodoro timer · next meeting from your calendar · CI and pull request status · system stats · clipboard history · smart home toggles · build progress for your dev server · a quick translator · stock or crypto ticker · world clocks for a remote team
+Pomodoro timer · next meeting from your calendar · CI and pull request status · clipboard history · smart home toggles · build progress for your dev server · a quick translator · stock or crypto ticker · world clocks for a remote team
 
 <br>
 
@@ -133,6 +133,13 @@ A control centre for your coding agents. Islet installs lightweight hooks for **
 - Drag files onto the notch and Islet switches to the Shelf automatically.
 - Drag them back out into any app, open them or reveal them in Finder.
 - The Shelf survives restarts and dims files that were moved or deleted.
+
+### 📊 System
+
+- CPU, memory (with memory pressure) and network at a glance, each with a graph of its recent values, plus free disk space and the battery.
+- The three processes using the most CPU right now.
+- The closed notch stays quiet until something needs attention: sustained high CPU, memory pressure, a low battery, a hot Mac or an almost full startup disk, each announced once. Optionally shows a CPU ring all the time.
+- Choose which rows to show under **Settings › System**. Samples every second while the screen is open and every five seconds otherwise.
 
 ### ⏱️ Timer
 
@@ -214,6 +221,8 @@ flowchart LR
         agents["Agents"]
         media["Media"]
         shelf["Shelf"]
+        system["System"]
+
         timer["Timer"]
     end
     core["<b>IsletCore</b><br/>plugin API · registry<br/>pill · settings store"]

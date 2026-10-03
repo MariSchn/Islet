@@ -17,6 +17,8 @@ packages:
     path: Plugins/MediaPlugin
   AgentsPlugin:
     path: Plugins/AgentsPlugin
+  SystemMonitorPlugin:
+    path: Plugins/SystemMonitorPlugin
   TimerPlugin:
     path: Plugins/TimerPlugin
   GitHubPlugin:
@@ -36,6 +38,7 @@ targets:
       - package: ShelfPlugin
       - package: MediaPlugin
       - package: AgentsPlugin
+      - package: SystemMonitorPlugin
       - package: TimerPlugin
       - package: GitHubPlugin
       - package: CalendarPlugin
@@ -72,6 +75,7 @@ schemes:
         - package: ShelfPlugin/ShelfPluginTests
         - package: MediaPlugin/MediaPluginTests
         - package: AgentsPlugin/AgentsPluginTests
+        - package: SystemMonitorPlugin/SystemMonitorPluginTests
         - package: TimerPlugin/TimerPluginTests
         - package: GitHubPlugin/GitHubPluginTests
         - package: CalendarPlugin/CalendarPluginTests
