@@ -6,7 +6,7 @@
 
 **Your MacBook's notch, finally pulling its weight.**
 
-Islet turns the notch into a home for small, glanceable tools. Every screen is a plugin, and a simple one takes a few lines of SwiftUI. Islet ships with three ready-made plugins and a minimal example, and the next one is yours to build.
+Islet turns the notch into a home for small, glanceable tools. Every screen is a plugin, and a simple one takes a few lines of SwiftUI. Islet ships with four ready-made plugins and a minimal example, and the next one is yours to build.
 
 <a href="#-getting-started"><img src="https://img.shields.io/badge/macOS_15+-111?style=flat&logo=apple&logoColor=white" width="133" alt="macOS 15+"></a>
 <a href="https://www.swift.org"><img src="https://img.shields.io/badge/Swift_6-111?style=flat&logo=swift&logoColor=F05138" width="94" alt="Swift 6"></a>
@@ -29,7 +29,7 @@ The notch sits in the most valuable spot on your screen and does nothing. Islet 
 
 - 🧩 **Everything is a plugin.** The built-in screens use exactly the same public API as yours. Nothing is special-cased.
 - ⚡️ **One class and a SwiftUI view.** No window or AppKit code required, no private APIs. Islet handles the notch shape, hover, animations, displays and settings for you.
-- 🎁 **Useful out of the box.** A control centre for coding agents, a music player and a file shelf ship as ready-made plugins, and double as reference implementations.
+- 🎁 **Useful out of the box.** A control centre for coding agents, a music player, a file shelf and your GitHub pull requests ship as ready-made plugins, and double as reference implementations.
 - 🪄 **Feels like part of macOS.** Smooth animations, a collapsed status pill, every display, a settings tab per plugin. Your plugin gets all of it for free.
 
 <br>
@@ -141,6 +141,22 @@ A control centre for your coding agents. Islet installs lightweight hooks for **
 - The closed notch stays quiet until something needs attention: sustained high CPU, memory pressure, a low battery, a hot Mac or an almost full startup disk, each announced once. Optionally shows a CPU ring all the time.
 - Choose which rows to show under **Settings › System**. Samples every second while the screen is open and every five seconds otherwise.
 
+### ⏱️ Timer
+
+- Start countdown timers from presets (1, 5, 10 and 25 minutes) or any number of minutes, and pause, resume or cancel each one.
+- The collapsed notch shows the timer ending soonest as a shrinking ring.
+- When a timer ends, Islet plays a sound, announces it and shows an orange pill for a minute or until you open the Timer.
+- **Pomodoro:** work and break phases with a red or green ring in the collapsed notch, a dot for each finished work phase, and a long break after every fourth. Durations and starting the next phase automatically are set under **Settings › Timer**.
+- Timers keep running across restarts. A stopwatch is there too.
+
+### 🐙 GitHub
+
+- Your open pull requests and the ones waiting for your review, newest first, each with its review state and CI status.
+- The collapsed notch shows a ring with the CI state of your pull requests, and turns orange when checks fail or someone requests your review.
+- A short announcement when checks fail or pass, a pull request is approved or gets change requests, or someone asks for your review.
+- Click a pull request to open it in the browser.
+- Talks to GitHub only through the [GitHub CLI](https://cli.github.com) (`gh`), which keeps its own login. Refreshes every two minutes, every minute while you look at it, and pauses while you are offline.
+
 <br>
 
 ## 🪄 The notch
@@ -165,7 +181,7 @@ While collapsed, the notch grows a small pill next to the camera housing. Any pl
 
 | | |
 |---|---|
-| 🏠 **Runs on your Mac** | No accounts, no analytics, no Islet servers. The only outbound request is the album artwork the Media plugin loads from Spotify's servers. |
+| 🏠 **Runs on your Mac** | No accounts, no analytics, no Islet servers. The only outbound requests are the album artwork the Media plugin loads from Spotify's servers and the GitHub plugin's queries, which go through your own `gh` command-line tool. |
 | 🔑 **No credentials** | Islet never touches your Keychain or API keys. Claude usage limits come from the data Claude Code already hands to its status line. |
 | 📜 **Readable hooks** | The agent integration is a pair of small shell scripts in `~/.claude` / `~/.codex`, registered in `settings.json` / `hooks.json`, that talk to Islet over `127.0.0.1`. Read them, and remove them from the settings at any time. |
 | 🎛️ **Opt-in** | Music control asks macOS for permission first; the agent hooks, macOS notifications and the status line integration are off until you turn them on. |
@@ -191,6 +207,7 @@ Or open `Islet.xcodeproj` in Xcode and press <kbd>⌘</kbd> <kbd>R</kbd>. To kee
 
 1. **Agents:** open **Settings › Agents** and press **Install** next to **Claude Code hooks** (or **Codex hooks**), then restart any sessions that were already running. Codex additionally needs its hooks feature enabled in `~/.codex/config.toml` and the hooks trusted once via `/hooks`. For live session names and usage limits, also install the **status line** integration in the same tab (your existing status line keeps working) and turn on **Show Claude usage limits**. Agents on other machines need an SSH port forward and a one-time install command, both shown under **Remote machines**.
 2. **Media:** choose **Spotify** or **Music** under **Settings › Media**, press play, and allow Islet to control the player when macOS asks.
+3. **GitHub:** install the GitHub CLI (`brew install gh`) and log in once with `gh auth login`.
 
 <br>
 
@@ -205,6 +222,8 @@ flowchart LR
         media["Media"]
         shelf["Shelf"]
         system["System"]
+
+        timer["Timer"]
     end
     core["<b>IsletCore</b><br/>plugin API · registry<br/>pill · settings store"]
     host["<b>IsletHost</b><br/>notch windows · animations<br/>settings · displays"]
