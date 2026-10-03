@@ -223,6 +223,23 @@ struct HookInstallerTests {
         #expect(after.isEmpty)
     }
 
+    @Test func writesThroughASymlinkedSettingsFile() throws {
+        let installer = try makeInstaller()
+        let dotfiles = installer.directory.appending(path: "dotfiles", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: dotfiles, withIntermediateDirectories: true)
+        let target = dotfiles.appending(path: "settings.json")
+        try #"{"model":"opus"}"#.write(to: target, atomically: true, encoding: .utf8)
+        try FileManager.default.createSymbolicLink(at: installer.settingsURL, withDestinationURL: target)
+
+        try installer.install()
+
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: installer.settingsURL.path) == target.path)
+        let settings = try JSONSerialization.jsonObject(with: Data(contentsOf: target)) as? [String: Any]
+        #expect(settings?["model"] as? String == "opus")
+        #expect(settings?["hooks"] != nil)
+        #expect(installer.isInstalled)
+    }
+
     @Test func refusesToOverwriteSettingsThatAreNotAnObject() throws {
         let installer = try makeInstaller()
         try "[1, 2]".write(to: installer.settingsURL, atomically: true, encoding: .utf8)

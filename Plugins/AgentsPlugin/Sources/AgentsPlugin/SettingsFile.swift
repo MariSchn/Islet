@@ -19,6 +19,6 @@ struct SettingsFile: Sendable {
 
     func write(_ settings: [String: Any]) throws {
         let data = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
-        try data.write(to: url, options: .atomic)
+        try data.write(to: url.resolvingSymlinksInPath(), options: .atomic)
     }
 }
