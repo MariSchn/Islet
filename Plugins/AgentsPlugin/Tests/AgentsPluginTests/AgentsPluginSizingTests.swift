@@ -79,4 +79,19 @@ struct AgentsPluginSizingTests {
         #expect(withCost == without + AgentsPlugin.activityHeaderHeight + AgentsPlugin.activityEntryHeight)
         #expect(session.details.sessionSummary == "$1.23 · +120 −45 · 42 min")
     }
+
+    private func questionRequest(options: Int, multiSelect: Bool = false) -> PendingRequest {
+        let labels = (0..<options).map { JSONValue.object(["label": .string("O\($0)")]) }
+        return PendingRequest(toolName: "AskUserQuestion", toolInput: .object([
+            "questions": .array([.object(["question": .string("Q?"), "multiSelect": .bool(multiSelect), "options": .array(labels)])]),
+        ]))!
+    }
+
+    @Test func questionHeightIncludesTheOtherRow() {
+        let fixed = 2 * AgentsPlugin.requestPadding + AgentsPlugin.questionDetailHeight + AgentsPlugin.requestSpacing
+        let row = AgentsPlugin.requestButtonHeight + AgentsPlugin.requestSpacing
+        #expect(AgentsPlugin.requestHeight(for: questionRequest(options: 1)) == fixed + 2 * row - AgentsPlugin.requestSpacing)
+        #expect(AgentsPlugin.requestHeight(for: questionRequest(options: 3)) == fixed + 4 * row - AgentsPlugin.requestSpacing)
+        #expect(AgentsPlugin.requestHeight(for: questionRequest(options: 3, multiSelect: true)) == fixed + 5 * row - AgentsPlugin.requestSpacing)
+    }
 }

@@ -340,68 +340,112 @@ private struct RequestView: View {
 }
 
 private struct QuestionView: View {
-    let questions: [PendingRequest.Question]
     let submit: ([String: String]) -> Void
-    @State private var index = 0
-    @State private var answers: [String: String] = [:]
-    @State private var selection: [Int] = []
+    @State private var state: QuestionAnswers
+    @State private var isTyping = false
+    @State private var text = ""
+    @FocusState private var fieldFocused: Bool
 
-    private var question: PendingRequest.Question { questions[index] }
+    init(questions: [PendingRequest.Question], submit: @escaping ([String: String]) -> Void) {
+        self.submit = submit
+        _state = State(initialValue: QuestionAnswers(questions: questions))
+    }
+
+    private var question: PendingRequest.Question { state.question }
+    private var canSubmitText: Bool { !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private var confirmTitle: String { state.isLast ? "Submit" : "Next" }
 
     var body: some View {
         VStack(alignment: .leading, spacing: AgentsPlugin.requestSpacing) {
-            VStack(alignment: .leading, spacing: 2) {
-                if let header = question.header {
-                    Text(questions.count > 1 ? "\(header) · \(index + 1) of \(questions.count)" : header)
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                        .textCase(.uppercase)
+            HStack(alignment: .top, spacing: 6) {
+                if state.canGoBack {
+                    Button {
+                        state.back()
+                        closeTyping()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 16, height: 16)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Previous question")
                 }
-                Text(question.text)
-                    .font(.system(size: 12))
-                    .lineLimit(2)
+                VStack(alignment: .leading, spacing: 2) {
+                    if let header = question.header {
+                        Text(state.questions.count > 1 ? "\(header) · \(state.index + 1) of \(state.questions.count)" : header)
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                            .textCase(.uppercase)
+                    }
+                    Text(question.text)
+                        .font(.system(size: 12))
+                        .lineLimit(2)
+                }
             }
             .frame(maxWidth: .infinity, minHeight: AgentsPlugin.questionDetailHeight, maxHeight: AgentsPlugin.questionDetailHeight, alignment: .topLeading)
-            ForEach(Array(question.options.enumerated()), id: \.offset) { offset, option in
-                RequestButton(
-                    option.label,
-                    subtitle: option.description,
-                    systemImage: question.multiSelect ? (selection.contains(offset) ? "checkmark.square.fill" : "square") : "arrow.turn.down.right",
-                    tint: .accentColor,
-                    fullWidth: true
-                ) { choose(offset) }
-            }
-            if question.multiSelect {
-                RequestButton(index + 1 < questions.count ? "Next" : "Submit", systemImage: "checkmark", tint: .green) {
-                    record(selection.sorted().map { question.options[$0].label }.joined(separator: ", "))
+            if isTyping {
+                TextField("Your answer", text: $text)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 11))
+                    .padding(.horizontal, 10)
+                    .frame(height: AgentsPlugin.requestButtonHeight)
+                    .background(Capsule().fill(Color.primary.opacity(0.1)))
+                    .focused($fieldFocused)
+                    .onAppear { fieldFocused = true }
+                    .onSubmit(submitText)
+                HStack(spacing: AgentsPlugin.requestSpacing) {
+                    RequestButton(confirmTitle, systemImage: "checkmark", tint: .green, action: submitText)
+                        .disabled(!canSubmitText)
+                        .opacity(canSubmitText ? 1 : 0.4)
+                    RequestButton("Cancel", systemImage: "xmark", tint: .red, action: closeTyping)
                 }
-                .disabled(selection.isEmpty)
-                .opacity(selection.isEmpty ? 0.4 : 1)
+            } else {
+                ForEach(Array(question.options.enumerated()), id: \.offset) { offset, option in
+                    RequestButton(
+                        option.label,
+                        subtitle: option.description,
+                        systemImage: question.multiSelect ? (state.selection.contains(offset) ? "checkmark.square.fill" : "square") : "arrow.turn.down.right",
+                        tint: .accentColor,
+                        fullWidth: true
+                    ) { choose(offset) }
+                }
+                RequestButton("Other…", systemImage: "pencil", tint: .accentColor, fullWidth: true) {
+                    isTyping = true
+                }
+                if question.multiSelect {
+                    RequestButton(confirmTitle, systemImage: "checkmark", tint: .green) {
+                        state.submitSelection()
+                        finishStep()
+                    }
+                    .disabled(state.selection.isEmpty)
+                    .opacity(state.selection.isEmpty ? 0.4 : 1)
+                }
             }
         }
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
     private func choose(_ offset: Int) {
-        if question.multiSelect {
-            if let position = selection.firstIndex(of: offset) {
-                selection.remove(at: position)
-            } else {
-                selection.append(offset)
-            }
-        } else {
-            record(question.options[offset].label)
-        }
+        state.choose(offset)
+        finishStep()
     }
 
-    private func record(_ answer: String) {
-        answers[question.text] = answer
-        selection = []
-        if index + 1 < questions.count {
-            index += 1
-        } else {
-            submit(answers)
-        }
+    private func submitText() {
+        guard canSubmitText else { return }
+        state.submitOther(text)
+        closeTyping()
+        finishStep()
+    }
+
+    private func closeTyping() {
+        isTyping = false
+        fieldFocused = false
+        text = ""
+    }
+
+    private func finishStep() {
+        if state.isComplete { submit(state.answers) }
     }
 }
 

@@ -54,7 +54,7 @@ public final class AgentsPlugin: IsletPlugin {
         case .permission:
             return 2 * requestPadding + requestDetailHeight + requestSpacing + requestButtonHeight
         case .question(let questions):
-            let options = questions.map { CGFloat($0.options.count) * requestButtonHeight + CGFloat($0.options.count - 1) * requestSpacing + ($0.multiSelect ? requestSpacing + requestButtonHeight : 0) }
+            let options = questions.map { CGFloat($0.options.count + 1) * requestButtonHeight + CGFloat($0.options.count) * requestSpacing + ($0.multiSelect ? requestSpacing + requestButtonHeight : 0) }
             return 2 * requestPadding + questionDetailHeight + requestSpacing + (options.max() ?? 0)
         }
     }
