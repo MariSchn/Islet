@@ -41,6 +41,7 @@ struct HookEvent: Sendable, Equatable, Decodable {
     var terminal: TerminalApp?
     var tty: String?
     var pid: Int32?
+    var tmux: TmuxLocation?
     var title: String?
 
     private enum CodingKeys: String, CodingKey {
@@ -63,7 +64,7 @@ struct HookEvent: Sendable, Equatable, Decodable {
         case title = "session_title"
     }
 
-    init(kind: Kind, sessionID: String, cwd: String? = nil, transcriptPath: String? = nil, toolName: String? = nil, toolInput: JSONValue? = nil, prompt: String? = nil, message: String? = nil, notificationType: String? = nil, source: String? = nil, permissionMode: String? = nil, agentType: String? = nil, error: String? = nil, lastAssistantMessage: String? = nil, reason: String? = nil, permissionSuggestions: [JSONValue]? = nil, agent: AgentSession.Agent = .claudeCode, host: String? = nil, terminal: TerminalApp? = nil, tty: String? = nil, pid: Int32? = nil, title: String? = nil) {
+    init(kind: Kind, sessionID: String, cwd: String? = nil, transcriptPath: String? = nil, toolName: String? = nil, toolInput: JSONValue? = nil, prompt: String? = nil, message: String? = nil, notificationType: String? = nil, source: String? = nil, permissionMode: String? = nil, agentType: String? = nil, error: String? = nil, lastAssistantMessage: String? = nil, reason: String? = nil, permissionSuggestions: [JSONValue]? = nil, agent: AgentSession.Agent = .claudeCode, host: String? = nil, terminal: TerminalApp? = nil, tty: String? = nil, pid: Int32? = nil, tmux: TmuxLocation? = nil, title: String? = nil) {
         self.kind = kind
         self.sessionID = sessionID
         self.cwd = cwd
@@ -85,6 +86,7 @@ struct HookEvent: Sendable, Equatable, Decodable {
         self.terminal = terminal
         self.tty = tty
         self.pid = pid
+        self.tmux = tmux
         self.title = title
     }
 
@@ -109,13 +111,14 @@ struct HookEvent: Sendable, Equatable, Decodable {
         title = (try? container.decodeIfPresent(String.self, forKey: .title)).flatMap { $0.isEmpty ? nil : $0 }
     }
 
-    static func decode(_ data: Data, agent: String? = nil, host: String? = nil, terminal: String? = nil, tty: String? = nil, pid: String? = nil, title: String? = nil) throws -> HookEvent {
+    static func decode(_ data: Data, agent: String? = nil, host: String? = nil, terminal: String? = nil, tty: String? = nil, pid: String? = nil, tmux: String? = nil, tmuxPane: String? = nil, title: String? = nil) throws -> HookEvent {
         var event = try JSONDecoder().decode(HookEvent.self, from: data)
         event.agent = agent.flatMap(AgentSession.Agent.init(rawValue:)) ?? .claudeCode
         event.host = host
         event.terminal = terminal.flatMap { Self.isSafeIdentifier($0) ? TerminalApp(identifier: $0) : nil }
         event.tty = tty.flatMap { $0.hasPrefix("/dev/") && Self.isSafeIdentifier($0) ? $0 : nil }
         event.pid = pid.flatMap { Int32($0) }.flatMap { $0 > 1 ? $0 : nil }
+        if let tmux, let tmuxPane { event.tmux = TmuxLocation(environment: tmux, pane: tmuxPane) }
         event.title = title.flatMap { $0.isEmpty ? nil : $0 } ?? event.title
         return event
     }

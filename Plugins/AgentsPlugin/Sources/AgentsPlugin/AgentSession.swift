@@ -1,7 +1,7 @@
 import Foundation
 
-struct AgentSession: Identifiable, Sendable, Equatable {
-    enum Agent: String, Sendable, CaseIterable {
+struct AgentSession: Identifiable, Sendable, Equatable, Codable {
+    enum Agent: String, Sendable, CaseIterable, Codable {
         case claudeCode = "claude-code"
         case codex
 
@@ -13,7 +13,7 @@ struct AgentSession: Identifiable, Sendable, Equatable {
         }
     }
 
-    enum State: Sendable, Equatable {
+    enum State: Sendable, Equatable, Codable {
         case starting
         case working
         case needsAttention(String)
@@ -37,6 +37,7 @@ struct AgentSession: Identifiable, Sendable, Equatable {
     var terminal: TerminalApp?
     var tty: String?
     var pid: Int32?
+    var tmux: TmuxLocation?
     var transcriptPath: String?
     var cwd: String?
     var title: String?
@@ -52,6 +53,11 @@ struct AgentSession: Identifiable, Sendable, Equatable {
     var turnStartedAt: Date
     var updatedAt: Date
 
+    enum CodingKeys: String, CodingKey {
+        case id, agent, host, isRemote, isUnreachable, terminal, tty, pid, tmux, transcriptPath, cwd, title, hasStatusLineTitle
+        case task, activity, state, activities, plan, details, startedAt, turnStartedAt, updatedAt
+    }
+
     var pendingRequest: PendingRequest? { pendingRequests.first }
 
     var displayName: String {
@@ -64,8 +70,8 @@ struct AgentSession: Identifiable, Sendable, Equatable {
     }
 }
 
-struct SessionDetails: Sendable, Equatable {
-    struct PullRequest: Sendable, Equatable {
+struct SessionDetails: Sendable, Equatable, Codable {
+    struct PullRequest: Sendable, Equatable, Codable {
         var number: Int
         var url: String?
         var reviewState: String?
@@ -98,6 +104,26 @@ struct SessionDetails: Sendable, Equatable {
     var fastMode: Bool?
     var worktree: String?
     var pullRequest: PullRequest?
+    var costUSD: Double?
+    var linesAdded: Int?
+    var linesRemoved: Int?
+    var duration: Duration?
+
+    var sessionSummary: String? {
+        guard let costUSD else { return nil }
+        var parts = [Self.currency(costUSD)]
+        if linesAdded != nil || linesRemoved != nil {
+            parts.append("+\(linesAdded ?? 0) −\(linesRemoved ?? 0)")
+        }
+        if let duration {
+            parts.append(duration.formatted(.units(allowed: [.hours, .minutes])))
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    static func currency(_ amount: Double) -> String {
+        String(format: "$%.2f", locale: Locale(identifier: "en_US_POSIX"), amount)
+    }
 
     var badgeText: String? {
         let parts = [model, effort, fastMode == true ? "fast" : nil].compactMap { $0 }
@@ -112,7 +138,11 @@ struct SessionDetails: Sendable, Equatable {
             effort: update.effort ?? effort,
             fastMode: update.fastMode ?? fastMode,
             worktree: update.worktree,
-            pullRequest: update.pullRequest
+            pullRequest: update.pullRequest,
+            costUSD: update.costUSD ?? costUSD,
+            linesAdded: update.linesAdded ?? linesAdded,
+            linesRemoved: update.linesRemoved ?? linesRemoved,
+            duration: update.duration ?? duration
         )
     }
 

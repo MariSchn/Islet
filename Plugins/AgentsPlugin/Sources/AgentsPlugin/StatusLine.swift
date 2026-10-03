@@ -29,8 +29,32 @@ struct StatusLineUpdate: Sendable, Equatable {
             effort: string(effort?["level"]),
             fastMode: object["fast_mode"] as? Bool,
             worktree: worktree(from: object),
-            pullRequest: pullRequest(from: object)
+            pullRequest: pullRequest(from: object),
+            costUSD: costUSD(from: object),
+            linesAdded: linesAdded(from: object),
+            linesRemoved: linesRemoved(from: object),
+            duration: duration(from: object)
         )
+    }
+
+    private static func costObject(_ object: [String: Any]) -> [String: Any]? {
+        object["cost"] as? [String: Any]
+    }
+
+    private static func costUSD(from object: [String: Any]) -> Double? {
+        double(costObject(object)?["total_cost_usd"])
+    }
+
+    private static func linesAdded(from object: [String: Any]) -> Int? {
+        integer(costObject(object)?["total_lines_added"])
+    }
+
+    private static func linesRemoved(from object: [String: Any]) -> Int? {
+        integer(costObject(object)?["total_lines_removed"])
+    }
+
+    private static func duration(from object: [String: Any]) -> Duration? {
+        double(costObject(object)?["total_duration_ms"]).map { Duration.milliseconds($0) }
     }
 
     private static func worktree(from object: [String: Any]) -> String? {

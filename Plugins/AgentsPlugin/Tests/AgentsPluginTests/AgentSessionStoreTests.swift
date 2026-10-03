@@ -5,6 +5,18 @@ import Testing
 
 @MainActor
 struct AgentSessionStoreTests {
+    @Test func storesAndUpdatesTheTmuxLocation() {
+        let store = AgentSessionStore()
+        let first = TmuxLocation(socket: "/tmp/tmux-501/default", serverPID: 10, pane: "%1")
+        let second = TmuxLocation(socket: "/tmp/tmux-501/default", serverPID: 10, pane: "%2")
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s1", prompt: "go", tmux: first))
+        #expect(store.sessions[0].tmux == first)
+        store.apply(HookEvent(kind: .stop, sessionID: "s1"))
+        #expect(store.sessions[0].tmux == first)
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s1", prompt: "again", tmux: second))
+        #expect(store.sessions[0].tmux == second)
+    }
+
     @Test func recordsRecentToolCallsAndPlans() {
         let store = AgentSessionStore()
         let read = JSONValue.object(["file_path": .string("/a/b.swift")])

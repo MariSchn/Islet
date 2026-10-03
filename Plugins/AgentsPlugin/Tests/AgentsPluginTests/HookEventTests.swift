@@ -102,4 +102,16 @@ struct HookEventTests {
         #expect(HookEvent(kind: .stopFailure, sessionID: "a", error: "unknown", lastAssistantMessage: "API Error: boom").failureDescription == "API Error: boom")
         #expect(HookEvent(kind: .stopFailure, sessionID: "a").failureDescription == "The request failed")
     }
+
+    @Test func decodesTmuxLocationAndDropsInvalidOnes() throws {
+        let payload = Data(#"{"session_id":"a","hook_event_name":"Stop"}"#.utf8)
+        let valid = try HookEvent.decode(payload, tmux: "/private/tmp/tmux-501/default,1234,0", tmuxPane: "%3")
+        #expect(valid.tmux == TmuxLocation(socket: "/private/tmp/tmux-501/default", serverPID: 1234, pane: "%3"))
+        #expect(try HookEvent.decode(payload, tmux: "", tmuxPane: "").tmux == nil)
+        #expect(try HookEvent.decode(payload, tmux: "tmux/default,1234,0", tmuxPane: "%3").tmux == nil)
+        #expect(try HookEvent.decode(payload, tmux: "/tmp/tmux-501/default,1234,0", tmuxPane: "3").tmux == nil)
+        #expect(try HookEvent.decode(payload, tmux: "/tmp/tmux-501/default,1234,0", tmuxPane: "%3a").tmux == nil)
+        #expect(try HookEvent.decode(payload, tmux: "/tmp/x;id,1234,0", tmuxPane: "%3").tmux == nil)
+        #expect(try HookEvent.decode(payload, tmux: "/tmp/tmux-501/default,abc,0", tmuxPane: "%3").tmux == nil)
+    }
 }
