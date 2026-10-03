@@ -67,4 +67,31 @@ struct AgentsPluginSizingTests {
         session.plan = "# Plan"
         #expect(AgentsPlugin.contentSize(for: [session], expanded: ["a"], showsUsage: false, historyLength: 8).height > withActivity)
     }
+
+    @Test func expandedRowsGrowWhenTheSessionHasACost() {
+        var session = AgentSession(id: "a", agent: .claudeCode, host: nil, cwd: nil, task: nil, activity: nil, state: .working, startedAt: .now, turnStartedAt: .now, updatedAt: .now)
+        let without = AgentsPlugin.detailHeight(for: session, historyLength: 8)
+        session.details.costUSD = 1.23
+        session.details.linesAdded = 120
+        session.details.linesRemoved = 45
+        session.details.duration = .seconds(42 * 60)
+        let withCost = AgentsPlugin.detailHeight(for: session, historyLength: 8)
+        #expect(withCost == without + AgentsPlugin.activityHeaderHeight + AgentsPlugin.activityEntryHeight)
+        #expect(session.details.sessionSummary == "$1.23 · +120 −45 · 42 min")
+    }
+
+    private func questionRequest(options: Int, multiSelect: Bool = false) -> PendingRequest {
+        let labels = (0..<options).map { JSONValue.object(["label": .string("O\($0)")]) }
+        return PendingRequest(toolName: "AskUserQuestion", toolInput: .object([
+            "questions": .array([.object(["question": .string("Q?"), "multiSelect": .bool(multiSelect), "options": .array(labels)])]),
+        ]))!
+    }
+
+    @Test func questionHeightIncludesTheOtherRow() {
+        let fixed = 2 * AgentsPlugin.requestPadding + AgentsPlugin.questionDetailHeight + AgentsPlugin.requestSpacing
+        let row = AgentsPlugin.requestButtonHeight + AgentsPlugin.requestSpacing
+        #expect(AgentsPlugin.requestHeight(for: questionRequest(options: 1)) == fixed + 2 * row - AgentsPlugin.requestSpacing)
+        #expect(AgentsPlugin.requestHeight(for: questionRequest(options: 3)) == fixed + 4 * row - AgentsPlugin.requestSpacing)
+        #expect(AgentsPlugin.requestHeight(for: questionRequest(options: 3, multiSelect: true)) == fixed + 5 * row - AgentsPlugin.requestSpacing)
+    }
 }

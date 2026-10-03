@@ -17,6 +17,8 @@ packages:
     path: Plugins/MediaPlugin
   AgentsPlugin:
     path: Plugins/AgentsPlugin
+  ScriptsPlugin:
+    path: Plugins/ScriptsPlugin
   DownloadsPlugin:
     path: Plugins/DownloadsPlugin
   SystemMonitorPlugin:
@@ -40,6 +42,7 @@ targets:
       - package: ShelfPlugin
       - package: MediaPlugin
       - package: AgentsPlugin
+      - package: ScriptsPlugin
       - package: DownloadsPlugin
       - package: SystemMonitorPlugin
       - package: TimerPlugin
@@ -79,6 +82,7 @@ schemes:
         - package: ShelfPlugin/ShelfPluginTests
         - package: MediaPlugin/MediaPluginTests
         - package: AgentsPlugin/AgentsPluginTests
+        - package: ScriptsPlugin/ScriptsPluginTests
         - package: DownloadsPlugin/DownloadsPluginTests
         - package: SystemMonitorPlugin/SystemMonitorPluginTests
         - package: TimerPlugin/TimerPluginTests

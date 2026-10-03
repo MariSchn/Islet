@@ -8,6 +8,7 @@ import IsletCore
 import IsletHost
 import MediaPlugin
 import os
+import ScriptsPlugin
 import ShelfPlugin
 import SystemMonitorPlugin
 import TimerPlugin
@@ -18,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ShelfPlugin.self,
         MediaPlugin.self,
         AgentsPlugin.self,
+        ScriptsPlugin.self,
         DownloadsPlugin.self,
         SystemMonitorPlugin.self,
         TimerPlugin.self,

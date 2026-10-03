@@ -5,11 +5,12 @@ struct AgentsScreen: View {
     let controller: AgentsController
     @Environment(\.notchAnimation) private var animation
     @State private var installError: String?
+    @State private var frozenOrder: [String]?
 
     var body: some View {
         VStack(spacing: AgentsPlugin.rowSpacing) {
             if let usage = controller.visibleUsage {
-                UsageBar(usage: usage, showsResetTimes: controller.display.showsResetTimes)
+                UsageBar(usage: usage, showsResetTimes: controller.display.showsResetTimes, dailyCost: controller.dailyCost)
                     .frame(height: AgentsPlugin.usageBarHeight)
             }
             content
@@ -59,13 +60,15 @@ struct AgentsScreen: View {
         } else {
             ScrollView {
                 VStack(spacing: AgentsPlugin.rowSpacing) {
-                    ForEach(controller.store.sessions) { session in
+                    ForEach(SessionOrder.applying(frozen: frozenOrder, to: controller.store.orderedSessions)) { session in
                         SessionRow(
                             session: session,
                             terminal: controller.terminal(for: session),
                             isExpanded: controller.expandedSessionIDs.contains(session.id),
                             historyLength: controller.display.historyLength,
                             showTerminal: { controller.showTerminal(for: session) },
+                            isMuted: controller.mutedSessionIDs.contains(session.id),
+                            toggleMute: { controller.toggleMute(session.id) },
                             dismiss: { controller.store.dismiss(session.id) },
                             toggleExpanded: { controller.toggleExpanded(session.id) },
                             decide: { controller.decide($0, $1) }
@@ -73,6 +76,10 @@ struct AgentsScreen: View {
                     }
                 }
                 .animation(animation, value: controller.expandedSessionIDs)
+                .animation(animation, value: SessionOrder.applying(frozen: frozenOrder, to: controller.store.orderedSessions).map(\.id))
+            }
+            .onHover { isHovering in
+                frozenOrder = isHovering ? controller.store.orderedSessions.map(\.id) : nil
             }
             .scrollIndicators(.never)
             .scrollBounceBehavior(.basedOnSize)
@@ -86,6 +93,8 @@ private struct SessionRow: View {
     let isExpanded: Bool
     let historyLength: Int
     let showTerminal: () -> Void
+    let isMuted: Bool
+    let toggleMute: () -> Void
     let dismiss: () -> Void
     let toggleExpanded: () -> Void
     let decide: (UUID, PermissionDecision) -> Void
@@ -122,6 +131,7 @@ private struct SessionRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     SessionTitle(session: session)
+                        .layoutPriority(-1)
                     if let terminal {
                         Button(action: showTerminal) {
                             Image(nsImage: terminal.icon)
@@ -142,8 +152,34 @@ private struct SessionRow: View {
                             .help(session.isUnreachable ? "No updates from \(host) for a while. Is the SSH tunnel still up?" : "Running on \(host)")
                     }
                     Spacer(minLength: 0)
+                    if let badge = session.details.badgeText {
+                        Text(badge)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                            .fixedSize()
+                    }
+                    if let percentage = session.details.contextPercentage {
+                        ContextMeter(percentage: percentage)
+                    }
                     AgentBadge(agent: session.agent)
+                    if isMuted {
+                        Image(systemName: "bell.slash")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                            .help("Muted")
+                    }
                     StateLabel(session: session)
+                    Button(action: toggleMute) {
+                        Image(systemName: isMuted ? "bell.slash" : "bell")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(isMuted ? "Unmute" : "Mute")
+                    .opacity(isHovering ? 1 : 0)
+                    .frame(width: isHovering ? nil : 0)
+                    .clipped()
                     ZStack {
                         Image(systemName: "chevron.down")
                             .font(.system(size: 10, weight: .semibold))
@@ -166,10 +202,22 @@ private struct SessionRow: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                Text(detail)
-                    .font(.system(size: 11))
-                    .foregroundStyle(detailStyle)
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(detail)
+                        .font(.system(size: 11))
+                        .foregroundStyle(detailStyle)
+                        .lineLimit(1)
+                        .layoutPriority(-1)
+                    if session.details.worktree != nil || session.details.pullRequest != nil {
+                        Spacer(minLength: 4)
+                        if let worktree = session.details.worktree {
+                            DetailChip(systemImage: "arrow.triangle.branch", text: worktree, style: AnyShapeStyle(.secondary))
+                        }
+                        if let pullRequest = session.details.pullRequest {
+                            PullRequestChip(pullRequest: pullRequest)
+                        }
+                    }
+                }
             }
         }
     }
@@ -205,6 +253,15 @@ private struct ActivityView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            if let summary = session.details.sessionSummary {
+                SectionHeader("Session")
+                Text(summary)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(height: AgentsPlugin.activityEntryHeight)
+            }
             if let plan = session.plan {
                 SectionHeader("Plan")
                 ScrollView {
@@ -287,6 +344,10 @@ private struct RequestView: View {
                     .frame(maxWidth: .infinity, minHeight: AgentsPlugin.requestDetailHeight, maxHeight: AgentsPlugin.requestDetailHeight, alignment: .topLeading)
                 HStack(spacing: AgentsPlugin.requestSpacing) {
                     RequestButton("Allow", systemImage: "checkmark", tint: .green) { decide(.allow) }
+                    if request.alwaysAllowRule != nil {
+                        RequestButton("Always allow", systemImage: "checkmark.circle", tint: .green) { decide(.allowAlways) }
+                            .help(request.alwaysAllowDescription ?? "")
+                    }
                     RequestButton("Deny", systemImage: "xmark", tint: .red) { decide(.deny) }
                 }
             }
@@ -299,68 +360,112 @@ private struct RequestView: View {
 }
 
 private struct QuestionView: View {
-    let questions: [PendingRequest.Question]
     let submit: ([String: String]) -> Void
-    @State private var index = 0
-    @State private var answers: [String: String] = [:]
-    @State private var selection: [Int] = []
+    @State private var state: QuestionAnswers
+    @State private var isTyping = false
+    @State private var text = ""
+    @FocusState private var fieldFocused: Bool
 
-    private var question: PendingRequest.Question { questions[index] }
+    init(questions: [PendingRequest.Question], submit: @escaping ([String: String]) -> Void) {
+        self.submit = submit
+        _state = State(initialValue: QuestionAnswers(questions: questions))
+    }
+
+    private var question: PendingRequest.Question { state.question }
+    private var canSubmitText: Bool { !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private var confirmTitle: String { state.isLast ? "Submit" : "Next" }
 
     var body: some View {
         VStack(alignment: .leading, spacing: AgentsPlugin.requestSpacing) {
-            VStack(alignment: .leading, spacing: 2) {
-                if let header = question.header {
-                    Text(questions.count > 1 ? "\(header) · \(index + 1) of \(questions.count)" : header)
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                        .textCase(.uppercase)
+            HStack(alignment: .top, spacing: 6) {
+                if state.canGoBack {
+                    Button {
+                        state.back()
+                        closeTyping()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 16, height: 16)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Previous question")
                 }
-                Text(question.text)
-                    .font(.system(size: 12))
-                    .lineLimit(2)
+                VStack(alignment: .leading, spacing: 2) {
+                    if let header = question.header {
+                        Text(state.questions.count > 1 ? "\(header) · \(state.index + 1) of \(state.questions.count)" : header)
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                            .textCase(.uppercase)
+                    }
+                    Text(question.text)
+                        .font(.system(size: 12))
+                        .lineLimit(2)
+                }
             }
             .frame(maxWidth: .infinity, minHeight: AgentsPlugin.questionDetailHeight, maxHeight: AgentsPlugin.questionDetailHeight, alignment: .topLeading)
-            ForEach(Array(question.options.enumerated()), id: \.offset) { offset, option in
-                RequestButton(
-                    option.label,
-                    subtitle: option.description,
-                    systemImage: question.multiSelect ? (selection.contains(offset) ? "checkmark.square.fill" : "square") : "arrow.turn.down.right",
-                    tint: .accentColor,
-                    fullWidth: true
-                ) { choose(offset) }
-            }
-            if question.multiSelect {
-                RequestButton(index + 1 < questions.count ? "Next" : "Submit", systemImage: "checkmark", tint: .green) {
-                    record(selection.sorted().map { question.options[$0].label }.joined(separator: ", "))
+            if isTyping {
+                TextField("Your answer", text: $text)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 11))
+                    .padding(.horizontal, 10)
+                    .frame(height: AgentsPlugin.requestButtonHeight)
+                    .background(Capsule().fill(Color.primary.opacity(0.1)))
+                    .focused($fieldFocused)
+                    .onAppear { fieldFocused = true }
+                    .onSubmit(submitText)
+                HStack(spacing: AgentsPlugin.requestSpacing) {
+                    RequestButton(confirmTitle, systemImage: "checkmark", tint: .green, action: submitText)
+                        .disabled(!canSubmitText)
+                        .opacity(canSubmitText ? 1 : 0.4)
+                    RequestButton("Cancel", systemImage: "xmark", tint: .red, action: closeTyping)
                 }
-                .disabled(selection.isEmpty)
-                .opacity(selection.isEmpty ? 0.4 : 1)
+            } else {
+                ForEach(Array(question.options.enumerated()), id: \.offset) { offset, option in
+                    RequestButton(
+                        option.label,
+                        subtitle: option.description,
+                        systemImage: question.multiSelect ? (state.selection.contains(offset) ? "checkmark.square.fill" : "square") : "arrow.turn.down.right",
+                        tint: .accentColor,
+                        fullWidth: true
+                    ) { choose(offset) }
+                }
+                RequestButton("Other…", systemImage: "pencil", tint: .accentColor, fullWidth: true) {
+                    isTyping = true
+                }
+                if question.multiSelect {
+                    RequestButton(confirmTitle, systemImage: "checkmark", tint: .green) {
+                        state.submitSelection()
+                        finishStep()
+                    }
+                    .disabled(state.selection.isEmpty)
+                    .opacity(state.selection.isEmpty ? 0.4 : 1)
+                }
             }
         }
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
     private func choose(_ offset: Int) {
-        if question.multiSelect {
-            if let position = selection.firstIndex(of: offset) {
-                selection.remove(at: position)
-            } else {
-                selection.append(offset)
-            }
-        } else {
-            record(question.options[offset].label)
-        }
+        state.choose(offset)
+        finishStep()
     }
 
-    private func record(_ answer: String) {
-        answers[question.text] = answer
-        selection = []
-        if index + 1 < questions.count {
-            index += 1
-        } else {
-            submit(answers)
-        }
+    private func submitText() {
+        guard canSubmitText else { return }
+        state.submitOther(text)
+        closeTyping()
+        finishStep()
+    }
+
+    private func closeTyping() {
+        isTyping = false
+        fieldFocused = false
+        text = ""
+    }
+
+    private func finishStep() {
+        if state.isComplete { submit(state.answers) }
     }
 }
 
@@ -471,6 +576,29 @@ enum SessionColors {
     static let working = Color(workingTint)
 }
 
+private struct ContextMeter: View {
+    let percentage: Double
+
+    var body: some View {
+        Capsule()
+            .fill(.quaternary)
+            .frame(width: 36, height: 4)
+            .overlay(alignment: .leading) {
+                Capsule()
+                    .fill(fill)
+                    .frame(width: 36 * CGFloat(min(max(percentage, 0), 100)) / 100)
+            }
+            .fixedSize()
+            .help("Context \(SessionDetails.percentText(percentage))% used")
+    }
+
+    private var fill: Color {
+        if percentage >= 85 { return .orange }
+        if percentage >= 70 { return .yellow }
+        return .secondary
+    }
+}
+
 private struct AgentBadge: View {
     let agent: AgentSession.Agent
 
@@ -482,6 +610,53 @@ private struct AgentBadge: View {
                 .help(agent.displayName)
         case .codex:
             Chip(agent.displayName)
+        }
+    }
+}
+
+private struct DetailChip: View {
+    var systemImage: String?
+    var text: String
+    var style: AnyShapeStyle
+
+    var body: some View {
+        HStack(spacing: 3) {
+            if let systemImage {
+                Image(systemName: systemImage)
+            }
+            Text(text)
+        }
+        .font(.system(size: 10, weight: .medium))
+        .foregroundStyle(style)
+        .lineLimit(1)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(.white.opacity(0.12)))
+        .fixedSize()
+    }
+}
+
+private struct PullRequestChip: View {
+    let pullRequest: SessionDetails.PullRequest
+
+    var body: some View {
+        Button {
+            if let url = pullRequest.url.flatMap(URL.init(string:)) {
+                NSWorkspace.shared.open(url)
+            }
+        } label: {
+            DetailChip(text: pullRequest.label, style: reviewStyle)
+        }
+        .buttonStyle(.plain)
+        .help(pullRequest.help)
+    }
+
+    private var reviewStyle: AnyShapeStyle {
+        switch pullRequest.reviewState {
+        case "approved": AnyShapeStyle(.green)
+        case "changes_requested": AnyShapeStyle(.orange)
+        case "draft": AnyShapeStyle(.tertiary)
+        default: AnyShapeStyle(.secondary)
         }
     }
 }
@@ -507,6 +682,7 @@ private struct Chip: View {
 private struct UsageBar: View {
     let usage: ClaudeUsage
     let showsResetTimes: Bool
+    let dailyCost: Double
 
     var body: some View {
         HStack(spacing: 8) {
@@ -523,6 +699,11 @@ private struct UsageBar: View {
                 UsageWindowView(label: "7d", window: window, showsResetTime: showsResetTimes)
             }
             Spacer(minLength: 0)
+            if dailyCost > 0 {
+                Text("\(SessionDetails.currency(dailyCost)) today")
+                    .foregroundStyle(.secondary)
+                    .help("Estimated at list price by Claude Code")
+            }
         }
         .font(.system(size: 11))
         .padding(.horizontal, AgentsPlugin.rowPadding)
