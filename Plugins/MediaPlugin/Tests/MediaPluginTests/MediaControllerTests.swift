@@ -134,10 +134,10 @@ struct MediaControllerTests {
     @Test func artworkIsLoadedAndPublishedWithTint() async {
         let source = StubSource()
         let url = URL(string: "https://example.com/cover.png")!
-        let controller = MediaController(source: source) { requested in
+        let controller = MediaController(source: source, loadArtwork: { requested in
             #expect(requested == url)
             return solidImageData(red: 0.9, green: 0.1, blue: 0.1)
-        }
+        })
         await source.set(NowPlaying(title: "Song", artist: "Band", artworkURL: url, isPlaying: true))
         await controller.refresh()
         await waitUntil { controller.artwork != nil }
@@ -153,13 +153,13 @@ struct MediaControllerTests {
         let source = StubSource()
         let slow = URL(string: "https://example.com/slow.png")!
         let fast = URL(string: "https://example.com/fast.png")!
-        let controller = MediaController(source: source) { requested in
+        let controller = MediaController(source: source, loadArtwork: { requested in
             if requested == slow {
                 try await Task.sleep(for: .milliseconds(150))
                 return solidImageData(red: 0, green: 0, blue: 1)
             }
             return solidImageData(red: 0, green: 1, blue: 0)
-        }
+        })
 
         await source.set(NowPlaying(title: "Slow", artist: "Band", artworkURL: slow, isPlaying: true))
         await controller.refresh()
@@ -177,13 +177,13 @@ struct MediaControllerTests {
         let first = URL(string: "https://example.com/first.png")!
         let second = URL(string: "https://example.com/second.png")!
         let attempts = Attempts()
-        let controller = MediaController(source: source) { requested in
+        let controller = MediaController(source: source, loadArtwork: { requested in
             await attempts.record(requested)
             if requested == second, await attempts.count(of: second) == 1 {
                 throw StubError(message: "offline")
             }
             return solidImageData(red: 1, green: 1, blue: 0)
-        }
+        })
 
         await source.set(NowPlaying(title: "First", artist: "Band", artworkURL: first, isPlaying: true))
         await controller.refresh()
@@ -371,6 +371,48 @@ struct MediaControllerTests {
         #expect(!controller.capabilities.canBrowsePlaylists)
     }
 
+    @Test func setVolumeCallsTheSourceAndRefreshes() async {
+        let source = StubSource(capabilities: MediaCapabilities(canSetVolume: true))
+        let fetched = Date(timeIntervalSinceReferenceDate: 1_700_000_000)
+        let controller = MediaController(source: source, clock: { fetched })
+        await source.set(NowPlaying(title: "Song", artist: "Band", isPlaying: true, volume: 20))
+
+        await controller.setVolume(40)
+
+        #expect(await source.commands == ["volume(40)"])
+        #expect(controller.nowPlaying?.volume == 40)
+        #expect(controller.nowPlayingDate == fetched)
+    }
+
+    @Test func setVolumeIsIgnoredWhenUnsupported() async {
+        let source = StubSource()
+        let controller = MediaController(source: source)
+        await source.set(NowPlaying(title: "Song", artist: "Band", isPlaying: true, volume: 20))
+        await controller.refresh()
+
+        await controller.setVolume(40)
+
+        #expect(await source.commands.isEmpty)
+        #expect(controller.nowPlaying?.volume == 20)
+    }
+
+    @Test func playheadTimeIsTakenWhenTheActiveSourceIsRead() async throws {
+        let spotify = StubSource(name: "Spotify", bundleIdentifier: "com.spotify.client")
+        let music = StubSource(name: "Music", bundleIdentifier: "com.apple.Music")
+        await spotify.set(NowPlaying(title: "Single", artist: "DJ", isPlaying: true, position: 10, duration: 100))
+        await music.set(NowPlaying(title: "Album", artist: "Band", isPlaying: false, position: 4, duration: 100))
+        await music.setReadDelay(.milliseconds(250))
+        let controller = MediaController(sources: [spotify, music])
+
+        let started = Date()
+        await controller.refresh()
+        let ended = Date()
+
+        let fetched = try #require(controller.nowPlayingDate)
+        #expect(controller.source?.displayName == "Spotify")
+        #expect(fetched.timeIntervalSince(started) < ended.timeIntervalSince(fetched))
+    }
+
     @Test func thePlayingSourceBecomesActive() async {
         let spotify = StubSource(name: "Spotify", bundleIdentifier: "com.spotify.client")
         let music = StubSource(name: "Music", bundleIdentifier: "com.apple.Music", capabilities: MediaCapabilities(canBrowsePlaylists: true))
@@ -472,13 +514,19 @@ struct SpotifyParsingTests {
             NSAppleEventDescriptor(int32: 185_000),
             NSAppleEventDescriptor(boolean: true),
             NSAppleEventDescriptor(boolean: true),
+            NSAppleEventDescriptor(int32: 64),
         ].enumerated() {
             list.insert(item, at: index + 1)
         }
 
         let nowPlaying = SpotifySource.nowPlaying(from: list)
 
-        #expect(nowPlaying == NowPlaying(title: "Song", artist: "Band", album: "Album", artworkURL: URL(string: "https://i.scdn.co/image/abc"), isPlaying: true, position: 12.5, duration: 185, isShuffling: true, repeatMode: .all))
+        #expect(nowPlaying == NowPlaying(title: "Song", artist: "Band", album: "Album", artworkURL: URL(string: "https://i.scdn.co/image/abc"), isPlaying: true, position: 12.5, duration: 185, isShuffling: true, repeatMode: .all, volume: 64))
+    }
+
+    @Test func nineItemsAreRejected() {
+        let list = descriptorList((1...9).map { NSAppleEventDescriptor(string: "\($0)") })
+        #expect(SpotifySource.nowPlaying(from: list) == nil)
     }
 
     @Test func emptyListMeansNothingPlaying() {
@@ -497,6 +545,7 @@ struct SpotifyParsingTests {
             NSAppleEventDescriptor(int32: 1000),
             NSAppleEventDescriptor(boolean: false),
             NSAppleEventDescriptor(boolean: false),
+            NSAppleEventDescriptor(int32: 0),
         ].enumerated() {
             list.insert(item, at: index + 1)
         }
@@ -507,6 +556,7 @@ struct SpotifyParsingTests {
         #expect(nowPlaying?.duration == 1)
         #expect(nowPlaying?.isShuffling == false)
         #expect(nowPlaying?.repeatMode == .off)
+        #expect(nowPlaying?.volume == 0)
     }
 
     @Test func spotifyCanShuffleAndRepeatButNotBrowse() {
@@ -515,6 +565,7 @@ struct SpotifyParsingTests {
         #expect(capabilities.canRepeat)
         #expect(capabilities.repeatMode(after: .all) == .off)
         #expect(!capabilities.canBrowsePlaylists)
+        #expect(capabilities.canSetVolume)
     }
 
     @Test func automationDenialGetsActionableMessage() {
@@ -537,13 +588,18 @@ struct MusicParsingTests {
             NSAppleEventDescriptor(double: 241.5),
             NSAppleEventDescriptor(boolean: true),
             NSAppleEventDescriptor(string: "one"),
+            NSAppleEventDescriptor(int32: 35),
         ])
 
         let track = try #require(MusicSource.track(from: list))
         let artworkURL = try #require(track.artworkURL)
 
         #expect(MusicSource.persistentID(fromArtworkURL: artworkURL) == "0A1B2C3D4E5F6789")
-        #expect(track == NowPlaying(title: "Song", artist: "Band", album: "Album", artworkURL: artworkURL, isPlaying: true, position: 30, duration: 241.5, isShuffling: true, repeatMode: .one))
+        #expect(track == NowPlaying(title: "Song", artist: "Band", album: "Album", artworkURL: artworkURL, isPlaying: true, position: 30, duration: 241.5, isShuffling: true, repeatMode: .one, volume: 35))
+    }
+
+    @Test func nineItemsAreRejected() {
+        #expect(MusicSource.track(from: descriptorList((1...9).map { NSAppleEventDescriptor(string: "\($0)") })) == nil)
     }
 
     @Test func artworkURLsOnlyCarryHexPersistentIDs() throws {
@@ -602,6 +658,7 @@ struct MusicParsingTests {
         #expect(capabilities.repeatMode(after: .off) == .all)
         #expect(capabilities.repeatMode(after: .all) == .one)
         #expect(capabilities.repeatMode(after: .one) == .off)
+        #expect(capabilities.canSetVolume)
     }
 }
 
@@ -617,13 +674,15 @@ struct AppleScriptCompilationTests {
             SpotifySource.seekScript(to: 12.5),
             SpotifySource.shuffleScript(true),
             SpotifySource.shuffleScript(false),
+            SpotifySource.volumeScript(40),
         ] + RepeatMode.allCases.map(SpotifySource.repeatScript)
         for script in scripts {
             #expect(compileError(script) == nil, "\(script)")
         }
     }
 
-    @Test func musicScriptsCompile() throws {
+    @Test(.enabled(if: NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Music") != nil, "Compiling needs Music's scripting dictionary"))
+    func musicScriptsCompile() throws {
         let scripts = [
             MusicSource.nowPlayingScript,
             MusicSource.playPauseScript,
@@ -634,6 +693,7 @@ struct AppleScriptCompilationTests {
             MusicSource.seekScript(to: 12.5),
             MusicSource.shuffleScript(true),
             MusicSource.shuffleScript(false),
+            MusicSource.volumeScript(40),
             try #require(MusicSource.playScript(playlistID: "0A1B2C3D4E5F6789")),
         ] + RepeatMode.allCases.map(MusicSource.repeatScript)
         for script in scripts {
@@ -713,6 +773,21 @@ struct MediaPlayerSettingTests {
         let registry = PluginRegistry(storageRoot: storage, userDefaults: defaults)
         let entry = try await registry.register(MediaPlugin.self)
         return try #require(entry.plugin as? MediaPlugin)
+    }
+}
+
+struct NowPlayingProgressTests {
+    @Test func positionAdvancesWhilePlayingAndClampsAtTheDuration() {
+        let track = NowPlaying(title: "Song", artist: "Band", isPlaying: true, position: 10, duration: 12)
+        let fetched = Date(timeIntervalSinceReferenceDate: 1_000)
+        #expect(track.position(at: fetched.addingTimeInterval(1.5), fetchedAt: fetched) == 11.5)
+        #expect(track.position(at: fetched.addingTimeInterval(5), fetchedAt: fetched) == 12)
+    }
+
+    @Test func positionStaysPutWhilePaused() {
+        let track = NowPlaying(title: "Song", artist: "Band", isPlaying: false, position: 10, duration: 12)
+        let fetched = Date(timeIntervalSinceReferenceDate: 1_000)
+        #expect(track.position(at: fetched.addingTimeInterval(4), fetchedAt: fetched) == 10)
     }
 }
 
@@ -934,6 +1009,10 @@ private struct StubSource: MediaSource {
     func setRepeatMode(_ mode: RepeatMode) async throws {
         await state.record("repeat(\(mode.rawValue))")
         await state.update { $0.repeatMode = mode }
+    }
+    func setVolume(_ volume: Int) async throws {
+        try await state.perform("volume(\(volume))")
+        await state.update { $0.volume = volume }
     }
     func playlists() async throws -> [MediaPlaylist] { try await state.readPlaylists() }
     func play(_ playlist: MediaPlaylist) async throws { try await state.playPlaylist(playlist) }

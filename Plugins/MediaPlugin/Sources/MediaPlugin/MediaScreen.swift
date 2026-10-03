@@ -79,6 +79,7 @@ private struct UnavailablePlayers: View {
 private struct NowPlayingView: View {
     let nowPlaying: NowPlaying
     let controller: MediaController
+    @State private var showsVolume = false
 
     private var tint: Color {
         controller.tint.map(Color.init) ?? .white
@@ -105,6 +106,11 @@ private struct NowPlayingView: View {
                                 .lineLimit(1)
                         }
                         Spacer(minLength: 0)
+                        if capabilities.canSetVolume {
+                            ToggleButton(systemImage: "speaker.wave.2.fill", isOn: showsVolume, tint: tint, help: "Volume") {
+                                showsVolume.toggle()
+                            }
+                        }
                         if capabilities.canBrowsePlaylists {
                             ToggleButton(systemImage: "music.note.list", isOn: controller.isBrowsingPlaylists, tint: tint, help: "Playlists") {
                                 await controller.togglePlaylists()
@@ -133,8 +139,14 @@ private struct NowPlayingView: View {
                     }
                     .frame(maxWidth: .infinity)
                     Spacer(minLength: 4)
-                    Timeline(nowPlaying: nowPlaying, tint: tint) { position in
-                        await controller.seek(to: position)
+                    if showsVolume, capabilities.canSetVolume {
+                        VolumeSlider(volume: nowPlaying.volume, tint: tint) { volume in
+                            await controller.setVolume(volume)
+                        }
+                    } else {
+                        Timeline(nowPlaying: nowPlaying, fetchedAt: controller.nowPlayingDate, tint: tint) { position in
+                            await controller.seek(to: position)
+                        }
                     }
                 }
             }
@@ -165,6 +177,7 @@ private struct ArtworkView: View {
 
 private struct Timeline: View {
     let nowPlaying: NowPlaying
+    let fetchedAt: Date?
     let tint: Color
     let onSeek: (TimeInterval) async -> Void
     @State private var isHovering = false
@@ -172,60 +185,69 @@ private struct Timeline: View {
     @State private var seekTask: Task<Void, Never>?
 
     private var isActive: Bool { isHovering || scrubFraction != nil }
-    private var fraction: Double { scrubFraction ?? nowPlaying.progress }
 
     var body: some View {
-        VStack(spacing: 4) {
-            GeometryReader { proxy in
-                let width = proxy.size.width
-                let knobX = width * fraction
-                ZStack(alignment: .leading) {
-                    Capsule().fill(.white.opacity(0.25)).frame(height: 4)
-                    Capsule().fill(isActive ? tint : .white).frame(width: knobX, height: 4)
-                    if isActive {
-                        Circle()
-                            .fill(.white)
-                            .frame(width: 12, height: 12)
-                            .offset(x: knobX - 6)
-                    }
-                    if let scrubFraction {
-                        Text(timestamp(scrubFraction * nowPlaying.duration))
-                            .font(.caption.monospacedDigit().weight(.medium))
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
-                            .background(.white.opacity(0.18), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-                            .fixedSize()
-                            .offset(x: min(max(knobX - 24, 0), width - 48), y: -26)
-                    }
-                }
-                .frame(height: proxy.size.height)
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { value in scrubFraction = fraction(at: value.location.x, in: width) }
-                        .onEnded { value in
-                            let target = fraction(at: value.location.x, in: width)
-                            scrubFraction = target
-                            seekTask?.cancel()
-                            seekTask = Task {
-                                await onSeek(target * nowPlaying.duration)
-                                guard !Task.isCancelled else { return }
-                                scrubFraction = nil
-                            }
+        TimelineView(.periodic(from: .now, by: 0.25)) { context in
+            let played = self.fraction(at: context.date)
+            VStack(spacing: 4) {
+                GeometryReader { proxy in
+                    let width = proxy.size.width
+                    let knobX = width * played
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(.white.opacity(0.25)).frame(height: 4)
+                        Capsule().fill(isActive ? tint : .white).frame(width: knobX, height: 4)
+                        if isActive {
+                            Circle()
+                                .fill(.white)
+                                .frame(width: 12, height: 12)
+                                .offset(x: knobX - 6)
                         }
-                )
+                        if let scrubFraction {
+                            Text(timestamp(scrubFraction * nowPlaying.duration))
+                                .font(.caption.monospacedDigit().weight(.medium))
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background(.white.opacity(0.18), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                                .fixedSize()
+                                .offset(x: min(max(knobX - 24, 0), width - 48), y: -26)
+                        }
+                    }
+                    .frame(height: proxy.size.height)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { value in scrubFraction = fraction(at: value.location.x, in: width) }
+                            .onEnded { value in
+                                let target = fraction(at: value.location.x, in: width)
+                                scrubFraction = target
+                                seekTask?.cancel()
+                                seekTask = Task {
+                                    await onSeek(target * nowPlaying.duration)
+                                    guard !Task.isCancelled else { return }
+                                    scrubFraction = nil
+                                }
+                            }
+                    )
+                }
+                .frame(height: 14)
+                .onHover { isHovering = $0 }
+                HStack {
+                    Text(timestamp(played * nowPlaying.duration))
+                    Spacer()
+                    Text(timestamp(nowPlaying.duration))
+                }
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.secondary)
             }
-            .frame(height: 14)
-            .onHover { isHovering = $0 }
-            HStack {
-                Text(timestamp(fraction * nowPlaying.duration))
-                Spacer()
-                Text(timestamp(nowPlaying.duration))
-            }
-            .font(.caption2.monospacedDigit())
-            .foregroundStyle(.secondary)
+            .animation(.easeOut(duration: 0.15), value: isActive)
         }
-        .animation(.easeOut(duration: 0.15), value: isActive)
+    }
+
+    private func fraction(at date: Date) -> Double {
+        if let scrubFraction { return scrubFraction }
+        let position = fetchedAt.map { nowPlaying.position(at: date, fetchedAt: $0) } ?? nowPlaying.position
+        guard nowPlaying.duration > 0 else { return 0 }
+        return min(max(position / nowPlaying.duration, 0), 1)
     }
 
     private func fraction(at x: CGFloat, in width: CGFloat) -> Double {
@@ -235,6 +257,85 @@ private struct Timeline: View {
 
     private func timestamp(_ seconds: TimeInterval) -> String {
         Duration.seconds(seconds).formatted(.time(pattern: .minuteSecond))
+    }
+}
+
+private struct VolumeSlider: View {
+    let volume: Int
+    let tint: Color
+    let onChange: (Int) async -> Void
+    @State private var dragged: Double?
+    @State private var isDragging = false
+    @State private var lastSent = Date.distantPast
+    @State private var sendChain: Task<Void, Never>?
+
+    private var displayed: Double { dragged ?? Double(volume) }
+
+    var body: some View {
+        VStack(spacing: 4) {
+            HStack(spacing: 8) {
+                Image(systemName: "speaker.fill")
+                GeometryReader { proxy in
+                    let width = proxy.size.width
+                    let fraction = min(max(displayed / 100, 0), 1)
+                    let knobX = width * fraction
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(.white.opacity(0.25)).frame(height: 4)
+                        Capsule().fill(tint).frame(width: knobX, height: 4)
+                        Circle()
+                            .fill(.white)
+                            .frame(width: 12, height: 12)
+                            .offset(x: knobX - 6)
+                    }
+                    .frame(height: proxy.size.height)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { value in
+                                guard width > 0 else { return }
+                                isDragging = true
+                                let next = min(max(value.location.x / width, 0), 1) * 100
+                                dragged = next
+                                send(Int(next.rounded()), force: false)
+                            }
+                            .onEnded { value in
+                                guard width > 0 else { return }
+                                let next = min(max(value.location.x / width, 0), 1) * 100
+                                dragged = next
+                                isDragging = false
+                                send(Int(next.rounded()), force: true)
+                            }
+                    )
+                }
+                .frame(height: 14)
+                Image(systemName: "speaker.wave.3.fill")
+            }
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.secondary)
+            HStack {
+                Text("\(Int(displayed.rounded()))")
+                Spacer()
+                Text("100")
+            }
+            .font(.caption2.monospacedDigit())
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    private func send(_ volume: Int, force: Bool) {
+        let now = Date()
+        guard force || now.timeIntervalSince(lastSent) >= 0.1 else { return }
+        lastSent = now
+        let previous = sendChain
+        let finishesDrag = force
+        sendChain = Task {
+            await previous?.value
+            guard !Task.isCancelled else { return }
+            await onChange(volume)
+            if finishesDrag, !isDragging {
+                dragged = nil
+            }
+        }
     }
 }
 

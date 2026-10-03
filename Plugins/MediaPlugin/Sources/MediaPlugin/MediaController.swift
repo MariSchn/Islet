@@ -11,6 +11,7 @@ final class MediaController {
     private(set) var sources: [any MediaSource]
     private(set) var activeIndex = 0
     private(set) var nowPlaying: NowPlaying?
+    private(set) var nowPlayingDate: Date?
     private(set) var artwork: CGImage?
     private(set) var tint: Color.Resolved?
     private(set) var isSourceRunning = false
@@ -28,6 +29,7 @@ final class MediaController {
     }
 
     @ObservationIgnored private let loadArtwork: ArtworkLoader?
+    @ObservationIgnored private let clock: @MainActor () -> Date
     @ObservationIgnored private let playingInterval: Duration
     @ObservationIgnored private let pausedInterval: Duration
     @ObservationIgnored private let hiddenInterval: Duration
@@ -48,9 +50,10 @@ final class MediaController {
         playingInterval: Duration = .seconds(1),
         pausedInterval: Duration = .seconds(3),
         hiddenInterval: Duration = .seconds(15),
+        clock: @escaping @MainActor () -> Date = { Date() },
         loadArtwork: ArtworkLoader? = nil
     ) {
-        self.init(sources: [source], showsPill: showsPill, playingInterval: playingInterval, pausedInterval: pausedInterval, hiddenInterval: hiddenInterval, loadArtwork: loadArtwork)
+        self.init(sources: [source], showsPill: showsPill, playingInterval: playingInterval, pausedInterval: pausedInterval, hiddenInterval: hiddenInterval, clock: clock, loadArtwork: loadArtwork)
     }
 
     init(
@@ -59,6 +62,7 @@ final class MediaController {
         playingInterval: Duration = .seconds(1),
         pausedInterval: Duration = .seconds(3),
         hiddenInterval: Duration = .seconds(15),
+        clock: @escaping @MainActor () -> Date = { Date() },
         loadArtwork: ArtworkLoader? = nil
     ) {
         self.sources = sources
@@ -66,6 +70,7 @@ final class MediaController {
         self.playingInterval = playingInterval
         self.pausedInterval = pausedInterval
         self.hiddenInterval = hiddenInterval
+        self.clock = clock
         self.loadArtwork = loadArtwork
     }
 
@@ -115,6 +120,7 @@ final class MediaController {
         pollTask = nil
         changeTasks.removeAll()
         nowPlaying = nil
+        nowPlayingDate = nil
         errorMessage = nil
         hidePlaylists()
         updateArtwork(for: nil)
@@ -151,8 +157,9 @@ final class MediaController {
             } catch {
                 outcome = .failure(error)
             }
+            let fetchedAt = clock()
             guard requested == generation else { return }
-            polls.append(SourcePoll(index: index, outcome: outcome))
+            polls.append(SourcePoll(index: index, outcome: outcome, fetchedAt: fetchedAt))
         }
         guard requested == generation else { return }
         let chosen = Self.preferredSourceIndex(among: polls, current: activeIndex)
@@ -184,6 +191,12 @@ final class MediaController {
 
     func seek(to position: TimeInterval) async {
         await perform { try await $0.seek(to: position) }
+    }
+
+    func setVolume(_ volume: Int) async {
+        guard capabilities.canSetVolume else { return }
+        let bounded = min(max(volume, 0), 100)
+        await perform { try await $0.setVolume(bounded) }
     }
 
     var capabilities: MediaCapabilities {
@@ -287,7 +300,7 @@ final class MediaController {
         switch poll.outcome {
         case .success(let nowPlaying):
             isSourceRunning = true
-            apply(nowPlaying: nowPlaying, error: nil)
+            apply(nowPlaying: nowPlaying, error: nil, fetchedAt: poll.fetchedAt)
         case .failure(let error as AppleScriptError) where error.isApplicationNotRunning:
             isSourceRunning = false
             hidePlaylists()
@@ -298,8 +311,9 @@ final class MediaController {
         }
     }
 
-    private func apply(nowPlaying: NowPlaying?, error: String?) {
+    private func apply(nowPlaying: NowPlaying?, error: String?, fetchedAt: Date? = nil) {
         self.nowPlaying = nowPlaying
+        nowPlayingDate = nowPlaying == nil ? nil : fetchedAt
         errorMessage = error
         updateArtwork(for: nowPlaying?.artworkURL)
     }
@@ -353,6 +367,7 @@ final class MediaController {
 private struct SourcePoll {
     let index: Int
     let outcome: Result<NowPlaying?, any Error>
+    let fetchedAt: Date
 
     var track: NowPlaying? {
         if case .success(let nowPlaying) = outcome { return nowPlaying }
