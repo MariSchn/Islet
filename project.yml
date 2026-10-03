@@ -21,6 +21,8 @@ packages:
     path: Plugins/CalendarPlugin
   GitHubPlugin:
     path: Plugins/GitHubPlugin
+  TimerPlugin:
+    path: Plugins/TimerPlugin
 targets:
   Islet:
     type: application
@@ -36,6 +38,7 @@ targets:
       - package: AgentsPlugin
       - package: CalendarPlugin
       - package: GitHubPlugin
+      - package: TimerPlugin
     info:
       path: App/Info.plist
       properties:
@@ -71,3 +74,4 @@ schemes:
         - package: AgentsPlugin/AgentsPluginTests
         - package: CalendarPlugin/CalendarPluginTests
         - package: GitHubPlugin/GitHubPluginTests
+        - package: TimerPlugin/TimerPluginTests
