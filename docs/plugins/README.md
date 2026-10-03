@@ -29,7 +29,9 @@ All built-in plugins live in `Plugins/` and use only the public `IsletCore` API,
 - `ShelfPlugin`: file drops (`acceptsFileDrops`), state that persists as JSON in `context.storageDirectory`, a width derived from the number of items, and logging through `context.logger`.
 - `MediaPlugin`: polling in `activate()`/`deactivate()` that slows down while its screen is hidden (`context.isScreenVisible`), a derived pill with artwork and tint, interchangeable data sources with per-source capabilities, a height that grows while a list is open, and stubbed sources in tests.
 - `TimerPlugin`: a model with an injected clock for tests, a one-second tick that only runs while a timer is running, a ring pill that switches to an attention pill when a timer ends, state restored from `context.storageDirectory` in `activate()`, and a settings pane bound to the model whose changes are saved with `context.observe`.
+- `CalendarPlugin`: a system permission requested only on the user's click, a main-actor data source behind a protocol so tests use a stub, periodic reloads plus reloads when the screen becomes visible, a height derived from a list grouped into sections, and a time-based pill and announcement that recompute on an observable minute tick.
 - `AgentsPlugin`: a local server started in `activate()`, a pill and content size derived from its session store, a ring pill, announcements driven by `context.observe`, bundled resources (`Bundle.module`) and a large settings pane.
+- `GitHubPlugin`: running a command-line tool (`gh`) with `Process` off the main actor with a timeout, polling that speeds up while the screen is visible and backs off after failures, pausing while `NWPathMonitor` reports no network, a ring pill derived from the fetched data with a setting to hide it, announcements computed by a pure function that compares the previous and the new data, and a stubbed client in tests registered through `register(manifest:make:)`.
 
 ## Checklist for a new plugin
 
