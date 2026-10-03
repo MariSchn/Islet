@@ -264,5 +264,11 @@ final class TimerStoreTests {
         #expect(TimerFormat.clock(59.2) == "1:00")
         #expect(TimerFormat.clock(65) == "1:05")
         #expect(TimerFormat.clock(1500) == "25:00")
+        #expect(TimerFormat.countdown(1500) == "25:00")
+        #expect(TimerFormat.countdown(290.4) == "4:51")
+        #expect(TimerFormat.countdown(5400) == "1:30:00")
+        #expect(TimerFormat.elapsed(0) == "0:00")
+        #expect(TimerFormat.elapsed(59.9) == "0:59")
+        #expect(TimerFormat.elapsed(3725) == "1:02:05")
     }
 }

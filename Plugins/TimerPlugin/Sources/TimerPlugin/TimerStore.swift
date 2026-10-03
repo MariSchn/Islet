@@ -4,6 +4,14 @@ import Observation
 import os
 import SwiftUI
 
+enum TimerMode: String, CaseIterable, Identifiable {
+    case timers = "Timers"
+    case pomodoro = "Pomodoro"
+    case stopwatch = "Stopwatch"
+
+    var id: String { rawValue }
+}
+
 @MainActor
 @Observable
 final class TimerStore {
@@ -26,6 +34,7 @@ final class TimerStore {
     static let workTint = Color.Resolved(red: 1, green: 0.27, blue: 0.23)
     static let breakTint = Color.Resolved(red: 0.2, green: 0.78, blue: 0.35)
 
+    var mode = TimerMode.timers
     private(set) var timers: [CountdownTimer] = []
     private(set) var stopwatch = Stopwatch()
     private(set) var pomodoro: PomodoroState?
