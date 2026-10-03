@@ -199,6 +199,11 @@ final class MediaController {
         await perform { try await $0.setVolume(bounded) }
     }
 
+    func toggleFavorite() async {
+        guard capabilities.canFavorite, let nowPlaying else { return }
+        await perform { try await $0.setFavorite(!nowPlaying.isFavorite) }
+    }
+
     var capabilities: MediaCapabilities {
         source?.capabilities ?? .none
     }

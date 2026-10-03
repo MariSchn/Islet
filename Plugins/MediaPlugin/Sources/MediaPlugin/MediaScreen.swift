@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MediaScreen: View {
     let controller: MediaController
+    let outputs: AudioOutputs
 
     var body: some View {
         VStack(spacing: MediaPlugin.browserSpacing) {
@@ -17,7 +18,7 @@ struct MediaScreen: View {
 
     @ViewBuilder private var content: some View {
         if let nowPlaying = controller.nowPlaying {
-            NowPlayingView(nowPlaying: nowPlaying, controller: controller)
+            NowPlayingView(nowPlaying: nowPlaying, controller: controller, outputs: outputs)
         } else {
             VStack(spacing: 10) {
                 Image(systemName: "music.note")
@@ -79,6 +80,7 @@ private struct UnavailablePlayers: View {
 private struct NowPlayingView: View {
     let nowPlaying: NowPlaying
     let controller: MediaController
+    let outputs: AudioOutputs
     @State private var showsVolume = false
 
     private var tint: Color {
@@ -106,6 +108,14 @@ private struct NowPlayingView: View {
                                 .lineLimit(1)
                         }
                         Spacer(minLength: 0)
+                        if capabilities.canFavorite {
+                            ToggleButton(systemImage: nowPlaying.isFavorite ? "heart.fill" : "heart", isOn: nowPlaying.isFavorite, tint: tint, help: "Favorite") {
+                                await controller.toggleFavorite()
+                            }
+                        }
+                        if !outputs.devices.isEmpty {
+                            OutputMenu(outputs: outputs)
+                        }
                         if capabilities.canSetVolume {
                             ToggleButton(systemImage: "speaker.wave.2.fill", isOn: showsVolume, tint: tint, help: "Volume") {
                                 showsVolume.toggle()
@@ -151,6 +161,38 @@ private struct NowPlayingView: View {
                 }
             }
         }
+    }
+}
+
+private struct OutputMenu: View {
+    let outputs: AudioOutputs
+
+    var body: some View {
+        Menu {
+            ForEach(outputs.devices) { device in
+                Button {
+                    outputs.select(device)
+                } label: {
+                    if device.id == outputs.currentID {
+                        Label(device.name, systemImage: "checkmark")
+                    } else {
+                        Text(device.name)
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "hifispeaker.2.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.45))
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Output Device")
+        .accessibilityLabel("Output Device")
     }
 }
 

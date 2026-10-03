@@ -3,7 +3,7 @@ import Foundation
 struct MusicSource: MediaSource {
     let displayName = "Music"
     let bundleIdentifier = "com.apple.Music"
-    let capabilities = MediaCapabilities(canShuffle: true, repeatModes: [.off, .all, .one], canBrowsePlaylists: true, canSetVolume: true)
+    let capabilities = MediaCapabilities(canShuffle: true, repeatModes: [.off, .all, .one], canBrowsePlaylists: true, canSetVolume: true, canFavorite: true)
 
     private let runner = AppleScriptRunner()
     private let browsingRunner = AppleScriptRunner()
@@ -56,6 +56,10 @@ struct MusicSource: MediaSource {
         try await runner.run(Self.volumeScript(volume), cached: false)
     }
 
+    func setFavorite(_ favorite: Bool) async throws {
+        try await runner.run(Self.favoriteScript(favorite), cached: false)
+    }
+
     func playlists() async throws -> [MediaPlaylist] {
         try await browsingRunner.run(Self.playlistsScript) { Self.playlists(from: $0) }
     }
@@ -94,7 +98,11 @@ struct MusicSource: MediaSource {
         else
             set repeatMode to "off"
         end if
-        return {name of t, artist of t, album of t, persistent ID of t, player state is playing, player position, duration of t, shuffle enabled, repeatMode, sound volume}
+        set isFavorite to false
+        try
+            set isFavorite to favorited of t
+        end try
+        return {name of t, artist of t, album of t, persistent ID of t, player state is playing, player position, duration of t, shuffle enabled, repeatMode, sound volume, isFavorite}
         """)
     static let playPauseScript = script("playpause")
     static let nextTrackScript = script("next track")
@@ -132,6 +140,10 @@ struct MusicSource: MediaSource {
         script("set sound volume to \(volume)")
     }
 
+    static func favoriteScript(_ favorite: Bool) -> String {
+        script("set favorited of current track to \(favorite)")
+    }
+
     static func playScript(playlistID: String) -> String? {
         guard isPersistentID(playlistID) else { return nil }
         return script("play (first playlist whose persistent ID is \"\(playlistID)\")")
@@ -159,7 +171,7 @@ struct MusicSource: MediaSource {
     }
 
     static func track(from result: NSAppleEventDescriptor) -> NowPlaying? {
-        guard result.numberOfItems == 10 else { return nil }
+        guard result.numberOfItems == 11 else { return nil }
         return NowPlaying(
             title: result.atIndex(1)?.stringValue ?? "",
             artist: result.atIndex(2)?.stringValue ?? "",
@@ -170,7 +182,8 @@ struct MusicSource: MediaSource {
             duration: result.atIndex(7)?.doubleValue ?? 0,
             isShuffling: result.atIndex(8)?.booleanValue ?? false,
             repeatMode: result.atIndex(9)?.stringValue.flatMap(RepeatMode.init(rawValue:)) ?? .off,
-            volume: Int(result.atIndex(10)?.int32Value ?? 0)
+            volume: Int(result.atIndex(10)?.int32Value ?? 0),
+            isFavorite: result.atIndex(11)?.booleanValue ?? false
         )
     }
 

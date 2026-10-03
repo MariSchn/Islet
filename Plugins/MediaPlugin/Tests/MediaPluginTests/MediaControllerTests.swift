@@ -384,6 +384,31 @@ struct MediaControllerTests {
         #expect(controller.nowPlayingDate == fetched)
     }
 
+    @Test func toggleFavoriteCallsTheSourceWithTheInvertedValueAndRefreshes() async {
+        let source = StubSource(capabilities: MediaCapabilities(canFavorite: true))
+        let controller = MediaController(source: source)
+        await source.set(NowPlaying(title: "Song", artist: "Band", isPlaying: true, isFavorite: false))
+        await controller.refresh()
+
+        await controller.toggleFavorite()
+        #expect(controller.nowPlaying?.isFavorite == true)
+
+        await controller.toggleFavorite()
+        #expect(await source.commands == ["favorite(true)", "favorite(false)"])
+        #expect(controller.nowPlaying?.isFavorite == false)
+    }
+
+    @Test func toggleFavoriteIsIgnoredWhenUnsupported() async {
+        let source = StubSource()
+        let controller = MediaController(source: source)
+        await source.set(NowPlaying(title: "Song", artist: "Band", isPlaying: true))
+        await controller.refresh()
+
+        await controller.toggleFavorite()
+
+        #expect(await source.commands.isEmpty)
+    }
+
     @Test func setVolumeIsIgnoredWhenUnsupported() async {
         let source = StubSource()
         let controller = MediaController(source: source)
@@ -589,17 +614,22 @@ struct MusicParsingTests {
             NSAppleEventDescriptor(boolean: true),
             NSAppleEventDescriptor(string: "one"),
             NSAppleEventDescriptor(int32: 35),
+            NSAppleEventDescriptor(boolean: true),
         ])
 
         let track = try #require(MusicSource.track(from: list))
         let artworkURL = try #require(track.artworkURL)
 
         #expect(MusicSource.persistentID(fromArtworkURL: artworkURL) == "0A1B2C3D4E5F6789")
-        #expect(track == NowPlaying(title: "Song", artist: "Band", album: "Album", artworkURL: artworkURL, isPlaying: true, position: 30, duration: 241.5, isShuffling: true, repeatMode: .one, volume: 35))
+        #expect(track == NowPlaying(title: "Song", artist: "Band", album: "Album", artworkURL: artworkURL, isPlaying: true, position: 30, duration: 241.5, isShuffling: true, repeatMode: .one, volume: 35, isFavorite: true))
     }
 
     @Test func nineItemsAreRejected() {
         #expect(MusicSource.track(from: descriptorList((1...9).map { NSAppleEventDescriptor(string: "\($0)") })) == nil)
+    }
+
+    @Test func tenItemsAreRejected() {
+        #expect(MusicSource.track(from: descriptorList((1...10).map { NSAppleEventDescriptor(string: "\($0)") })) == nil)
     }
 
     @Test func artworkURLsOnlyCarryHexPersistentIDs() throws {
@@ -655,6 +685,7 @@ struct MusicParsingTests {
         let capabilities = MusicSource().capabilities
         #expect(capabilities.canShuffle)
         #expect(capabilities.canBrowsePlaylists)
+        #expect(capabilities.canFavorite)
         #expect(capabilities.repeatMode(after: .off) == .all)
         #expect(capabilities.repeatMode(after: .all) == .one)
         #expect(capabilities.repeatMode(after: .one) == .off)
@@ -694,6 +725,8 @@ struct AppleScriptCompilationTests {
             MusicSource.shuffleScript(true),
             MusicSource.shuffleScript(false),
             MusicSource.volumeScript(40),
+            MusicSource.favoriteScript(true),
+            MusicSource.favoriteScript(false),
             try #require(MusicSource.playScript(playlistID: "0A1B2C3D4E5F6789")),
         ] + RepeatMode.allCases.map(MusicSource.repeatScript)
         for script in scripts {
@@ -1013,6 +1046,10 @@ private struct StubSource: MediaSource {
     func setVolume(_ volume: Int) async throws {
         try await state.perform("volume(\(volume))")
         await state.update { $0.volume = volume }
+    }
+    func setFavorite(_ favorite: Bool) async throws {
+        try await state.perform("favorite(\(favorite))")
+        await state.update { $0.isFavorite = favorite }
     }
     func playlists() async throws -> [MediaPlaylist] { try await state.readPlaylists() }
     func play(_ playlist: MediaPlaylist) async throws { try await state.playPlaylist(playlist) }
