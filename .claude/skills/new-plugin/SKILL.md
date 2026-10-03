@@ -158,7 +158,7 @@ In `project.yml`:
 - under `targets.Islet.dependencies`: `- package: <Name>Plugin`
 - under `schemes.Islet.test.targets`: `- package: <Name>Plugin/<Name>PluginTests`
 
-In `App/AppDelegate.swift`, add `import <Name>Plugin` in alphabetical order and append `<Name>Plugin.self` to `builtInPlugins`. The list order is the tab order in the notch.
+In `App/AppDelegate.swift`, add `import <Name>Plugin` in alphabetical order and append `<Name>Plugin.self` to `builtInPlugins`. The list order is the default tab order in the notch; users can reorder the tabs in Settings › Plugins.
 
 If the plugin controls other apps through Apple events, check that `NSAppleEventsUsageDescription` in `project.yml` still describes why.
 

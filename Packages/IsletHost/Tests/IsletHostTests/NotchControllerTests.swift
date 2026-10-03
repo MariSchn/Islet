@@ -73,6 +73,111 @@ struct NotchControllerTests {
         }
     }
 
+    @Test func clickModeHoverOnlyHighlights() async throws {
+        let controller = makeController()
+        controller.settings.openTrigger = .click
+
+        controller.isHovering = true
+        #expect(controller.highlightsHoveredShape)
+        try await Task.sleep(for: settle)
+        #expect(!controller.isExpanded)
+        #expect(controller.highlightsHoveredShape)
+
+        controller.isHovering = false
+        #expect(!controller.highlightsHoveredShape)
+    }
+
+    @Test func clickModeClickExpandsAndLeavingCollapsesAfterDelay() async throws {
+        let controller = makeController()
+        controller.settings.openTrigger = .click
+        controller.isHovering = true
+
+        controller.clicked()
+        #expect(controller.isExpanded)
+        #expect(!controller.highlightsHoveredShape)
+
+        let leftAt = ContinuousClock.now
+        controller.isHovering = false
+        #expect(controller.isExpanded)
+        try await waitUntil { !controller.isExpanded }
+        #expect(ContinuousClock.now - leftAt >= collapseDelay)
+    }
+
+    @Test func clickModeFileDragStillExpands() async throws {
+        let controller = makeController()
+        controller.settings.openTrigger = .click
+
+        controller.isDragTargeted = true
+        #expect(controller.isExpanded)
+
+        controller.isDragTargeted = false
+        try await waitUntil { !controller.isExpanded }
+    }
+
+    @Test func hoverModeStillExpandsOnHoverWithoutHighlight() async throws {
+        let controller = makeController()
+        controller.settings.openTrigger = .hover
+
+        controller.isHovering = true
+        #expect(!controller.highlightsHoveredShape)
+        try await waitUntil { controller.isExpanded }
+
+        controller.isHovering = false
+        try await waitUntil { !controller.isExpanded }
+    }
+
+    @Test func pinnedExpansionSurvivesThePointerBeingElsewhere() async throws {
+        let controller = makeController()
+
+        controller.expandPinned()
+        #expect(controller.isExpanded)
+        #expect(controller.isPinned)
+
+        controller.isHovering = false
+        try await Task.sleep(for: settle)
+        #expect(controller.isExpanded)
+        #expect(controller.isPinned)
+    }
+
+    @Test func enteringAndLeavingUnpinsAndCollapses() async throws {
+        let controller = makeController()
+        controller.expandPinned()
+
+        controller.isHovering = true
+        #expect(controller.isPinned)
+        let leftAt = ContinuousClock.now
+        controller.isHovering = false
+        #expect(!controller.isPinned)
+        #expect(controller.isExpanded)
+        try await waitUntil { !controller.isExpanded }
+        #expect(ContinuousClock.now - leftAt >= collapseDelay)
+    }
+
+    @Test func pinningWhileHoveringCountsAsEntered() async throws {
+        let controller = makeController()
+        controller.settings.openTrigger = .click
+        controller.isHovering = true
+
+        controller.expandPinned()
+        controller.isHovering = false
+        #expect(!controller.isPinned)
+        try await waitUntil { !controller.isExpanded }
+    }
+
+    @Test func collapseClearsThePin() async throws {
+        let controller = makeController()
+        controller.expandPinned()
+
+        controller.collapse()
+        #expect(!controller.isExpanded)
+        #expect(!controller.isPinned)
+
+        controller.isHovering = true
+        controller.isHovering = false
+        try await Task.sleep(for: settle)
+        #expect(!controller.isExpanded)
+    }
+
     @Test func explicitCollapseCancelsPendingExpand() async throws {
         let controller = makeController()
 
@@ -437,6 +542,23 @@ struct NotchControllerTests {
         await Task.yield()
         #expect(controller.hoverHoldSize == largeSize)
         controller.collapse()
+        #expect(controller.hoverHoldSize == nil)
+    }
+
+    @Test func pinnedNotchDoesNotHoldTheHoverRegionWithoutThePointer() async throws {
+        let harness = Harness()
+        let registry = harness.makeRegistry()
+        let controller = NotchController(settings: AppSettings()) { CGPoint(x: 10_000, y: 10_000) }
+        controller.attach(registry)
+        let stub = try await harness.registerStub(in: registry)
+        let second = try await harness.registerSecond(in: registry)
+        stub.context.contentSize = CGSize(width: 800, height: 400)
+        second.context.contentSize = CGSize(width: 300, height: 100)
+        await Task.yield()
+
+        controller.expandPinned()
+        registry.select("test.second")
+        await Task.yield()
         #expect(controller.hoverHoldSize == nil)
     }
 

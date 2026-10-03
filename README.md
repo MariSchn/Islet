@@ -177,7 +177,7 @@ While collapsed, the notch grows a small pill next to the camera housing. Any pl
 
 ### 🍎 Feels like part of macOS
 
-- **Hover to open**, move away to close, with an adjustable delay. Swipe with two fingers to switch plugins.
+- **Hover, click or a keyboard shortcut to open**, move away to close, with an adjustable delay. Swipe with two fingers or use the arrow keys to switch plugins.
 - **Smooth ease-out animations** by default, or springs with adjustable bounce.
 - **Four sizes** for the expanded notch.
 - **Every display.** The built-in screen, the primary display, all displays or a specific monitor. Displays without a notch get a virtual one.

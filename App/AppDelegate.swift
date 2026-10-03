@@ -44,10 +44,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var registration: Task<Void, Never>?
     private lazy var settingsWindow = SettingsWindowController(settings: settings, registry: registry)
+    private lazy var hotKey = GlobalHotKey { [unowned self] in
+        displays.toggleNotch(at: NSEvent.mouseLocation)
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         displays.start()
         observeMenuBarIconSetting()
+        observeShortcutSetting()
         registration = Task { @MainActor in
             await registerBuiltInPlugins()
         }
@@ -95,6 +99,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } onChange: { [weak self] in
             Task { @MainActor in
                 self?.observeMenuBarIconSetting()
+            }
+        }
+    }
+
+    private func observeShortcutSetting() {
+        withObservationTracking {
+            hotKey.register(settings.openShortcut)
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.observeShortcutSetting()
             }
         }
     }
