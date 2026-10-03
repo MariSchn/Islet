@@ -676,12 +676,12 @@ struct ArtworkTests {
         let artwork = try #require(Artwork(data: data))
         let side = Artwork.thumbnailSide
         for x in [side / 4, side * 3 / 4] {
-            let pixel = try #require(pixel(of: artwork.image, x: x, y: side / 2))
-            #expect(pixel.red > 200 && pixel.green < 60 && pixel.blue < 60, "x \(x): \(pixel)")
+            let color = try #require(color(of: artwork.image, x: x, y: side / 2))
+            #expect(color.red > 200 && color.green < 60 && color.blue < 60, "x \(x): \(color)")
         }
     }
 
-    private func pixel(of image: CGImage, x: Int, y: Int) -> (red: UInt8, green: UInt8, blue: UInt8)? {
+    private func color(of image: CGImage, x: Int, y: Int) -> (red: UInt8, green: UInt8, blue: UInt8)? {
         var pixels = [UInt8](repeating: 0, count: image.width * image.height * 4)
         guard let context = CGContext(
             data: &pixels,
