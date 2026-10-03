@@ -2,7 +2,7 @@
 
 This walks through a small "Counter" plugin: a screen with a number and a button. Later pages extend it with a pill and settings.
 
-Requirements: Xcode 16+ and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`). Islet targets macOS 15 and Swift 6 (strict concurrency).
+Requirements: Xcode 26 or later and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`). Islet targets macOS 15 and Swift 6 (strict concurrency).
 
 ## 1. Create the package
 
