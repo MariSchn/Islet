@@ -199,6 +199,8 @@ struct HookInstallerTests {
         #expect(script.contains("127.0.0.1:7365/hook"))
         #expect(script.contains(#"-H "X-Islet-Terminal: $terminal""#))
         #expect(script.contains(#"-H "X-Islet-TTY: $tty""#))
+        #expect(script.contains(#"-H "X-Islet-Tmux: $TMUX""#))
+        #expect(script.contains(#"-H "X-Islet-Tmux-Pane: $TMUX_PANE""#))
         let permissions = try FileManager.default.attributesOfItem(atPath: installer.scriptURL.path)[.posixPermissions] as! Int
         #expect(permissions == 0o700)
         #expect(try String(contentsOf: installer.settingsURL, encoding: .utf8).contains("\"command\" : \"'/"))
@@ -315,5 +317,30 @@ struct HookInstallerTests {
         #expect(installer.needsUpgrade)
         try installer.install()
         #expect(installer.isInstalled)
+    }
+
+    @Test func scriptForwardsTheTmuxLocation() throws {
+        let installer = try makeInstaller()
+        try installer.install()
+        let capture = installer.directory.appending(path: "curl-call")
+        let fakeCurl = installer.directory.appending(path: "curl")
+        try "#!/bin/sh\nprintf '%s\\n' \"$@\" > '\(capture.path)'\n".write(to: fakeCurl, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeCurl.path)
+        let payload = #"{"session_id":"a","hook_event_name":"Stop"}"#
+        for (environment, expectedTmux, expectedPane) in [(["TMUX": "/tmp/tmux-501/default,1234,0", "TMUX_PANE": "%3"], "/tmp/tmux-501/default,1234,0", "%3"), ([:], "", "")] {
+            let process = Process()
+            process.executableURL = URL(filePath: "/bin/sh")
+            process.arguments = [installer.scriptURL.path]
+            process.environment = environment.merging(["PATH": installer.directory.path + ":/usr/bin:/bin"]) { $1 }
+            let input = Pipe()
+            process.standardInput = input
+            try process.run()
+            input.fileHandleForWriting.write(Data(payload.utf8))
+            try input.fileHandleForWriting.close()
+            process.waitUntilExit()
+            let call = try String(contentsOf: capture, encoding: .utf8).components(separatedBy: "\n")
+            #expect(call.contains("X-Islet-Tmux: \(expectedTmux)"))
+            #expect(call.contains("X-Islet-Tmux-Pane: \(expectedPane)"))
+        }
     }
 }

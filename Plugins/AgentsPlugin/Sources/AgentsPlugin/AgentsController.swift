@@ -88,6 +88,17 @@ final class AgentsController {
     }
 
     func showTerminal(for session: AgentSession) {
+        guard let tmux = session.tmux, !session.isRemote else {
+            activateTerminal(for: session)
+            return
+        }
+        Task {
+            if await InstalledTerminal.showTmuxPane(tmux) { return }
+            activateTerminal(for: session)
+        }
+    }
+
+    private func activateTerminal(for session: AgentSession) {
         terminal(for: session)?.activate(tty: session.isRemote ? nil : session.tty, cwd: session.isRemote ? nil : session.cwd)
     }
 
