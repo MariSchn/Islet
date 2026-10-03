@@ -28,6 +28,15 @@ struct CalendarSettings: View {
                 Section {
                     Toggle("Show all-day events", isOn: $controller.includesAllDay)
                 }
+                Section {
+                    Toggle("Show upcoming events in the closed notch", isOn: $controller.showsPill)
+                    Picker("Lead time", selection: $controller.leadMinutes) {
+                        ForEach(CalendarController.leadMinuteChoices, id: \.self) { minutes in
+                            Text("\(minutes) minutes").tag(minutes)
+                        }
+                    }
+                    .disabled(!controller.showsPill)
+                }
                 ForEach(accounts) { account in
                     Section(account.title.isEmpty ? "Other" : account.title) {
                         ForEach(account.calendars) { calendar in

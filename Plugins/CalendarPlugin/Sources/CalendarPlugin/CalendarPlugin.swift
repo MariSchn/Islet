@@ -26,6 +26,8 @@ public final class CalendarPlugin: IsletPlugin {
 
     static let calendarsKey = "calendars"
     static let includesAllDayKey = "includesAllDay"
+    static let leadMinutesKey = "leadMinutes"
+    static let showsPillKey = "showsPill"
 
     let controller: CalendarController
 
@@ -40,14 +42,24 @@ public final class CalendarPlugin: IsletPlugin {
             source: source,
             selectedCalendarIDs: stored.map(Set.init),
             includesAllDay: settings.value(forKey: Self.includesAllDayKey) ?? false,
+            leadMinutes: settings.value(forKey: Self.leadMinutesKey) ?? CalendarController.defaultLeadMinutes,
+            showsPill: settings.value(forKey: Self.showsPillKey) ?? true,
             now: now,
             calendar: calendar,
             logger: context.logger
         )
         self.controller = controller
         context.derive(\.contentSize) { Self.contentSize(for: controller.agenda) }
+        context.derive(\.pillStatus) { controller.pillStatus }
         context.observe({ controller.selectedCalendarIDs }) { settings.set($0.map { $0.sorted() }, forKey: Self.calendarsKey) }
         context.observe({ controller.includesAllDay }) { settings.set($0, forKey: Self.includesAllDayKey) }
+        context.observe({ controller.leadMinutes }) { settings.set($0, forKey: Self.leadMinutesKey) }
+        context.observe({ controller.showsPill }) { settings.set($0, forKey: Self.showsPillKey) }
+        context.observe({ controller.announcementCandidate }) { [unowned context] _ in
+            if let announcement = controller.takeAnnouncement() {
+                context.announce(announcement)
+            }
+        }
         context.observe({ [unowned context] in context.isScreenVisible }) { controller.isScreenVisible = $0 }
     }
 
