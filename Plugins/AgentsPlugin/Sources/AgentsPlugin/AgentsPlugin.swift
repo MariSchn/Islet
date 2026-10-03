@@ -102,6 +102,7 @@ public final class AgentsPlugin: IsletPlugin {
             alerts: Self.load(AlertSettings(), Self.alertKeys, from: settings),
             display: display,
             showsUsage: settings.value(forKey: Self.usageKey) ?? false,
+            storageDirectory: context.storageDirectory,
             logger: context.logger
         )
         self.controller = controller
@@ -131,6 +132,7 @@ public final class AgentsPlugin: IsletPlugin {
                 }
             }
             controller.interruptions.track(sessions)
+            controller.sessionsDidChange()
         }
     }
 

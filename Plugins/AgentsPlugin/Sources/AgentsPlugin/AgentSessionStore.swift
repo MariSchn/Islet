@@ -328,6 +328,30 @@ final class AgentSessionStore {
         }
     }
 
+    func snapshot() -> SessionSnapshot {
+        SessionSnapshot(sessions: sessions, hiddenSessions: Array(hiddenSessions.values))
+    }
+
+    func restore(_ snapshot: SessionSnapshot, isRunning: (Int32) -> Bool) {
+        func isAlive(_ session: AgentSession) -> Bool {
+            guard !session.isRemote else { return true }
+            guard let pid = session.pid else { return false }
+            return isRunning(pid)
+        }
+        func revived(_ session: AgentSession) -> AgentSession {
+            var session = session
+            session.pendingRequests = []
+            if case .needsAttention = session.state {
+                session.state = .needsAttention("Waiting for your answer in the terminal")
+            }
+            return session
+        }
+        sessions = snapshot.sessions.filter(isAlive).map(revived)
+        hiddenSessions = Dictionary(snapshot.hiddenSessions.filter(isAlive).map { ($0.id, revived($0)) }, uniquingKeysWith: { first, _ in first })
+        scheduleFinishedExpiry()
+        scheduleUnreachableCheck()
+    }
+
     func removeExitedSessions(isRunning: (Int32) -> Bool) {
         hiddenSessions = hiddenSessions.filter { _, session in
             guard !session.isRemote, let pid = session.pid else { return true }

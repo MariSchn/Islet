@@ -1,6 +1,6 @@
 import Foundation
 
-struct TerminalApp: Sendable, Equatable, Hashable {
+struct TerminalApp: Sendable, Equatable, Hashable, Codable {
     enum Targeting: Sendable {
         case terminalTab
         case iTermSession
