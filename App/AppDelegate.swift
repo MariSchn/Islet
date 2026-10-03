@@ -1,5 +1,6 @@
 import AgentsPlugin
 import AppKit
+import GitHubPlugin
 import CalendarPlugin
 import HelloPlugin
 import IsletCore
@@ -14,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ShelfPlugin.self,
         MediaPlugin.self,
         AgentsPlugin.self,
+        GitHubPlugin.self,
         CalendarPlugin.self,
     ] + examplePlugins
     #if DEBUG

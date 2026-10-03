@@ -17,6 +17,8 @@ packages:
     path: Plugins/MediaPlugin
   AgentsPlugin:
     path: Plugins/AgentsPlugin
+  GitHubPlugin:
+    path: Plugins/GitHubPlugin
   CalendarPlugin:
     path: Plugins/CalendarPlugin
 targets:
@@ -32,6 +34,7 @@ targets:
       - package: ShelfPlugin
       - package: MediaPlugin
       - package: AgentsPlugin
+      - package: GitHubPlugin
       - package: CalendarPlugin
     info:
       path: App/Info.plist
@@ -66,4 +69,5 @@ schemes:
         - package: ShelfPlugin/ShelfPluginTests
         - package: MediaPlugin/MediaPluginTests
         - package: AgentsPlugin/AgentsPluginTests
+        - package: GitHubPlugin/GitHubPluginTests
         - package: CalendarPlugin/CalendarPluginTests
