@@ -39,6 +39,9 @@ public final class AgentsPlugin: IsletPlugin {
 
     static func detailHeight(for session: AgentSession, historyLength: Int) -> CGFloat {
         var height = 2 * requestPadding
+        if session.details.costUSD != nil {
+            height += activityHeaderHeight + activityEntryHeight
+        }
         if session.plan != nil {
             height += activityHeaderHeight + planHeight + requestSpacing
         }
@@ -51,7 +54,7 @@ public final class AgentsPlugin: IsletPlugin {
         case .permission:
             return 2 * requestPadding + requestDetailHeight + requestSpacing + requestButtonHeight
         case .question(let questions):
-            let options = questions.map { CGFloat($0.options.count) * requestButtonHeight + CGFloat($0.options.count - 1) * requestSpacing + ($0.multiSelect ? requestSpacing + requestButtonHeight : 0) }
+            let options = questions.map { CGFloat($0.options.count + 1) * requestButtonHeight + CGFloat($0.options.count) * requestSpacing + ($0.multiSelect ? requestSpacing + requestButtonHeight : 0) }
             return 2 * requestPadding + questionDetailHeight + requestSpacing + (options.max() ?? 0)
         }
     }
@@ -99,6 +102,7 @@ public final class AgentsPlugin: IsletPlugin {
             alerts: Self.load(AlertSettings(), Self.alertKeys, from: settings),
             display: display,
             showsUsage: settings.value(forKey: Self.usageKey) ?? false,
+            storageDirectory: context.storageDirectory,
             logger: context.logger
         )
         self.controller = controller
@@ -112,18 +116,25 @@ public final class AgentsPlugin: IsletPlugin {
         }
         context.derive(\.pillStatus) { controller.store.pillStatus(for: controller.display) }
         context.derive(\.contentSize) {
-            Self.contentSize(for: controller.store.sessions, expanded: controller.expandedSessionIDs, showsUsage: controller.showsUsageBar, historyLength: controller.display.historyLength)
+            Self.contentSize(for: controller.store.orderedSessions, expanded: controller.expandedSessionIDs, showsUsage: controller.showsUsageBar, historyLength: controller.display.historyLength)
         }
         var announcer = StatusAnnouncer()
         var contextAlert = ContextAlert()
+        var reviewAlert = ReviewAlert()
         context.observe({ controller.store.sessions }) { [unowned context] sessions in
-            if let announcement = announcer.announcement(for: sessions), controller.shouldAnnounce(announcement) {
+            controller.pruneMutedSessions()
+            let muted = controller.mutedSessionIDs
+            if let announcement = announcer.announcement(for: sessions, muted: muted), controller.shouldAnnounce(announcement) {
                 context.announce(announcement)
             }
-            for announcement in contextAlert.announcements(for: sessions) where controller.alerts.announcesInNotch {
-                context.announce(announcement)
+            let detailsAnnouncements = contextAlert.announcements(for: sessions, muted: muted) + reviewAlert.announcements(for: sessions, muted: muted)
+            if controller.alerts.announcesInNotch {
+                for announcement in detailsAnnouncements {
+                    context.announce(announcement)
+                }
             }
             controller.interruptions.track(sessions)
+            controller.sessionsDidChange()
         }
     }
 
