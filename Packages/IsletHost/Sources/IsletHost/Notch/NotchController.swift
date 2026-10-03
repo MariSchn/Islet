@@ -40,6 +40,10 @@ public final class NotchController {
         }
     }
 
+    public var acceptsFileDrops: Bool {
+        registry?.preferredDropTarget != nil
+    }
+
     public var switchesToDropTargetOnDrag: Bool {
         get { settings.switchesToDropTargetOnDrag }
         set { settings.switchesToDropTargetOnDrag = newValue }

@@ -454,6 +454,21 @@ struct NotchControllerTests {
         #expect(!controller.navigate(.forward))
     }
 
+    @Test func acceptsFileDropsOnlyWhileAnEnabledPluginTakesThem() async throws {
+        let harness = Harness()
+        let registry = harness.makeRegistry()
+        let controller = makeController()
+        controller.attach(registry)
+        try await harness.registerStub(in: registry)
+        #expect(!controller.acceptsFileDrops)
+
+        try await harness.registerSecond(in: registry) { $0.acceptsFileDrops = true }
+        #expect(controller.acceptsFileDrops)
+
+        await registry.setEnabled(false, for: "test.second")
+        #expect(!controller.acceptsFileDrops)
+    }
+
     @Test func dragSwitchesToFirstDropAcceptingPluginUnlessDisabled() async throws {
         let harness = Harness()
         let registry = harness.makeRegistry()

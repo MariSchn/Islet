@@ -104,7 +104,7 @@ private final class NotchHostingView<Content: View>: NSHostingView<Content> {
     init(controller: NotchController, rootView: Content) {
         self.controller = controller
         super.init(rootView: rootView)
-        registerForDraggedTypes([.fileURL, .URL, .string, .tiff, .png])
+        registerForDraggedTypes([.fileURL])
     }
 
     @available(*, unavailable)
@@ -114,8 +114,14 @@ private final class NotchHostingView<Content: View>: NSHostingView<Content> {
     required init(rootView: Content) { fatalError("use init(controller:rootView:)") }
 
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        guard controller.acceptsFileDrops else { return [] }
         controller.isDragTargeted = true
         return super.draggingEntered(sender)
+    }
+
+    override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        guard controller.isDragTargeted else { return [] }
+        return super.draggingUpdated(sender)
     }
 
     override func draggingExited(_ sender: (any NSDraggingInfo)?) {
