@@ -26,6 +26,20 @@ struct ScriptsSettings: View {
                 Text("Requests need the token from the file as a bearer token. Regenerating it invalidates the old one.")
             }
             Section {
+                LabeledContent("islet command") {
+                    Button(controller.isCommandInstalled ? "Remove" : "Install command-line tool") {
+                        controller.isCommandInstalled ? controller.removeCommand() : controller.installCommand()
+                    }
+                }
+                if let error = controller.commandError {
+                    Text(error).foregroundStyle(.red)
+                }
+            } header: {
+                Text("Command-line tool")
+            } footer: {
+                Text("Installs \(controller.command.url.path). Make sure ~/.local/bin is in your PATH.")
+            }
+            Section {
                 Text(example)
                     .font(.system(size: 11, design: .monospaced))
                     .textSelection(.enabled)
