@@ -25,6 +25,7 @@ final class AgentsController {
         return display.visibleUsage(current)
     }
     var showsUsageBar: Bool { visibleUsage != nil }
+    var dailyCost: Double { usage.dailyCost }
 
     func shouldAnnounce(_ announcement: PillAnnouncement) -> Bool {
         alerts.announcesInNotch && (announcement.priority == .attention || display.pillShowsFinished)
@@ -55,6 +56,9 @@ final class AgentsController {
             await store.applyStatusLine(update)
             if let limits = update.usage {
                 await usage.receive(limits)
+            }
+            if let cost = update.details.costUSD {
+                await usage.record(sessionID: update.sessionID, cost: cost)
             }
         } handler: { event in
             await store.handle(event)

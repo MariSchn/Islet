@@ -67,4 +67,16 @@ struct AgentsPluginSizingTests {
         session.plan = "# Plan"
         #expect(AgentsPlugin.contentSize(for: [session], expanded: ["a"], showsUsage: false, historyLength: 8).height > withActivity)
     }
+
+    @Test func expandedRowsGrowWhenTheSessionHasACost() {
+        var session = AgentSession(id: "a", agent: .claudeCode, host: nil, cwd: nil, task: nil, activity: nil, state: .working, startedAt: .now, turnStartedAt: .now, updatedAt: .now)
+        let without = AgentsPlugin.detailHeight(for: session, historyLength: 8)
+        session.details.costUSD = 1.23
+        session.details.linesAdded = 120
+        session.details.linesRemoved = 45
+        session.details.duration = .seconds(42 * 60)
+        let withCost = AgentsPlugin.detailHeight(for: session, historyLength: 8)
+        #expect(withCost == without + AgentsPlugin.activityHeaderHeight + AgentsPlugin.activityEntryHeight)
+        #expect(session.details.sessionSummary == "$1.23 · +120 −45 · 42 min")
+    }
 }

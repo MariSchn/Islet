@@ -98,6 +98,26 @@ struct SessionDetails: Sendable, Equatable {
     var fastMode: Bool?
     var worktree: String?
     var pullRequest: PullRequest?
+    var costUSD: Double?
+    var linesAdded: Int?
+    var linesRemoved: Int?
+    var duration: Duration?
+
+    var sessionSummary: String? {
+        guard let costUSD else { return nil }
+        var parts = [Self.currency(costUSD)]
+        if linesAdded != nil || linesRemoved != nil {
+            parts.append("+\(linesAdded ?? 0) −\(linesRemoved ?? 0)")
+        }
+        if let duration {
+            parts.append(duration.formatted(.units(allowed: [.hours, .minutes])))
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    static func currency(_ amount: Double) -> String {
+        String(format: "$%.2f", locale: Locale(identifier: "en_US_POSIX"), amount)
+    }
 
     var badgeText: String? {
         let parts = [model, effort, fastMode == true ? "fast" : nil].compactMap { $0 }
@@ -112,7 +132,11 @@ struct SessionDetails: Sendable, Equatable {
             effort: update.effort ?? effort,
             fastMode: update.fastMode ?? fastMode,
             worktree: update.worktree,
-            pullRequest: update.pullRequest
+            pullRequest: update.pullRequest,
+            costUSD: update.costUSD ?? costUSD,
+            linesAdded: update.linesAdded ?? linesAdded,
+            linesRemoved: update.linesRemoved ?? linesRemoved,
+            duration: update.duration ?? duration
         )
     }
 

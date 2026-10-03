@@ -39,6 +39,9 @@ public final class AgentsPlugin: IsletPlugin {
 
     static func detailHeight(for session: AgentSession, historyLength: Int) -> CGFloat {
         var height = 2 * requestPadding
+        if session.details.costUSD != nil {
+            height += activityHeaderHeight + activityEntryHeight
+        }
         if session.plan != nil {
             height += activityHeaderHeight + planHeight + requestSpacing
         }

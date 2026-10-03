@@ -9,7 +9,7 @@ struct AgentsScreen: View {
     var body: some View {
         VStack(spacing: AgentsPlugin.rowSpacing) {
             if let usage = controller.visibleUsage {
-                UsageBar(usage: usage, showsResetTimes: controller.display.showsResetTimes)
+                UsageBar(usage: usage, showsResetTimes: controller.display.showsResetTimes, dailyCost: controller.dailyCost)
                     .frame(height: AgentsPlugin.usageBarHeight)
             }
             content
@@ -228,6 +228,15 @@ private struct ActivityView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            if let summary = session.details.sessionSummary {
+                SectionHeader("Session")
+                Text(summary)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(height: AgentsPlugin.activityEntryHeight)
+            }
             if let plan = session.plan {
                 SectionHeader("Plan")
                 ScrollView {
@@ -604,6 +613,7 @@ private struct Chip: View {
 private struct UsageBar: View {
     let usage: ClaudeUsage
     let showsResetTimes: Bool
+    let dailyCost: Double
 
     var body: some View {
         HStack(spacing: 8) {
@@ -620,6 +630,11 @@ private struct UsageBar: View {
                 UsageWindowView(label: "7d", window: window, showsResetTime: showsResetTimes)
             }
             Spacer(minLength: 0)
+            if dailyCost > 0 {
+                Text("\(SessionDetails.currency(dailyCost)) today")
+                    .foregroundStyle(.secondary)
+                    .help("Estimated at list price by Claude Code")
+            }
         }
         .font(.system(size: 11))
         .padding(.horizontal, AgentsPlugin.rowPadding)
