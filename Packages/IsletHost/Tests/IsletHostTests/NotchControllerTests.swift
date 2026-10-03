@@ -268,6 +268,30 @@ struct NotchControllerTests {
         #expect(controller.announcement == nil)
     }
 
+    @Test func hidesTheShapeOnlyWhileIdleAndNotAlwaysDrawn() async throws {
+        let harness = Harness()
+        let registry = harness.makeRegistry()
+        let controller = makeController()
+        controller.attach(registry)
+        let stub = try await harness.registerStub(in: registry)
+        #expect(controller.hidesIdleShape)
+
+        controller.settings.drawsIdleNotchShape = true
+        #expect(!controller.hidesIdleShape)
+        controller.settings.drawsIdleNotchShape = false
+        #expect(controller.hidesIdleShape)
+
+        stub.context.pillStatus = PillStatus(text: "song")
+        await Task.yield()
+        #expect(!controller.hidesIdleShape)
+
+        stub.context.pillStatus = nil
+        await Task.yield()
+        #expect(controller.hidesIdleShape)
+        controller.expand()
+        #expect(!controller.hidesIdleShape)
+    }
+
     @Test func lessImportantAnnouncementsWaitForMoreImportantOnes() async throws {
         let harness = Harness()
         let registry = harness.makeRegistry()
@@ -436,3 +460,4 @@ struct NotchControllerTests {
         #expect(registry.selectedID == "test.stub")
     }
 }
+

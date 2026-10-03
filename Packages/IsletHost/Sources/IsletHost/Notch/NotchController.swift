@@ -64,6 +64,10 @@ public final class NotchController {
         return Self.union(hoverHoldSize, expandedShapeSize)
     }
 
+    public var hidesIdleShape: Bool {
+        !isExpanded && pill == nil && announcement == nil && !settings.drawsIdleNotchShape
+    }
+
     public var navigationSideWidth: CGFloat {
         geometry.navigationSideWidth(for: contentSize)
     }

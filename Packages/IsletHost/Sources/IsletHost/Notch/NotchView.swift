@@ -49,16 +49,12 @@ public struct NotchView<Content: View>: View {
         NotchShape(bottomRadius: controller.isExpanded ? 24 : controller.announcement == nil ? 12 : 18)
     }
 
-    private var isIdle: Bool {
-        !controller.isExpanded && controller.pill == nil && controller.announcement == nil
-    }
-
     private var fillOpacity: Double {
         isShapeHidden ? hitTestableInvisibleOpacity : 1
     }
 
     private func updateShapeVisibility() async {
-        let shouldHide = isIdle && !controller.settings.drawsIdleNotchShape
+        let shouldHide = controller.hidesIdleShape
         if shouldHide {
             try? await Task.sleep(for: .seconds(controller.animation.collapseDuration))
             guard !Task.isCancelled else { return }
@@ -72,7 +68,7 @@ public struct NotchView<Content: View>: View {
                 shape.fill(.black)
                     .opacity(fillOpacity)
                     .animation(nil, value: fillOpacity)
-                    .task(id: isIdle || controller.settings.drawsIdleNotchShape) {
+                    .task(id: controller.hidesIdleShape) {
                         await updateShapeVisibility()
                     }
                 if controller.isExpanded {
