@@ -8,6 +8,7 @@ import IsletHost
 import MediaPlugin
 import os
 import ShelfPlugin
+import TimerPlugin
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -15,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ShelfPlugin.self,
         MediaPlugin.self,
         AgentsPlugin.self,
+        TimerPlugin.self,
         GitHubPlugin.self,
         CalendarPlugin.self,
     ] + examplePlugins
