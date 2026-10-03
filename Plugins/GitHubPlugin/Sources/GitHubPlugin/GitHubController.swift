@@ -1,4 +1,5 @@
 import Foundation
+import IsletCore
 import Network
 import Observation
 import os
@@ -34,6 +35,7 @@ enum NetworkStatus {
 final class GitHubController {
     private(set) var phase: GitHubPhase = .loading
     private(set) var isOnline = true
+    var showsPill: Bool
     var isScreenVisible = false {
         didSet {
             guard isScreenVisible, !oldValue else { return }
@@ -54,14 +56,21 @@ final class GitHubController {
 
     init(
         client: any GitHubClient,
+        showsPill: Bool = true,
         networkUpdates: @escaping NetworkUpdates = NetworkStatus.updates,
         now: @escaping @MainActor () -> Date = { .now },
         logger: Logger = Logger(subsystem: "Islet", category: "islet.github")
     ) {
         self.client = client
+        self.showsPill = showsPill
         self.networkUpdates = networkUpdates
         self.now = now
         self.logger = logger
+    }
+
+    var pillStatus: PillStatus? {
+        guard showsPill, let snapshot = phase.snapshot else { return nil }
+        return GitHubPill.status(for: snapshot)
     }
 
     var pollInterval: Duration {

@@ -21,8 +21,8 @@ struct GitHubSnapshot: Sendable, Equatable {
             throw GitHubError.failed(response.errors?.first?.message ?? "GitHub returned no data.")
         }
         return GitHubSnapshot(
-            mine: data.mine.nodes.compactMap(\.pullRequest),
-            reviewRequested: data.review.nodes.compactMap(\.pullRequest)
+            mine: data.mine.nodes.compactMap { $0?.pullRequest },
+            reviewRequested: data.review.nodes.compactMap { $0?.pullRequest }
         )
     }
 
@@ -41,7 +41,7 @@ struct GitHubSnapshot: Sendable, Equatable {
     }
 
     private struct Search: Decodable {
-        var nodes: [Node]
+        var nodes: [Node?]
     }
 
     private struct Node: Decodable {
@@ -53,6 +53,7 @@ struct GitHubSnapshot: Sendable, Equatable {
         var updatedAt: Date?
         var author: Login?
         var repository: Repository?
+        var commits: Commits?
 
         var pullRequest: PullRequest? {
             guard let number, let title, let url, let updatedAt, let repository else { return nil }
@@ -64,7 +65,8 @@ struct GitHubSnapshot: Sendable, Equatable {
                 isDraft: isDraft ?? false,
                 reviewDecision: reviewDecision.flatMap(ReviewDecision.init(rawValue:)),
                 author: author?.login,
-                updatedAt: updatedAt
+                updatedAt: updatedAt,
+                checks: commits?.nodes.last??.commit.statusCheckRollup.flatMap { CheckStatus(rollupState: $0.state) }
             )
         }
     }
@@ -75,6 +77,22 @@ struct GitHubSnapshot: Sendable, Equatable {
 
     private struct Repository: Decodable {
         var nameWithOwner: String
+    }
+
+    private struct Commits: Decodable {
+        var nodes: [CommitNode?]
+    }
+
+    private struct CommitNode: Decodable {
+        var commit: Commit
+    }
+
+    private struct Commit: Decodable {
+        var statusCheckRollup: Rollup?
+    }
+
+    private struct Rollup: Decodable {
+        var state: String
     }
 }
 
@@ -87,6 +105,7 @@ struct PullRequest: Sendable, Equatable, Identifiable {
     var reviewDecision: ReviewDecision?
     var author: String?
     var updatedAt: Date
+    var checks: CheckStatus?
 
     var id: URL { url }
 
@@ -101,6 +120,21 @@ struct PullRequest: Sendable, Equatable, Identifiable {
         case .changesRequested: return .changesRequested
         case .reviewRequired: return .reviewRequired
         case nil: return nil
+        }
+    }
+}
+
+enum CheckStatus: Sendable {
+    case passing
+    case failing
+    case pending
+
+    init?(rollupState: String) {
+        switch rollupState {
+        case "SUCCESS": self = .passing
+        case "FAILURE", "ERROR": self = .failing
+        case "PENDING", "EXPECTED": self = .pending
+        default: return nil
         }
     }
 }

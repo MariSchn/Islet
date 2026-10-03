@@ -136,7 +136,8 @@ A control centre for your coding agents. Islet installs lightweight hooks for **
 
 ### 🐙 GitHub
 
-- Your open pull requests and the ones waiting for your review, newest first, each with its review state.
+- Your open pull requests and the ones waiting for your review, newest first, each with its review state and CI status.
+- The collapsed notch shows a ring with the CI state of your pull requests, and turns orange when checks fail or someone requests your review.
 - Click a pull request to open it in the browser.
 - Talks to GitHub only through the [GitHub CLI](https://cli.github.com) (`gh`), which keeps its own login. Refreshes every two minutes, every minute while you look at it, and pauses while you are offline.
 

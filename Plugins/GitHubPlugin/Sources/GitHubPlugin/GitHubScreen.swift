@@ -120,6 +120,9 @@ private struct PullRequestRow: View {
                 if showsReview, let chip = pullRequest.reviewChip {
                     ReviewChipView(chip: chip)
                 }
+                if showsReview, let checks = pullRequest.checks {
+                    CheckStatusIcon(status: checks)
+                }
             }
             .padding(.horizontal, 6)
             .frame(height: GitHubPlugin.rowHeight)
@@ -129,6 +132,41 @@ private struct PullRequestRow: View {
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
         .help(pullRequest.url.absoluteString)
+    }
+}
+
+private struct CheckStatusIcon: View {
+    let status: CheckStatus
+
+    var body: some View {
+        Image(systemName: symbol)
+            .foregroundStyle(color)
+            .help(label)
+            .accessibilityLabel(label)
+    }
+
+    private var symbol: String {
+        switch status {
+        case .passing: "checkmark.circle.fill"
+        case .failing: "xmark.circle.fill"
+        case .pending: "circle.dotted"
+        }
+    }
+
+    private var color: Color {
+        switch status {
+        case .passing: .green
+        case .failing: .red
+        case .pending: .yellow
+        }
+    }
+
+    private var label: String {
+        switch status {
+        case .passing: "Checks passed"
+        case .failing: "Checks failed"
+        case .pending: "Checks running"
+        }
     }
 }
 

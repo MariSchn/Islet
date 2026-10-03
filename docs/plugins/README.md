@@ -29,7 +29,7 @@ All built-in plugins live in `Plugins/` and use only the public `IsletCore` API,
 - `ShelfPlugin`: file drops (`acceptsFileDrops`), state that persists as JSON in `context.storageDirectory`, a width derived from the number of items, and logging through `context.logger`.
 - `MediaPlugin`: polling in `activate()`/`deactivate()` that slows down while its screen is hidden (`context.isScreenVisible`), a derived pill with artwork and tint, interchangeable data sources with per-source capabilities, a height that grows while a list is open, and stubbed sources in tests.
 - `AgentsPlugin`: a local server started in `activate()`, a pill and content size derived from its session store, a ring pill, announcements driven by `context.observe`, bundled resources (`Bundle.module`) and a large settings pane.
-- `GitHubPlugin`: running a command-line tool (`gh`) with `Process` off the main actor with a timeout, polling that speeds up while the screen is visible and backs off after failures, pausing while `NWPathMonitor` reports no network, and a stubbed client in tests registered through `register(manifest:make:)`.
+- `GitHubPlugin`: running a command-line tool (`gh`) with `Process` off the main actor with a timeout, polling that speeds up while the screen is visible and backs off after failures, pausing while `NWPathMonitor` reports no network, a ring pill derived from the fetched data with a setting to hide it, and a stubbed client in tests registered through `register(manifest:make:)`.
 
 ## Checklist for a new plugin
 
