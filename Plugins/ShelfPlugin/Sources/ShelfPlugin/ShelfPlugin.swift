@@ -66,7 +66,9 @@ public final class ShelfPlugin: IsletPlugin {
         AnyView(ShelfSettings(store: store))
     }
 
-    public var acceptedDropTypes: [UTType] { [.fileURL] }
+    public var acceptedDropTypes: [UTType] { Self.acceptedTypes }
+
+    static let acceptedTypes: [UTType] = [.fileURL, .url, .image, .plainText]
 }
 
 private struct ShelfSettings: View {
