@@ -96,13 +96,13 @@ Every plugin receives a `PluginContext`, its single connection to the host:
 
 ### 💡 Ideas for your notch
 
-Pomodoro timer · next meeting from your calendar · CI and pull request status · system stats · clipboard history · smart home toggles · build progress for your dev server · a quick translator · stock or crypto ticker · world clocks for a remote team
+Pomodoro timer · next meeting from your calendar · CI and pull request status · clipboard history · smart home toggles · build progress for your dev server · a quick translator · stock or crypto ticker · world clocks for a remote team
 
 <br>
 
 ## 🎁 Built-in plugins
 
-Islet comes with three ready-made plugins, plus the minimal Hello example in Debug builds. They are ordinary plugins built on the same API as yours: use them as they are, switch off the ones you don't need, or read their source as examples.
+Islet comes with four ready-made plugins, plus the minimal Hello example in Debug builds. They are ordinary plugins built on the same API as yours: use them as they are, switch off the ones you don't need, or read their source as examples.
 
 ### 🤖 Agents
 
@@ -133,6 +133,12 @@ A control centre for your coding agents. Islet installs lightweight hooks for **
 - Drag files onto the notch and Islet switches to the Shelf automatically.
 - Drag them back out into any app, open them or reveal them in Finder.
 - The Shelf survives restarts and dims files that were moved or deleted.
+
+### 📊 System
+
+- CPU, memory (with memory pressure) and network at a glance, each with a graph of its recent values, plus free disk space and the battery.
+- The three processes using the most CPU right now.
+- Choose which rows to show under **Settings › System**. Samples every second while the screen is open and every five seconds otherwise.
 
 <br>
 
@@ -197,6 +203,7 @@ flowchart LR
         agents["Agents"]
         media["Media"]
         shelf["Shelf"]
+        system["System"]
     end
     core["<b>IsletCore</b><br/>plugin API · registry<br/>pill · settings store"]
     host["<b>IsletHost</b><br/>notch windows · animations<br/>settings · displays"]
