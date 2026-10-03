@@ -1,10 +1,11 @@
 import Foundation
 
-struct TerminalApp: Sendable, Equatable, Hashable {
+struct TerminalApp: Sendable, Equatable, Hashable, Codable {
     enum Targeting: Sendable {
         case terminalTab
         case iTermSession
         case editorFolder
+        case wezTermPane
         case application
     }
 
@@ -41,6 +42,7 @@ struct TerminalApp: Sendable, Equatable, Hashable {
         switch bundleIdentifier {
         case "com.apple.Terminal": .terminalTab
         case "com.googlecode.iterm2": .iTermSession
+        case "com.github.wez.wezterm": .wezTermPane
         case _ where Self.editors.contains(bundleIdentifier): .editorFolder
         default: .application
         }

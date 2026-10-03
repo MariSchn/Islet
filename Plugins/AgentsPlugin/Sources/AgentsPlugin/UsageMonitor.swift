@@ -49,18 +49,35 @@ final class UsageMonitor {
     var isEnabled: Bool
     private var latest: ClaudeUsage?
     private var expiries = 0
+    @ObservationIgnored private var costs = CostTracker()
+    private var costTick = 0
     @ObservationIgnored private var expiryTask: Task<Void, Never>?
+    @ObservationIgnored private var costResetTask: Task<Void, Never>?
     @ObservationIgnored private let now: () -> Date
+    @ObservationIgnored private let calendar: Calendar
 
-    init(isEnabled: Bool = false, now: @escaping () -> Date = Date.init) {
+    init(isEnabled: Bool = false, now: @escaping () -> Date = Date.init, calendar: Calendar = .current) {
         self.isEnabled = isEnabled
         self.now = now
+        self.calendar = calendar
+        costs = CostTracker(calendar: calendar)
     }
 
     var usage: ClaudeUsage? {
         _ = expiries
         guard let current = latest?.current(at: now()), !current.isEmpty else { return nil }
         return current
+    }
+
+    var dailyCost: Double {
+        _ = costTick
+        return costs.total(at: now())
+    }
+
+    func record(sessionID: String, cost: Double) {
+        costs.record(sessionID: sessionID, cost: cost, at: now())
+        costTick += 1
+        scheduleCostReset()
     }
 
     func receive(_ usage: ClaudeUsage) {
@@ -89,6 +106,19 @@ final class UsageMonitor {
             guard !Task.isCancelled, let self else { return }
             expiries += 1
             scheduleExpiry()
+        }
+    }
+
+    private func scheduleCostReset() {
+        costResetTask?.cancel()
+        let date = now()
+        let start = calendar.startOfDay(for: date)
+        guard let next = calendar.date(byAdding: .day, value: 1, to: start) else { return }
+        costResetTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(next.timeIntervalSince(date) + 1))
+            guard !Task.isCancelled, let self else { return }
+            costTick += 1
+            scheduleCostReset()
         }
     }
 }

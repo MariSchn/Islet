@@ -3,7 +3,7 @@ import Foundation
 struct SpotifySource: MediaSource {
     let displayName = "Spotify"
     let bundleIdentifier = "com.spotify.client"
-    let capabilities = MediaCapabilities(canShuffle: true, repeatModes: [.off, .all])
+    let capabilities = MediaCapabilities(canShuffle: true, repeatModes: [.off, .all], canSetVolume: true)
 
     private let runner = AppleScriptRunner()
 
@@ -50,10 +50,14 @@ struct SpotifySource: MediaSource {
         try await runner.run(Self.repeatScript(mode))
     }
 
+    func setVolume(_ volume: Int) async throws {
+        try await runner.run(Self.volumeScript(volume), cached: false)
+    }
+
     static let nowPlayingScript = script("""
         if player state is stopped then return {}
         set t to current track
-        return {name of t, artist of t, album of t, artwork url of t, player state is playing, player position, duration of t, shuffling, repeating}
+        return {name of t, artist of t, album of t, artwork url of t, player state is playing, player position, duration of t, shuffling, repeating, sound volume}
         """)
     static let playPauseScript = script("playpause")
     static let nextTrackScript = script("next track")
@@ -71,12 +75,16 @@ struct SpotifySource: MediaSource {
         script("set repeating to \(mode != .off)")
     }
 
+    static func volumeScript(_ volume: Int) -> String {
+        script("set sound volume to \(volume)")
+    }
+
     static func script(_ body: String) -> String {
         AppleScript.tell("Spotify", body)
     }
 
     static func nowPlaying(from result: NSAppleEventDescriptor) -> NowPlaying? {
-        guard result.numberOfItems == 9 else { return nil }
+        guard result.numberOfItems == 10 else { return nil }
         return NowPlaying(
             title: result.atIndex(1)?.stringValue ?? "",
             artist: result.atIndex(2)?.stringValue ?? "",
@@ -86,7 +94,8 @@ struct SpotifySource: MediaSource {
             position: result.atIndex(6)?.doubleValue ?? 0,
             duration: Double(result.atIndex(7)?.int32Value ?? 0) / 1000,
             isShuffling: result.atIndex(8)?.booleanValue ?? false,
-            repeatMode: result.atIndex(9)?.booleanValue == true ? .all : .off
+            repeatMode: result.atIndex(9)?.booleanValue == true ? .all : .off,
+            volume: Int(result.atIndex(10)?.int32Value ?? 0)
         )
     }
 }

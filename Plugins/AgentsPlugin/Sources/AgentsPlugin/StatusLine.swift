@@ -4,6 +4,7 @@ struct StatusLineUpdate: Sendable, Equatable {
     var sessionID: String
     var sessionName: String?
     var usage: ClaudeUsage?
+    var details = SessionDetails()
 
     struct Invalid: Error {}
 
@@ -15,7 +16,74 @@ struct StatusLineUpdate: Sendable, Equatable {
         let usage = (object["rate_limits"] as? [String: Any]).map { limits in
             ClaudeUsage(fiveHour: window(limits["five_hour"]), sevenDay: window(limits["seven_day"]))
         }
-        return StatusLineUpdate(sessionID: sessionID, sessionName: name, usage: usage)
+        return StatusLineUpdate(sessionID: sessionID, sessionName: name, usage: usage, details: details(from: object))
+    }
+
+    private static func details(from object: [String: Any]) -> SessionDetails {
+        let context = object["context_window"] as? [String: Any]
+        let model = object["model"] as? [String: Any]
+        let effort = object["effort"] as? [String: Any]
+        return SessionDetails(
+            contextPercentage: double(context?["used_percentage"]),
+            model: string(model?["display_name"]),
+            effort: string(effort?["level"]),
+            fastMode: object["fast_mode"] as? Bool,
+            worktree: worktree(from: object),
+            pullRequest: pullRequest(from: object),
+            costUSD: costUSD(from: object),
+            linesAdded: linesAdded(from: object),
+            linesRemoved: linesRemoved(from: object),
+            duration: duration(from: object)
+        )
+    }
+
+    private static func costObject(_ object: [String: Any]) -> [String: Any]? {
+        object["cost"] as? [String: Any]
+    }
+
+    private static func costUSD(from object: [String: Any]) -> Double? {
+        double(costObject(object)?["total_cost_usd"])
+    }
+
+    private static func linesAdded(from object: [String: Any]) -> Int? {
+        integer(costObject(object)?["total_lines_added"])
+    }
+
+    private static func linesRemoved(from object: [String: Any]) -> Int? {
+        integer(costObject(object)?["total_lines_removed"])
+    }
+
+    private static func duration(from object: [String: Any]) -> Duration? {
+        double(costObject(object)?["total_duration_ms"]).map { Duration.milliseconds($0) }
+    }
+
+    private static func worktree(from object: [String: Any]) -> String? {
+        if let name = string((object["worktree"] as? [String: Any])?["name"]) { return name }
+        return string((object["workspace"] as? [String: Any])?["git_worktree"])
+    }
+
+    private static func pullRequest(from object: [String: Any]) -> SessionDetails.PullRequest? {
+        guard let pr = object["pr"] as? [String: Any], let number = integer(pr["number"]) else { return nil }
+        return SessionDetails.PullRequest(
+            number: number,
+            url: string(pr["url"]),
+            reviewState: string(pr["review_state"]),
+            isMergeRequest: (pr["kind"] as? String) == "mr"
+        )
+    }
+
+    private static func integer(_ value: Any?) -> Int? {
+        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        return number.intValue
+    }
+
+    private static func string(_ value: Any?) -> String? {
+        (value as? String).flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    private static func double(_ value: Any?) -> Double? {
+        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        return number.doubleValue
     }
 
     private static func window(_ value: Any?) -> UsageWindow? {
