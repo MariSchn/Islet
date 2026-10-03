@@ -275,10 +275,15 @@ struct NotchSettingsView: View {
                     }
                 }
                 .pickerStyle(.segmented)
+                Picker("Shortcut", selection: $settings.openShortcut) {
+                    ForEach(NotchShortcut.allCases) { shortcut in
+                        Text(shortcut.displayName).tag(shortcut)
+                    }
+                }
             } header: {
                 Text("Opening")
             } footer: {
-                Text("With Click, hovering only highlights the notch.")
+                Text("With Click, hovering only highlights the notch. The shortcut opens the notch on the display with the pointer from any app; ← and → switch plugins and Esc closes it.")
             }
             Section {
                 Toggle("Always draw the notch shape", isOn: $settings.drawsIdleNotchShape)

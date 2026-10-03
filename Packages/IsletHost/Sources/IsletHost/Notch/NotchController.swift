@@ -17,6 +17,7 @@ public final class NotchController {
             }
             if !isExpanded {
                 hoverHoldSize = nil
+                isPinned = false
             } else {
                 dismissAnnouncement()
                 if !oldValue, let pillOwnerID {
@@ -28,8 +29,28 @@ public final class NotchController {
     public private(set) var announcement: PillAnnouncement?
     public var announcementDuration: Duration = .seconds(4)
     public private(set) var hoverHoldSize: CGSize?
+    public private(set) var isPinned = false {
+        didSet {
+            guard isPinned != oldValue else { return }
+            if isPinned {
+                installOutsideClickMonitor()
+            } else {
+                pointerEnteredWhilePinned = false
+                removeOutsideClickMonitor()
+            }
+        }
+    }
     public var isHovering = false {
-        didSet { scheduleHoverUpdate() }
+        didSet {
+            if isPinned {
+                if isHovering {
+                    pointerEnteredWhilePinned = true
+                } else if pointerEnteredWhilePinned {
+                    isPinned = false
+                }
+            }
+            scheduleHoverUpdate()
+        }
     }
     public var isDragTargeted = false {
         didSet {
@@ -93,6 +114,8 @@ public final class NotchController {
     @ObservationIgnored private var pillOwnerID: String?
     @ObservationIgnored private var trackedExpandedShapeSize: CGSize = .zero
     @ObservationIgnored private let pointerLocation: @MainActor () -> CGPoint
+    @ObservationIgnored private var pointerEnteredWhilePinned = false
+    @ObservationIgnored nonisolated(unsafe) private var outsideClickMonitor: Any?
 
     public init(
         settings: AppSettings,
@@ -102,6 +125,12 @@ public final class NotchController {
         self.settings = settings
         self.screenGeometry = geometry
         self.pointerLocation = pointerLocation
+    }
+
+    deinit {
+        if let outsideClickMonitor {
+            NSEvent.removeMonitor(outsideClickMonitor)
+        }
     }
 
     public func update(geometry: NotchGeometry) {
@@ -160,7 +189,7 @@ public final class NotchController {
     }
 
     private func holdHoverRegionIfShapeLeftPointer(previousSize: CGSize) {
-        guard isExpanded, previousSize != expandedShapeSize else { return }
+        guard isExpanded, isHovering, previousSize != expandedShapeSize else { return }
         if isPointerInsideExpandedShape {
             hoverHoldSize = nil
         } else {
@@ -197,6 +226,13 @@ public final class NotchController {
         isExpanded = true
     }
 
+    public func expandPinned() {
+        hoverTask?.cancel()
+        isPinned = true
+        pointerEnteredWhilePinned = isHovering
+        isExpanded = true
+    }
+
     public func clicked() {
         guard !isExpanded else { return }
         expand()
@@ -208,7 +244,22 @@ public final class NotchController {
     }
 
     private var wantsExpansion: Bool {
-        isHovering || isDragTargeted
+        isHovering || isDragTargeted || isPinned
+    }
+
+    private func installOutsideClickMonitor() {
+        guard outsideClickMonitor == nil else { return }
+        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.collapse()
+            }
+        }
+    }
+
+    private func removeOutsideClickMonitor() {
+        guard let outsideClickMonitor else { return }
+        NSEvent.removeMonitor(outsideClickMonitor)
+        self.outsideClickMonitor = nil
     }
 
     private func scheduleHoverUpdate() {

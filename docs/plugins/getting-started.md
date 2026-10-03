@@ -137,7 +137,7 @@ pkill -x Islet; sleep 1; open DerivedData/Build/Products/Debug/Islet.app
 
 You can also open `Islet.xcodeproj` and run the `Islet` scheme. Re-run `xcodegen generate` whenever you change `project.yml`. Files inside the package are picked up by SwiftPM without regenerating.
 
-Hover over the notch to expand it (or click it, when Settings › Notch › Open on is set to Click), then click the plugin's icon in the left part of the navigation row, or swipe horizontally with two fingers to switch between plugins. Swipes over a horizontally scrollable `ScrollView` whose content is wider than the view scroll it instead of switching plugins.
+Hover over the notch to expand it (or click it, when Settings › Notch › Open on is set to Click, or press the shortcut chosen there), then click the plugin's icon in the left part of the navigation row, or swipe horizontally with two fingers to switch between plugins. After opening the notch with the shortcut, the Left and Right arrow keys switch plugins and Escape closes it; arrow keys typed into a text field stay with the text field. Swipes over a horizontally scrollable `ScrollView` whose content is wider than the view scroll it instead of switching plugins.
 
 ## Next steps
 
