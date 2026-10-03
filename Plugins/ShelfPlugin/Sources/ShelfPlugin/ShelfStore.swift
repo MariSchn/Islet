@@ -7,6 +7,7 @@ import os
 final class ShelfStore {
     private(set) var items: [ShelfItem] = []
     var copyMode: ShelfCopyMode = .never
+    var showsCountPill = false
 
     private let directory: URL
     private let fileURL: URL
