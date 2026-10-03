@@ -14,19 +14,25 @@ final class ScriptsController {
     let tokenFile: URL
     private(set) var token: String
     private(set) var serverError: String?
+    private(set) var isCommandInstalled = false
+    private(set) var commandError: String?
+    let command: IsletCommand
 
     @ObservationIgnored private let api: ScriptsAPI
     @ObservationIgnored private let server: LocalHTTPServer
     @ObservationIgnored private let saveToken: @MainActor (String) -> Void
     @ObservationIgnored private let logger: Logger
 
-    init(token: String, storageDirectory: URL, port: UInt16 = ScriptsController.defaultPort, store: ScriptActivityStore = ScriptActivityStore(), announce: @escaping @MainActor (PillAnnouncement) -> Void, saveToken: @escaping @MainActor (String) -> Void, logger: Logger = Logger()) {
+    init(token: String, storageDirectory: URL, port: UInt16 = ScriptsController.defaultPort, commandDirectory: URL? = nil, store: ScriptActivityStore = ScriptActivityStore(), announce: @escaping @MainActor (PillAnnouncement) -> Void, saveToken: @escaping @MainActor (String) -> Void, logger: Logger = Logger()) {
         self.token = token
         self.port = port
         self.store = store
         self.saveToken = saveToken
         self.logger = logger
-        tokenFile = storageDirectory.appending(path: Self.tokenFileName)
+        let tokenFile = storageDirectory.appending(path: Self.tokenFileName)
+        self.tokenFile = tokenFile
+        command = commandDirectory.map { IsletCommand(port: port, tokenFile: tokenFile, directory: $0) } ?? IsletCommand(port: port, tokenFile: tokenFile)
+        isCommandInstalled = command.isInstalled
         api = ScriptsAPI(token: token, store: store, announce: announce)
         server = LocalHTTPServer(port: port)
     }
@@ -53,6 +59,26 @@ final class ScriptsController {
         api.isAccepting = false
         await server.stop()
         store.removeAll()
+    }
+
+    func installCommand() {
+        do {
+            try command.install()
+            commandError = nil
+        } catch {
+            commandError = error.localizedDescription
+        }
+        isCommandInstalled = command.isInstalled
+    }
+
+    func removeCommand() {
+        do {
+            try command.uninstall()
+            commandError = nil
+        } catch {
+            commandError = error.localizedDescription
+        }
+        isCommandInstalled = command.isInstalled
     }
 
     func regenerateToken() {
