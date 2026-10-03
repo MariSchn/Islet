@@ -662,6 +662,40 @@ struct ArtworkTests {
     @Test func garbageDataYieldsNoArtwork() {
         #expect(Artwork(data: Data("not an image".utf8)) == nil)
     }
+
+    @Test func wideCoverIsCroppedToItsCenterInsteadOfStretched() throws {
+        let stripes: [NSColor] = [.green, .red, .blue]
+        let image = NSImage(size: NSSize(width: 30, height: 10), flipped: false) { rect in
+            for (index, color) in stripes.enumerated() {
+                color.setFill()
+                NSRect(x: CGFloat(index) * rect.width / 3, y: 0, width: rect.width / 3, height: rect.height).fill()
+            }
+            return true
+        }
+        let data = try #require(image.tiffRepresentation.flatMap { NSBitmapImageRep(data: $0)?.representation(using: .png, properties: [:]) })
+        let artwork = try #require(Artwork(data: data))
+        let side = Artwork.thumbnailSide
+        for x in [side / 4, side * 3 / 4] {
+            let pixel = try #require(pixel(of: artwork.image, x: x, y: side / 2))
+            #expect(pixel.red > 200 && pixel.green < 60 && pixel.blue < 60, "x \(x): \(pixel)")
+        }
+    }
+
+    private func pixel(of image: CGImage, x: Int, y: Int) -> (red: UInt8, green: UInt8, blue: UInt8)? {
+        var pixels = [UInt8](repeating: 0, count: image.width * image.height * 4)
+        guard let context = CGContext(
+            data: &pixels,
+            width: image.width,
+            height: image.height,
+            bitsPerComponent: 8,
+            bytesPerRow: image.width * 4,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        let offset = ((image.height - 1 - y) * image.width + x) * 4
+        return (pixels[offset], pixels[offset + 1], pixels[offset + 2])
+    }
 }
 
 private func descriptorList(_ items: [NSAppleEventDescriptor]) -> NSAppleEventDescriptor {
