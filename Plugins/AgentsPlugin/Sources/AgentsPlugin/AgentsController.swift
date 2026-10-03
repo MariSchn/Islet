@@ -42,6 +42,7 @@ final class AgentsController {
     private let persistence: SessionPersistence?
     private let saveDelay: Duration
     private var saveTask: Task<Void, Never>?
+    private var hasRestored = false
 
     init(token: String, claudeDirectory: URL, codexDirectory: URL, port: UInt16 = HookServer.defaultPort, alerts: AlertSettings = AlertSettings(), display: DisplaySettings = DisplaySettings(), showsUsage: Bool = false, usage: UsageMonitor? = nil, storageDirectory: URL? = nil, saveDelay: Duration = .seconds(1), logger: Logger = Logger()) {
         persistence = storageDirectory.map { SessionPersistence(directory: $0, logger: logger) }
@@ -96,8 +97,11 @@ final class AgentsController {
     }
 
     func start() async {
-        if let snapshot = persistence?.load() {
-            store.restore(snapshot, isRunning: ProcessMonitor.isRunning)
+        if !hasRestored {
+            hasRestored = true
+            if let snapshot = persistence?.load() {
+                store.restore(snapshot, isRunning: ProcessMonitor.isRunning)
+            }
         }
         do {
             try await server.start()
