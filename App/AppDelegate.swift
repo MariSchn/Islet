@@ -9,6 +9,7 @@ import MediaPlugin
 import os
 import ShelfPlugin
 import TimerPlugin
+import SystemMonitorPlugin
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -19,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         CalendarPlugin.self,
         GitHubPlugin.self,
         TimerPlugin.self,
+        SystemMonitorPlugin.self,
     ] + examplePlugins
     #if DEBUG
     private static let examplePlugins: [any IsletPlugin.Type] = [HelloPlugin.self]

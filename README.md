@@ -96,7 +96,7 @@ Every plugin receives a `PluginContext`, its single connection to the host:
 
 ### 💡 Ideas for your notch
 
-Pomodoro timer · next meeting from your calendar · CI and pull request status · system stats · clipboard history · smart home toggles · build progress for your dev server · a quick translator · stock or crypto ticker · world clocks for a remote team
+Pomodoro timer · next meeting from your calendar · CI and pull request status · clipboard history · smart home toggles · build progress for your dev server · a quick translator · stock or crypto ticker · world clocks for a remote team
 
 <br>
 
@@ -149,6 +149,13 @@ A control centre for your coding agents. Islet installs lightweight hooks for **
 - When a timer ends, Islet plays a sound, announces it and shows an orange pill for a minute or until you open the Timer.
 - **Pomodoro:** work and break phases with a red or green ring in the collapsed notch, a dot for each finished work phase, and a long break after every fourth. Durations and starting the next phase automatically are set under **Settings › Timer**.
 - Timers keep running across restarts. A stopwatch is there too.
+
+### 📊 System
+
+- CPU, memory (with memory pressure) and network at a glance, each with a graph of its recent values, plus free disk space and the battery.
+- The three processes using the most CPU right now.
+- The closed notch stays quiet until something needs attention: sustained high CPU, memory pressure, a low battery, a hot Mac or an almost full startup disk, each announced once. Optionally shows a CPU ring all the time.
+- Choose which rows to show under **Settings › System**. Samples every second while the screen is open and every five seconds otherwise.
 
 <br>
 
@@ -215,6 +222,8 @@ flowchart LR
         media["Media"]
         shelf["Shelf"]
         timer["Timer"]
+
+        system["System"]
     end
     core["<b>IsletCore</b><br/>plugin API · registry<br/>pill · settings store"]
     host["<b>IsletHost</b><br/>notch windows · animations<br/>settings · displays"]
