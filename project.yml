@@ -27,6 +27,8 @@ packages:
     path: Plugins/SystemMonitorPlugin
   DownloadsPlugin:
     path: Plugins/DownloadsPlugin
+  ScriptsPlugin:
+    path: Plugins/ScriptsPlugin
 targets:
   Islet:
     type: application
@@ -45,6 +47,7 @@ targets:
       - package: TimerPlugin
       - package: SystemMonitorPlugin
       - package: DownloadsPlugin
+      - package: ScriptsPlugin
     info:
       path: App/Info.plist
       properties:
@@ -84,3 +87,4 @@ schemes:
         - package: TimerPlugin/TimerPluginTests
         - package: SystemMonitorPlugin/SystemMonitorPluginTests
         - package: DownloadsPlugin/DownloadsPluginTests
+        - package: ScriptsPlugin/ScriptsPluginTests

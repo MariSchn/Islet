@@ -8,6 +8,7 @@ import IsletCore
 import IsletHost
 import MediaPlugin
 import os
+import ScriptsPlugin
 import ShelfPlugin
 import TimerPlugin
 import SystemMonitorPlugin
@@ -23,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         TimerPlugin.self,
         SystemMonitorPlugin.self,
         DownloadsPlugin.self,
+        ScriptsPlugin.self,
     ] + examplePlugins
     #if DEBUG
     private static let examplePlugins: [any IsletPlugin.Type] = [HelloPlugin.self]
