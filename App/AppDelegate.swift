@@ -1,5 +1,6 @@
 import AgentsPlugin
 import AppKit
+import DownloadsPlugin
 import GitHubPlugin
 import CalendarPlugin
 import HelloPlugin
@@ -17,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ShelfPlugin.self,
         MediaPlugin.self,
         AgentsPlugin.self,
+        DownloadsPlugin.self,
         SystemMonitorPlugin.self,
         TimerPlugin.self,
         GitHubPlugin.self,
