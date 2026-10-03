@@ -8,19 +8,29 @@ public final class TimerPlugin: IsletPlugin {
     static let contentWidth: CGFloat = 380
     static let contentPadding: CGFloat = 12
     static let sectionSpacing: CGFloat = 10
-    static let pomodoroHeight: CGFloat = 44
+    static let pickerHeight: CGFloat = 24
+    static let timeHeight: CGFloat = 48
+    static let pomodoroInfoHeight: CGFloat = 26
     static let pomodoroDotSize: CGFloat = 6
-    static let controlRowHeight: CGFloat = 28
-    static let stopwatchRowHeight: CGFloat = 32
-    static let timerRowHeight: CGFloat = 32
+    static let primaryButtonSize: CGFloat = 52
+    static let secondaryButtonSize: CGFloat = 36
+    static let newTimerHeight: CGFloat = 32
+    static let timerRowHeight: CGFloat = 34
     static let timerRowSpacing: CGFloat = 4
     static let maxVisibleTimerRows = 4
     static let presetMinutes = [1, 5, 10, 25]
 
-    static func contentSize(timerCount: Int) -> CGSize {
-        let controls = pomodoroHeight + 2 * controlRowHeight + stopwatchRowHeight + 3 * sectionSpacing
-        let list = timerCount > 0 ? sectionSpacing + timerListHeight(timerCount: timerCount) : 0
-        return CGSize(width: contentWidth, height: 2 * contentPadding + controls + list)
+    static func contentSize(mode: TimerMode, timerCount: Int) -> CGSize {
+        let body: CGFloat
+        switch mode {
+        case .timers:
+            body = newTimerHeight + (timerCount > 0 ? sectionSpacing + timerListHeight(timerCount: timerCount) : 0)
+        case .pomodoro:
+            body = timeHeight + pomodoroInfoHeight + primaryButtonSize + 2 * sectionSpacing
+        case .stopwatch:
+            body = timeHeight + primaryButtonSize + sectionSpacing
+        }
+        return CGSize(width: contentWidth, height: 2 * contentPadding + pickerHeight + sectionSpacing + body)
     }
 
     static func timerListHeight(timerCount: Int) -> CGFloat {
@@ -62,7 +72,7 @@ public final class TimerPlugin: IsletPlugin {
             settings.set(pomodoro.startsNextPhaseAutomatically, forKey: Self.pomodoroAutoStartKey)
         }
         context.derive(\.pillStatus) { store.pillStatus }
-        context.derive(\.contentSize) { Self.contentSize(timerCount: store.timers.count) }
+        context.derive(\.contentSize) { Self.contentSize(mode: store.mode, timerCount: store.timers.count) }
         context.observe({ [unowned context] in context.isScreenVisible }) { store.isScreenVisible = $0 }
     }
 

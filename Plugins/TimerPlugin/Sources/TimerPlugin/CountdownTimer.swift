@@ -46,4 +46,20 @@ enum TimerFormat {
         let secondsPart = total % 60
         return "\(total / 60):" + (secondsPart < 10 ? "0" : "") + "\(secondsPart)"
     }
+
+    static func countdown(_ seconds: TimeInterval) -> String {
+        format(max(Int(seconds.rounded(.up)), 0))
+    }
+
+    static func elapsed(_ seconds: TimeInterval) -> String {
+        format(max(Int(seconds.rounded(.down)), 0))
+    }
+
+    private static func format(_ total: Int) -> String {
+        let secondsPart = String(format: "%02d", total % 60)
+        if total >= 3600 {
+            return "\(total / 3600):" + String(format: "%02d", total / 60 % 60) + ":" + secondsPart
+        }
+        return "\(total / 60):" + secondsPart
+    }
 }
