@@ -28,6 +28,7 @@ All built-in plugins live in `Plugins/` and use only the public `IsletCore` API,
 - `HelloPlugin`: the minimal example, registered in Debug builds only. It covers a screen, a settings view, pill priorities and resizing at runtime.
 - `ShelfPlugin`: file drops (`acceptsFileDrops`), state that persists as JSON in `context.storageDirectory`, a width derived from the number of items, and logging through `context.logger`.
 - `MediaPlugin`: polling in `activate()`/`deactivate()` that slows down while its screen is hidden (`context.isScreenVisible`), a derived pill with artwork and tint, interchangeable data sources with per-source capabilities, a height that grows while a list is open, and stubbed sources in tests.
+- `CalendarPlugin`: a system permission requested only on the user's click, a main-actor data source behind a protocol so tests use a stub, periodic reloads plus reloads when the screen becomes visible, and a height derived from a list grouped into sections.
 - `AgentsPlugin`: a local server started in `activate()`, a pill and content size derived from its session store, a ring pill, announcements driven by `context.observe`, bundled resources (`Bundle.module`) and a large settings pane.
 
 ## Checklist for a new plugin
