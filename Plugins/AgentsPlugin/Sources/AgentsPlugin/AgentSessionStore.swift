@@ -12,6 +12,12 @@ final class AgentSessionStore {
     enum Alert: Sendable, Equatable {
         case needsAttention(AgentSession)
         case finished(AgentSession)
+
+        var session: AgentSession {
+            switch self {
+            case .needsAttention(let session), .finished(let session): session
+            }
+        }
     }
 
     private(set) var sessions: [AgentSession] = []
@@ -42,6 +48,10 @@ final class AgentSessionStore {
         gethostname(&buffer, buffer.count)
         let name = String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
         return String(name.prefix { $0 != "." })
+    }
+
+    var orderedSessions: [AgentSession] {
+        SessionOrder.sorted(sessions)
     }
 
     var attentionSessions: [AgentSession] {
@@ -108,6 +118,7 @@ final class AgentSessionStore {
         if let terminal = event.terminal { session.terminal = terminal }
         if let tty = event.tty { session.tty = tty }
         if let pid = event.pid { session.pid = pid }
+        if let tmux = event.tmux { session.tmux = tmux }
         if let transcriptPath = event.transcriptPath { session.transcriptPath = transcriptPath }
         if let title = event.title, !session.hasStatusLineTitle { session.title = title }
         session.updatedAt = timestamp
@@ -326,6 +337,30 @@ final class AgentSessionStore {
                 hiddenSessions[sessionID]?.task = Self.summarize(prompt)
             }
         }
+    }
+
+    func snapshot() -> SessionSnapshot {
+        SessionSnapshot(sessions: sessions, hiddenSessions: Array(hiddenSessions.values))
+    }
+
+    func restore(_ snapshot: SessionSnapshot, isRunning: (Int32) -> Bool) {
+        func isAlive(_ session: AgentSession) -> Bool {
+            guard !session.isRemote else { return true }
+            guard let pid = session.pid else { return false }
+            return isRunning(pid)
+        }
+        func revived(_ session: AgentSession) -> AgentSession {
+            var session = session
+            session.pendingRequests = []
+            if case .needsAttention = session.state {
+                session.state = .needsAttention("Waiting for your answer in the terminal")
+            }
+            return session
+        }
+        sessions = snapshot.sessions.filter(isAlive).map(revived)
+        hiddenSessions = Dictionary(snapshot.hiddenSessions.filter(isAlive).map { ($0.id, revived($0)) }, uniquingKeysWith: { first, _ in first })
+        scheduleFinishedExpiry()
+        scheduleUnreachableCheck()
     }
 
     func removeExitedSessions(isRunning: (Int32) -> Bool) {

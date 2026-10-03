@@ -15,6 +15,7 @@ final class AgentsController {
     private(set) var statusLineState: StatusLineInstaller.State
     private(set) var serverError: String?
     private(set) var expandedSessionIDs: Set<String> = []
+    private(set) var mutedSessionIDs: Set<String> = []
     let usage: UsageMonitor
     var showsUsage: Bool {
         get { usage.isEnabled }
@@ -30,6 +31,23 @@ final class AgentsController {
     func shouldAnnounce(_ announcement: PillAnnouncement) -> Bool {
         alerts.announcesInNotch && (announcement.priority == .attention || display.pillShowsFinished)
     }
+    func shouldAlert(_ alert: AgentSessionStore.Alert) -> Bool {
+        !mutedSessionIDs.contains(alert.session.id)
+    }
+
+    func toggleMute(_ sessionID: String) {
+        if !mutedSessionIDs.insert(sessionID).inserted {
+            mutedSessionIDs.remove(sessionID)
+        }
+    }
+
+    func pruneMutedSessions() {
+        let ids = Set(store.sessions.map(\.id))
+        if !mutedSessionIDs.isSubset(of: ids) {
+            mutedSessionIDs.formIntersection(ids)
+        }
+    }
+
     var display: DisplaySettings
     var alerts: AlertSettings {
         didSet { alerter.settings = alerts }
@@ -39,8 +57,14 @@ final class AgentsController {
     private let processes: ProcessMonitor
     private let server: HookServer
     private let alerter: SessionAlerter
+    private let persistence: SessionPersistence?
+    private let saveDelay: Duration
+    private var saveTask: Task<Void, Never>?
+    private var hasRestored = false
 
-    init(token: String, claudeDirectory: URL, codexDirectory: URL, port: UInt16 = HookServer.defaultPort, alerts: AlertSettings = AlertSettings(), display: DisplaySettings = DisplaySettings(), showsUsage: Bool = false, usage: UsageMonitor? = nil, logger: Logger = Logger()) {
+    init(token: String, claudeDirectory: URL, codexDirectory: URL, port: UInt16 = HookServer.defaultPort, alerts: AlertSettings = AlertSettings(), display: DisplaySettings = DisplaySettings(), showsUsage: Bool = false, usage: UsageMonitor? = nil, storageDirectory: URL? = nil, saveDelay: Duration = .seconds(1), logger: Logger = Logger()) {
+        persistence = storageDirectory.map { SessionPersistence(directory: $0, logger: logger) }
+        self.saveDelay = saveDelay
         let store = AgentSessionStore()
         self.store = store
         self.usage = usage ?? UsageMonitor(isEnabled: showsUsage)
@@ -67,10 +91,13 @@ final class AgentsController {
         self.alerter = alerter
         self.alerts = alerts
         self.display = display
-        store.onAlert = { alerter.handle($0) }
         interruptions = InterruptionMonitor { store.markInterrupted($0) }
         processes = ProcessMonitor { store.removeExitedSessions(isRunning: ProcessMonitor.isRunning) }
         alerter.onOpenSession = { [weak self] in self?.showTerminal(forSession: $0) }
+        store.onAlert = { [weak self] alert in
+            guard self?.shouldAlert(alert) ?? true else { return }
+            alerter.handle(alert)
+        }
     }
 
     func makeRemoteInstallCommand() async -> String {
@@ -82,6 +109,17 @@ final class AgentsController {
     }
 
     func showTerminal(for session: AgentSession) {
+        guard let tmux = session.tmux, !session.isRemote else {
+            activateTerminal(for: session)
+            return
+        }
+        Task {
+            if await InstalledTerminal.showTmuxPane(tmux) { return }
+            activateTerminal(for: session)
+        }
+    }
+
+    private func activateTerminal(for session: AgentSession) {
         terminal(for: session)?.activate(tty: session.isRemote ? nil : session.tty, cwd: session.isRemote ? nil : session.cwd)
     }
 
@@ -91,6 +129,12 @@ final class AgentsController {
     }
 
     func start() async {
+        if !hasRestored {
+            hasRestored = true
+            if let snapshot = persistence?.load() {
+                store.restore(snapshot, isRunning: ProcessMonitor.isRunning)
+            }
+        }
         do {
             try await server.start()
             serverError = nil
@@ -112,7 +156,20 @@ final class AgentsController {
         isCodexHookInstalled || FileManager.default.fileExists(atPath: codexInstaller.directory.path)
     }
 
+    func sessionsDidChange() {
+        guard persistence != nil, saveTask == nil else { return }
+        saveTask = Task { [weak self] in
+            try? await Task.sleep(for: self?.saveDelay ?? .zero)
+            guard !Task.isCancelled, let self else { return }
+            saveTask = nil
+            persistence?.save(store.snapshot())
+        }
+    }
+
     func stop() async {
+        saveTask?.cancel()
+        saveTask = nil
+        persistence?.save(store.snapshot())
         await server.stop()
         interruptions.stop()
         processes.stop()

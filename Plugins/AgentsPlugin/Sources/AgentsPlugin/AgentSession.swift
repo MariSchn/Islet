@@ -1,7 +1,7 @@
 import Foundation
 
-struct AgentSession: Identifiable, Sendable, Equatable {
-    enum Agent: String, Sendable, CaseIterable {
+struct AgentSession: Identifiable, Sendable, Equatable, Codable {
+    enum Agent: String, Sendable, CaseIterable, Codable {
         case claudeCode = "claude-code"
         case codex
 
@@ -13,7 +13,7 @@ struct AgentSession: Identifiable, Sendable, Equatable {
         }
     }
 
-    enum State: Sendable, Equatable {
+    enum State: Sendable, Equatable, Codable {
         case starting
         case working
         case needsAttention(String)
@@ -37,6 +37,7 @@ struct AgentSession: Identifiable, Sendable, Equatable {
     var terminal: TerminalApp?
     var tty: String?
     var pid: Int32?
+    var tmux: TmuxLocation?
     var transcriptPath: String?
     var cwd: String?
     var title: String?
@@ -52,6 +53,11 @@ struct AgentSession: Identifiable, Sendable, Equatable {
     var turnStartedAt: Date
     var updatedAt: Date
 
+    enum CodingKeys: String, CodingKey {
+        case id, agent, host, isRemote, isUnreachable, terminal, tty, pid, tmux, transcriptPath, cwd, title, hasStatusLineTitle
+        case task, activity, state, activities, plan, details, startedAt, turnStartedAt, updatedAt
+    }
+
     var pendingRequest: PendingRequest? { pendingRequests.first }
 
     var displayName: String {
@@ -64,8 +70,8 @@ struct AgentSession: Identifiable, Sendable, Equatable {
     }
 }
 
-struct SessionDetails: Sendable, Equatable {
-    struct PullRequest: Sendable, Equatable {
+struct SessionDetails: Sendable, Equatable, Codable {
+    struct PullRequest: Sendable, Equatable, Codable {
         var number: Int
         var url: String?
         var reviewState: String?
