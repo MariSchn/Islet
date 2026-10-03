@@ -6,15 +6,20 @@ import os
 import Synchronization
 
 final class LiveSystemReader: SystemReading {
+    static let diskInterval: UInt64 = 60_000_000_000
+
     let timebase: MachTimebase
     private let host = mach_host_self()
     private let pageSize: UInt64
     private let pressure = MemoryPressureMonitor()
     private let logger: Logger
     private let reportedFailures = Mutex<Set<String>>([])
+    private let readDisk: @Sendable (LiveSystemReader) -> DiskSpace?
+    private let lastDisk = Mutex<(at: UInt64, space: DiskSpace?)?>(nil)
 
-    init(logger: Logger) {
+    init(logger: Logger, readDisk: @escaping @Sendable (LiveSystemReader) -> DiskSpace? = { $0.diskSpace() }) {
         self.logger = logger
+        self.readDisk = readDisk
         var info = mach_timebase_info()
         mach_timebase_info(&info)
         timebase = MachTimebase(numer: info.numer, denom: info.denom)
@@ -23,8 +28,9 @@ final class LiveSystemReader: SystemReading {
     }
 
     func readCounters(includingDetails: Bool) -> SystemCounters {
-        SystemCounters(
-            uptimeNanoseconds: DispatchTime.now().uptimeNanoseconds,
+        let now = DispatchTime.now().uptimeNanoseconds
+        return SystemCounters(
+            uptimeNanoseconds: now,
             cpuTicks: cpuTicks(),
             memoryUsed: memoryUsed(),
             memoryTotal: ProcessInfo.processInfo.physicalMemory,
@@ -32,7 +38,7 @@ final class LiveSystemReader: SystemReading {
             battery: battery(),
             thermalState: ProcessInfo.processInfo.thermalState,
             network: includingDetails ? networkBytes() : nil,
-            disk: disk(),
+            disk: disk(at: now),
             processes: includingDetails ? processTimes() : nil
         )
     }
@@ -121,7 +127,16 @@ final class LiveSystemReader: SystemReading {
         return bytes.isEmpty ? nil : String(decoding: bytes, as: UTF8.self)
     }
 
-    private func disk() -> DiskSpace? {
+    func disk(at now: UInt64) -> DiskSpace? {
+        if let last = lastDisk.withLock({ $0 }), now >= last.at, now - last.at < Self.diskInterval {
+            return last.space
+        }
+        let space = readDisk(self)
+        lastDisk.withLock { $0 = (now, space) }
+        return space
+    }
+
+    private func diskSpace() -> DiskSpace? {
         do {
             let values = try URL(fileURLWithPath: "/").resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey, .volumeTotalCapacityKey])
             guard let free = values.volumeAvailableCapacityForImportantUsage, let total = values.volumeTotalCapacity else { return nil }
