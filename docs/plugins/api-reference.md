@@ -29,7 +29,7 @@ public protocol IsletPlugin: AnyObject {
 | `activate()` | When the plugin is registered while enabled, and each time the user enables it again. | Start work: load state, start timers, servers or observers, set `contentSize` and `pillStatus`. Throwing puts the plugin in the failed state (see [Lifecycle](#lifecycle)). |
 | `deactivate()` | When the user disables the plugin, and when the app quits. | Stop everything `activate()` started. On quit, the host waits at most 2 seconds for all plugins together. |
 | `makeScreen()` | Once, the first time the host needs the screen. The result is cached for the lifetime of the app. | Return the expanded view. Because it is built only once, it has to observe your model rather than capture values. |
-| `acceptsFileDrops` | Whenever the user drags something over the notch. | `true` makes the notch switch to this plugin during a drag (see [File drops](resources-and-concurrency.md#file-drops)). |
+| `acceptsFileDrops` | Whenever the user drags files over the notch. | `true` makes the notch react to file drags and switch to this plugin during one (see [File drops](resources-and-concurrency.md#file-drops)). |
 | `makeSettingsView()` | Once, when the settings window first lists plugin settings. Cached like the screen. | Return a view for the plugin's settings tab, or `nil` for no tab. |
 
 `init(context:)` is called when the host registers the plugin with `PluginRegistry.register(_:)`. It runs even for plugins the user has disabled, so keep it cheap and start work in `activate()`. Setting up `derive` and `observe` in the initializer is fine: they only read your model.

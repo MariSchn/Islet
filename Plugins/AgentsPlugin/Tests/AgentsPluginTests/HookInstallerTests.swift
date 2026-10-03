@@ -73,7 +73,7 @@ struct HookInstallerTests {
         }
     }
 
-    @Test func scriptSkipsTheTranscriptOnToolEvents() throws {
+    @Test func scriptOnlyReadsTheTranscriptWhenTheTitleCanChange() throws {
         let installer = try makeInstaller()
         try installer.install()
         let transcript = installer.directory.appending(path: "transcript.jsonl")
@@ -82,7 +82,7 @@ struct HookInstallerTests {
         let fakeCurl = installer.directory.appending(path: "curl")
         try "#!/bin/sh\nprintf '%s\\n' \"$@\" > '\(capture.path)'\n".write(to: fakeCurl, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeCurl.path)
-        for (event, expectedTitle) in [("PreToolUse", ""), ("PostToolUseFailure", ""), ("UserPromptSubmit", "named")] {
+        for (event, expectedTitle) in [("PreToolUse", ""), ("PostToolUseFailure", ""), ("PermissionRequest", ""), ("Notification", ""), ("UserPromptSubmit", "named"), ("Stop", "named")] {
             let process = Process()
             process.executableURL = URL(filePath: "/bin/sh")
             process.arguments = [installer.scriptURL.path]
@@ -223,6 +223,36 @@ struct HookInstallerTests {
         #expect(after.isEmpty)
     }
 
+    @Test func writesThroughASymlinkedSettingsFile() throws {
+        let installer = try makeInstaller()
+        let dotfiles = installer.directory.appending(path: "dotfiles", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: dotfiles, withIntermediateDirectories: true)
+        let target = dotfiles.appending(path: "settings.json")
+        try #"{"model":"opus"}"#.write(to: target, atomically: true, encoding: .utf8)
+        try FileManager.default.createSymbolicLink(at: installer.settingsURL, withDestinationURL: target)
+
+        try installer.install()
+
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: installer.settingsURL.path) == target.path)
+        let settings = try JSONSerialization.jsonObject(with: Data(contentsOf: target)) as? [String: Any]
+        #expect(settings?["model"] as? String == "opus")
+        #expect(settings?["hooks"] != nil)
+        #expect(installer.isInstalled)
+    }
+
+    @Test func writesThroughADanglingRelativeSymlink() throws {
+        let installer = try makeInstaller()
+        let dotfiles = installer.directory.appending(path: "dotfiles", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: dotfiles, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(atPath: installer.settingsURL.path, withDestinationPath: "dotfiles/settings.json")
+
+        try installer.install()
+
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: installer.settingsURL.path) == "dotfiles/settings.json")
+        let settings = try JSONSerialization.jsonObject(with: Data(contentsOf: dotfiles.appending(path: "settings.json"))) as? [String: Any]
+        #expect(settings?["hooks"] != nil)
+    }
+
     @Test func refusesToOverwriteSettingsThatAreNotAnObject() throws {
         let installer = try makeInstaller()
         try "[1, 2]".write(to: installer.settingsURL, atomically: true, encoding: .utf8)
@@ -259,8 +289,9 @@ struct HookInstallerTests {
         #expect(stop?.count == 2)
         let command = ((stop?.last?["hooks"] as? [[String: Any]])?.first?["command"] as? String) ?? ""
         #expect(command == "'\(remoteInstaller.scriptURL.path)'")
-        #expect(installer.remoteInstallCommand.contains("Bearer deadbeef"))
-        #expect(installer.remoteInstallCommand.contains("127.0.0.1:7365/install"))
+        #expect(installer.remoteInstallCommand(code: "c0de").contains("Bearer c0de"))
+        #expect(!installer.remoteInstallCommand(code: "c0de").contains("deadbeef"))
+        #expect(installer.remoteInstallCommand(code: "c0de").contains("127.0.0.1:7365/install"))
         #expect(installer.sshConfigSnippet == "RemoteForward 7365 127.0.0.1:7365")
     }
 

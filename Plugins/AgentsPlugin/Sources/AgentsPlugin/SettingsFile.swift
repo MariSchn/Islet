@@ -19,6 +19,15 @@ struct SettingsFile: Sendable {
 
     func write(_ settings: [String: Any]) throws {
         let data = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
-        try data.write(to: url, options: .atomic)
+        try data.write(to: Self.destination(of: url), options: .atomic)
+    }
+
+    static func destination(of url: URL) -> URL {
+        var current = url
+        for _ in 0..<16 {
+            guard let target = try? FileManager.default.destinationOfSymbolicLink(atPath: current.path) else { return current }
+            current = URL(filePath: target, relativeTo: current.deletingLastPathComponent()).absoluteURL
+        }
+        return current
     }
 }

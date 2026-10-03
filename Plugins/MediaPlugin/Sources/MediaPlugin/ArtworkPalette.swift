@@ -15,18 +15,22 @@ struct Artwork: Sendable {
         tint = Self.legible(dominant)
     }
 
+    private static let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+
     private static func render(_ image: CGImage, side: Int) -> CGImage? {
-        guard let context = CGContext(
+        guard image.width > 0, image.height > 0, let context = CGContext(
             data: nil,
             width: side,
             height: side,
             bitsPerComponent: 8,
             bytesPerRow: side * 4,
-            space: CGColorSpaceCreateDeviceRGB(),
+            space: colorSpace,
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ) else { return nil }
         context.interpolationQuality = .high
-        context.draw(image, in: CGRect(x: 0, y: 0, width: side, height: side))
+        let scale = CGFloat(side) / CGFloat(min(image.width, image.height))
+        let size = CGSize(width: CGFloat(image.width) * scale, height: CGFloat(image.height) * scale)
+        context.draw(image, in: CGRect(x: (CGFloat(side) - size.width) / 2, y: (CGFloat(side) - size.height) / 2, width: size.width, height: size.height))
         return context.makeImage()
     }
 
@@ -39,7 +43,7 @@ struct Artwork: Sendable {
             height: side,
             bitsPerComponent: 8,
             bytesPerRow: side * 4,
-            space: CGColorSpaceCreateDeviceRGB(),
+            space: colorSpace,
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ) else { return nil }
         context.interpolationQuality = .medium

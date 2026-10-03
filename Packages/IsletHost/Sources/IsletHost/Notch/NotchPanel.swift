@@ -57,7 +57,8 @@ public final class NotchPanel: NSPanel {
             swipeRecognizer.handle(phase: .ended, deltaX: 0, deltaY: 0)
             return
         }
-        if let direction = swipeRecognizer.handle(phase: phase, deltaX: event.scrollingDeltaX, deltaY: event.scrollingDeltaY) {
+        let fingerDirection: CGFloat = event.isDirectionInvertedFromDevice ? 1 : -1
+        if let direction = swipeRecognizer.handle(phase: phase, deltaX: event.scrollingDeltaX * fingerDirection, deltaY: event.scrollingDeltaY * fingerDirection) {
             controller.navigate(direction)
         }
     }
@@ -104,7 +105,7 @@ private final class NotchHostingView<Content: View>: NSHostingView<Content> {
     init(controller: NotchController, rootView: Content) {
         self.controller = controller
         super.init(rootView: rootView)
-        registerForDraggedTypes([.fileURL, .URL, .string, .tiff, .png])
+        registerForDraggedTypes([.fileURL])
     }
 
     @available(*, unavailable)
@@ -114,8 +115,16 @@ private final class NotchHostingView<Content: View>: NSHostingView<Content> {
     required init(rootView: Content) { fatalError("use init(controller:rootView:)") }
 
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        guard controller.acceptsFileDrops,
+              sender.draggingPasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true])
+        else { return [] }
         controller.isDragTargeted = true
         return super.draggingEntered(sender)
+    }
+
+    override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        guard controller.isDragTargeted else { return [] }
+        return super.draggingUpdated(sender)
     }
 
     override func draggingExited(_ sender: (any NSDraggingInfo)?) {

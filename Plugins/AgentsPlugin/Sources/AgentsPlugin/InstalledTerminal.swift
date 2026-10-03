@@ -8,6 +8,8 @@ struct InstalledTerminal {
     let icon: NSImage
 
     private static var installed: [TerminalApp: InstalledTerminal] = [:]
+    private static let scripts = TerminalScriptRunner()
+    private static let scriptTimeout = 3
 
     static func lookup(_ app: TerminalApp) -> InstalledTerminal? {
         if let cached = installed[app] { return cached }
@@ -49,46 +51,56 @@ struct InstalledTerminal {
     }
 
     private func runScript(_ source: String) {
-        var error: NSDictionary?
-        NSAppleScript(source: source)?.executeAndReturnError(&error)
+        Task { await Self.scripts.run(source) }
     }
 
-    private static func terminalTabScript(tty: String) -> String {
+    static func terminalTabScript(tty: String) -> String {
         """
-        tell application "Terminal"
-            repeat with w in windows
-                repeat with t in tabs of w
-                    if tty of t is "\(tty)" then
-                        set selected tab of w to t
-                        set frontmost of w to true
-                        activate
-                        return
-                    end if
-                end repeat
-            end repeat
-            activate
-        end tell
-        """
-    }
-
-    private static func iTermSessionScript(tty: String) -> String {
-        """
-        tell application "iTerm2"
-            repeat with w in windows
-                repeat with t in tabs of w
-                    repeat with s in sessions of t
-                        if tty of s is "\(tty)" then
-                            tell w to select
-                            tell t to select
-                            tell s to select
+        with timeout of \(scriptTimeout) seconds
+            tell application "Terminal"
+                repeat with w in windows
+                    repeat with t in tabs of w
+                        if tty of t is "\(tty)" then
+                            set selected tab of w to t
+                            set frontmost of w to true
                             activate
                             return
                         end if
                     end repeat
                 end repeat
-            end repeat
-            activate
-        end tell
+                activate
+            end tell
+        end timeout
         """
+    }
+
+    static func iTermSessionScript(tty: String) -> String {
+        """
+        with timeout of \(scriptTimeout) seconds
+            tell application "iTerm2"
+                repeat with w in windows
+                    repeat with t in tabs of w
+                        repeat with s in sessions of t
+                            if tty of s is "\(tty)" then
+                                tell w to select
+                                tell t to select
+                                tell s to select
+                                activate
+                                return
+                            end if
+                        end repeat
+                    end repeat
+                end repeat
+                activate
+            end tell
+        end timeout
+        """
+    }
+}
+
+private actor TerminalScriptRunner {
+    func run(_ source: String) {
+        var error: NSDictionary?
+        NSAppleScript(source: source)?.executeAndReturnError(&error)
     }
 }

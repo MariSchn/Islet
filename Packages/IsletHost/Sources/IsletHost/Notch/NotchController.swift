@@ -40,6 +40,10 @@ public final class NotchController {
         }
     }
 
+    public var acceptsFileDrops: Bool {
+        registry?.preferredDropTarget != nil
+    }
+
     public var switchesToDropTargetOnDrag: Bool {
         get { settings.switchesToDropTargetOnDrag }
         set { settings.switchesToDropTargetOnDrag = newValue }
@@ -62,6 +66,10 @@ public final class NotchController {
     public var expandedHoverSize: CGSize {
         guard let hoverHoldSize else { return expandedShapeSize }
         return Self.union(hoverHoldSize, expandedShapeSize)
+    }
+
+    public var hidesIdleShape: Bool {
+        !isExpanded && pill == nil && announcement == nil && !settings.drawsIdleNotchShape
     }
 
     public var navigationSideWidth: CGFloat {
@@ -98,6 +106,7 @@ public final class NotchController {
 
     public func attach(_ registry: PluginRegistry) {
         self.registry = registry
+        seenAnnouncementIDs = Set(registry.announcements.map(\.id))
         observeRegistry()
     }
 

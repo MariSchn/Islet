@@ -166,9 +166,17 @@ struct GeneralSettingsView: View {
         Form {
             Section {
                 Toggle("Open at login", isOn: Binding(
-                    get: { loginItem.isEnabled },
+                    get: { loginItem.isEnabled || loginItem.requiresApproval },
                     set: { loginItem.setEnabled($0) }
                 ))
+                if loginItem.requiresApproval {
+                    HStack {
+                        Text("macOS needs your approval before Islet can open at login.")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Open Login Items") { loginItem.openSystemSettings() }
+                    }
+                }
                 if let error = loginItem.error {
                     Text(error).foregroundStyle(.red)
                 }
@@ -200,6 +208,9 @@ struct GeneralSettingsView: View {
             }
         }
         .onAppear { loginItem.refresh() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            loginItem.refresh()
+        }
         .confirmationDialog("Reset all settings?", isPresented: $confirmsReset) {
             Button("Reset", role: .destructive) { settings.resetAll() }
         } message: {
@@ -214,11 +225,24 @@ struct NotchSettingsView: View {
 
     private var placementOptions: [NotchDisplayPlacement] {
         var options: [NotchDisplayPlacement] = [.builtIn, .primary, .all]
-        options += displays.map { .named($0.name) }
-        if case .named(let name) = settings.displayPlacement, !displays.contains(where: { $0.name == name }) {
-            options.append(.named(name))
+        options += displays.map { display in
+            if case .display(let id, _) = settings.displayPlacement, id == display.persistentID {
+                return settings.displayPlacement
+            }
+            return .display(id: display.persistentID, name: display.name)
+        }
+        if case .display(let id, _) = settings.displayPlacement, !displays.contains(where: { $0.persistentID == id }) {
+            options.append(settings.displayPlacement)
         }
         return options
+    }
+
+    private func label(for placement: NotchDisplayPlacement) -> String {
+        guard case .display(let id, let storedName) = placement else { return placement.displayName }
+        guard let display = displays.first(where: { $0.persistentID == id }) else { return storedName }
+        let namesakes = displays.filter { $0.name == display.name }
+        guard namesakes.count > 1, let index = namesakes.firstIndex(of: display) else { return display.name }
+        return "\(display.name) (\(index + 1))"
     }
 
     private var placementSummary: String {
@@ -265,13 +289,13 @@ struct NotchSettingsView: View {
             Section {
                 Picker("Show on", selection: $settings.displayPlacement) {
                     ForEach(placementOptions, id: \.self) { placement in
-                        Text(placement.displayName).tag(placement)
+                        Text(label(for: placement)).tag(placement)
                     }
                 }
             } header: {
                 Text("Displays")
             } footer: {
-                Text("\(placementSummary) Choosing a display by name falls back to the built-in display while it is disconnected.")
+                Text("\(placementSummary) A chosen display falls back to the built-in display while it is disconnected.")
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)) { _ in

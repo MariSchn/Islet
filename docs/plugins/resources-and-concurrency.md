@@ -24,9 +24,9 @@ SF Symbols need no bundling. Use them by name in `PluginManifest.systemImage`, `
 
 ## File drops
 
-Files dragged over the notch expand it. If the user has "Switch to a plugin that accepts files" turned on (Settings › General, on by default), the notch also switches to the first enabled plugin whose `acceptsFileDrops` is `true`.
+Files dragged over the notch expand it while at least one enabled plugin has `acceptsFileDrops` set to `true`; other drags, such as text, links or images, are ignored. If the user has "Switch to a plugin that accepts files" turned on (Settings › General, on by default), the notch also switches to the first enabled plugin whose `acceptsFileDrops` is `true`.
 
-`acceptsFileDrops` only controls that switch. To receive the files, your screen handles the drop itself, as `ShelfScreen` does:
+`acceptsFileDrops` only decides whether the notch reacts to file drags and which plugin it switches to. To receive the files, your screen handles the drop itself, as `ShelfScreen` does:
 
 ```swift
 .onDrop(of: [.fileURL], isTargeted: $isTargeted) { providers in

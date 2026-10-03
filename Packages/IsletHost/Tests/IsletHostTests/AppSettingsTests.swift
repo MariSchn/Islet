@@ -26,13 +26,13 @@ struct AppSettingsTests {
 
         let first = AppSettings(defaults: defaults)
         first.notchSize = .large
-        first.displayPlacement = .named("Studio Display")
+        first.displayPlacement = .display(id: "37D8832A-2D66-02CA-B9F7-8F30A301B230", name: "Studio Display")
         first.showsMenuBarIcon = false
         first.pillSelection = .latestActivity
 
         let second = AppSettings(defaults: defaults)
         #expect(second.notchSize == .large)
-        #expect(second.displayPlacement == .named("Studio Display"))
+        #expect(second.displayPlacement == .display(id: "37D8832A-2D66-02CA-B9F7-8F30A301B230", name: "Studio Display"))
         #expect(!second.showsMenuBarIcon)
         #expect(second.pillSelection == .latestActivity)
 
@@ -100,10 +100,12 @@ struct AppSettingsTests {
         }
         defaults.set("garbage", forKey: "islet.settings.animation")
         defaults.set(Data("{\"expandDuration\": 0.9, \"curve\": {\"wobble\": {}}}".utf8), forKey: "islet.settings.switchesToDropTargetOnDrag")
+        defaults.set(Data(#"{"named":{"_0":"Studio Display"}}"#.utf8), forKey: "islet.settings.displayPlacement")
 
         let settings = AppSettings(defaults: defaults)
         #expect(settings.animation == .default)
         #expect(settings.switchesToDropTargetOnDrag)
+        #expect(settings.displayPlacement == .builtIn)
     }
 
     @Test func partialAnimationDataKeepsKnownFieldsAndDefaultsTheRest() throws {

@@ -57,16 +57,21 @@ struct ActivityEntry: Identifiable, Sendable, Equatable {
         case "Write":
             return lines("content", in: input).map { "\($0) lines" }
         case "Read":
-            guard case .number(let offset)? = input?["offset"] ?? .number(1) else { return nil }
-            if case .number(let limit)? = input?["limit"] {
-                return "lines \(Int(offset))–\(Int(offset) + Int(limit) - 1)"
+            guard let offset = lineNumber(input?["offset"] ?? .number(1)) else { return nil }
+            if let limit = lineNumber(input?["limit"]) {
+                return "lines \(offset)–\(offset + limit - 1)"
             }
-            return offset > 1 ? "from line \(Int(offset))" : nil
+            return offset > 1 ? "from line \(offset)" : nil
         case "Grep", "Glob":
             return input?["path"]?.stringValue.map { ($0 as NSString).lastPathComponent }
         default:
             return nil
         }
+    }
+
+    private static func lineNumber(_ value: JSONValue?) -> Int? {
+        guard case .number(let number)? = value, (0...Double(Int32.max)).contains(number) else { return nil }
+        return Int(number)
     }
 
     static func lineCount(_ text: String) -> Int {

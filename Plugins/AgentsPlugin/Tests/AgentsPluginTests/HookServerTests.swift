@@ -67,6 +67,38 @@ struct HookServerTests {
         #expect(await received.events.count == 2)
     }
 
+    @Test func installCodesFetchTheInstallScriptOnceAndExpire() async throws {
+        let port = try freePort()
+        let server = HookServer(port: port, token: "secret", installScript: "#!/bin/sh\n") { _ in .empty }
+        try await server.start()
+        defer { Task { await server.stop() } }
+        let code = await server.issueInstallCode()
+        #expect(code != "secret")
+
+        var hook = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/hook")!)
+        hook.httpMethod = "POST"
+        hook.setValue("Bearer \(code)", forHTTPHeaderField: "Authorization")
+        hook.httpBody = Data(#"{"session_id":"s","hook_event_name":"Stop"}"#.utf8)
+        let (_, hookResponse) = try await URLSession.shared.data(for: hook)
+        #expect((hookResponse as? HTTPURLResponse)?.statusCode == 401)
+
+        var install = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/install")!)
+        install.setValue("Bearer \(code)", forHTTPHeaderField: "Authorization")
+        let (_, accepted) = try await URLSession.shared.data(for: install)
+        #expect((accepted as? HTTPURLResponse)?.statusCode == 200)
+        let (_, reused) = try await URLSession.shared.data(for: install)
+        #expect((reused as? HTTPURLResponse)?.statusCode == 401)
+
+        let expiringPort = try freePort()
+        let expiring = HookServer(port: expiringPort, token: "secret", installScript: "#!/bin/sh\n", installCodeLifetime: .zero) { _ in .empty }
+        try await expiring.start()
+        defer { Task { await expiring.stop() } }
+        var expired = URLRequest(url: URL(string: "http://127.0.0.1:\(expiringPort)/install")!)
+        expired.setValue("Bearer \(await expiring.issueInstallCode())", forHTTPHeaderField: "Authorization")
+        let (_, expiredResponse) = try await URLSession.shared.data(for: expired)
+        #expect((expiredResponse as? HTTPURLResponse)?.statusCode == 401)
+    }
+
     @Test func repliesWaitForTheHandlerAndCancelWhenTheClientLeaves() async throws {
         let gate = Gate()
         let port = try freePort()

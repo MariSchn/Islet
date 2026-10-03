@@ -53,8 +53,7 @@ struct HookInstaller: Sendable {
         title=""
         transcript=""
         case "$(printf '%s' "$payload" | sed -n 's/.*"hook_event_name":"\\([A-Za-z]*\\)".*/\\1/p')" in
-          PreToolUse|PostToolUse|PostToolUseFailure|PermissionDenied) ;;
-          *) transcript=$(printf '%s' "$payload" | sed -n 's/.*"transcript_path":"\\([^"]*\\)".*/\\1/p') ;;
+          SessionStart|UserPromptSubmit|Stop|StopFailure) transcript=$(printf '%s' "$payload" | sed -n 's/.*"transcript_path":"\\([^"]*\\)".*/\\1/p') ;;
         esac
         if [ -n "$transcript" ] && [ -f "$transcript" ]; then
           titles=$(grep -oE '"(customTitle|aiTitle)":"([^"\\\\]|\\\\.)*"' "$transcript" 2>/dev/null)
@@ -107,8 +106,8 @@ struct HookInstaller: Sendable {
         """
     }
 
-    var remoteInstallCommand: String {
-        "curl -sf -H 'Authorization: Bearer \(token)' http://127.0.0.1:\(port)\(HookServer.installPath) | sh"
+    func remoteInstallCommand(code: String) -> String {
+        "curl -sf -H 'Authorization: Bearer \(code)' http://127.0.0.1:\(port)\(HookServer.installPath) | sh"
     }
 
     var sshConfigSnippet: String {

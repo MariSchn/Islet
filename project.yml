@@ -37,7 +37,7 @@ targets:
         LSUIElement: true
         LSMinimumSystemVersion: "15.0"
         NSHumanReadableCopyright: ""
-        NSAppleEventsUsageDescription: Islet controls your music player to show and control what's playing.
+        NSAppleEventsUsageDescription: Islet controls your music player to show what's playing, and your terminal to bring an agent's session to the front.
     settings:
       base:
         PRODUCT_NAME: Islet

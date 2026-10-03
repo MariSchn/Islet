@@ -12,6 +12,7 @@ actor HookServer {
     static let maxBodySize = 16 << 20
     static let requestTimeout: Duration = .seconds(10)
     static let replyTimeout: Duration = .seconds(600)
+    static let installCodeLifetime: Duration = .seconds(600)
 
     private struct Client {
         let connection: NWConnection
@@ -22,16 +23,19 @@ actor HookServer {
     let port: UInt16
     let token: String
     let installScript: String?
+    private let installCodeLifetime: Duration
+    private var installCodes: [String: ContinuousClock.Instant] = [:]
     private let handler: Handler
     private let statusLineHandler: StatusLineHandler?
     private var listener: NWListener?
     private var clients: [ObjectIdentifier: Client] = [:]
     private let queue = DispatchQueue(label: "islet.agents.hook-server")
 
-    init(port: UInt16 = HookServer.defaultPort, token: String, installScript: String? = nil, statusLineHandler: StatusLineHandler? = nil, handler: @escaping Handler) {
+    init(port: UInt16 = HookServer.defaultPort, token: String, installScript: String? = nil, installCodeLifetime: Duration = HookServer.installCodeLifetime, statusLineHandler: StatusLineHandler? = nil, handler: @escaping Handler) {
         self.port = port
         self.token = token
         self.installScript = installScript
+        self.installCodeLifetime = installCodeLifetime
         self.statusLineHandler = statusLineHandler
         self.handler = handler
     }
@@ -85,6 +89,25 @@ actor HookServer {
 
     var isListening: Bool {
         listener != nil
+    }
+
+    static func makeToken() -> String {
+        (0..<32).map { _ in "0123456789abcdef".randomElement()! }.reduce(into: "") { $0.append($1) }
+    }
+
+    func issueInstallCode() -> String {
+        let now = ContinuousClock.now
+        installCodes = installCodes.filter { $0.value > now }
+        let code = Self.makeToken()
+        installCodes[code] = now + installCodeLifetime
+        return code
+    }
+
+    private func isAuthorized(_ request: HTTPRequest) -> Bool {
+        guard let presented = request.bearerToken else { return false }
+        if presented == token { return true }
+        guard request.method == "GET", request.path == Self.installPath, let expiry = installCodes.removeValue(forKey: presented) else { return false }
+        return expiry > .now
     }
 
     func stop() async {
@@ -185,7 +208,7 @@ actor HookServer {
 
     private func respond(to request: HTTPRequest, on connection: NWConnection) async {
         let response: HTTPResponse
-        if request.bearerToken != token {
+        if !isAuthorized(request) {
             response = .json(401, #"{"error":"unauthorized"}"#)
         } else if request.method == "GET", request.path == Self.installPath, let installScript {
             response = .text(installScript)

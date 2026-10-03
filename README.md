@@ -82,7 +82,7 @@ Every plugin receives a `PluginContext`, its single connection to the host:
 | 💊 **`pillStatus`** | Show text, an icon, a status ring or artwork in the collapsed notch, with a priority so urgent things always get through. |
 | 📣 **`announce(_:)`** | Flash a short message below the collapsed notch. |
 | ⚙️ **`settings`** + **`makeSettingsView()`** | Persist preferences and get your own tab in the settings window. |
-| 📥 **`acceptsFileDrops`** | Ask Islet to switch to your plugin when files are dragged onto the notch; your view handles the drop. |
+| 📥 **`acceptsFileDrops`** | Let the notch react when files are dragged onto it and switch to your plugin; your view handles the drop. |
 | 🔄 **`derive`**, **`observe`**, **`isScreenVisible`** | Keep the size and pill in sync with your model, react to changes, and pause work while your screen is hidden. |
 | 🗂 **`storageDirectory`**, **`logger`** | A private folder for your data and an `os.Logger` scoped to your plugin. |
 
@@ -102,7 +102,7 @@ Pomodoro timer · next meeting from your calendar · CI and pull request status 
 
 ## 🎁 Built-in plugins
 
-Islet comes with three ready-made plugins, plus the minimal Hello example. They are ordinary plugins built on the same API as yours: use them as they are, switch off the ones you don't need, or read their source as examples.
+Islet comes with three ready-made plugins, plus the minimal Hello example in Debug builds. They are ordinary plugins built on the same API as yours: use them as they are, switch off the ones you don't need, or read their source as examples.
 
 ### 🤖 Agents
 

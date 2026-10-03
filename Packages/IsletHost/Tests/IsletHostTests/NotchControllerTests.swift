@@ -57,14 +57,20 @@ struct NotchControllerTests {
         let controller = makeController()
 
         controller.isHovering = true
-        try await Task.sleep(for: expandDelay * 2)
-        #expect(controller.isExpanded)
+        try await waitUntil { controller.isExpanded }
 
+        let leftAt = ContinuousClock.now
         controller.isHovering = false
-        try await Task.sleep(for: expandDelay * 2 / 3)
-        #expect(controller.isExpanded)
-        try await Task.sleep(for: settle)
-        #expect(!controller.isExpanded)
+        try await waitUntil { !controller.isExpanded }
+        #expect(ContinuousClock.now - leftAt > expandDelay)
+    }
+
+    private func waitUntil(_ condition: () -> Bool) async throws {
+        let deadline = ContinuousClock.now + .seconds(2)
+        while !condition() {
+            try #require(ContinuousClock.now < deadline)
+            await Task.yield()
+        }
     }
 
     @Test func explicitCollapseCancelsPendingExpand() async throws {
@@ -268,6 +274,51 @@ struct NotchControllerTests {
         #expect(controller.announcement == nil)
     }
 
+    @Test func notchesCreatedLaterDoNotReplayEarlierAnnouncements() async throws {
+        let harness = Harness()
+        let registry = harness.makeRegistry()
+        let first = makeController()
+        first.announcementDuration = .milliseconds(50)
+        first.attach(registry)
+        let stub = try await harness.registerStub(in: registry)
+        stub.context.announce(PillAnnouncement(text: "Build finished"))
+        await Task.yield()
+        #expect(first.announcement != nil)
+
+        let second = makeController()
+        second.attach(registry)
+        #expect(second.announcement == nil)
+
+        let next = PillAnnouncement(text: "Needs you")
+        stub.context.announce(next)
+        await Task.yield()
+        #expect(second.announcement == next)
+    }
+
+    @Test func hidesTheShapeOnlyWhileIdleAndNotAlwaysDrawn() async throws {
+        let harness = Harness()
+        let registry = harness.makeRegistry()
+        let controller = makeController()
+        controller.attach(registry)
+        let stub = try await harness.registerStub(in: registry)
+        #expect(controller.hidesIdleShape)
+
+        controller.settings.drawsIdleNotchShape = true
+        #expect(!controller.hidesIdleShape)
+        controller.settings.drawsIdleNotchShape = false
+        #expect(controller.hidesIdleShape)
+
+        stub.context.pillStatus = PillStatus(text: "song")
+        await Task.yield()
+        #expect(!controller.hidesIdleShape)
+
+        stub.context.pillStatus = nil
+        await Task.yield()
+        #expect(controller.hidesIdleShape)
+        controller.expand()
+        #expect(!controller.hidesIdleShape)
+    }
+
     @Test func lessImportantAnnouncementsWaitForMoreImportantOnes() async throws {
         let harness = Harness()
         let registry = harness.makeRegistry()
@@ -336,8 +387,8 @@ struct NotchControllerTests {
     @Test func keepsPreviousHoverRegionWhenShapeShrinksAwayFromPointer() async throws {
         let harness = Harness()
         let registry = harness.makeRegistry()
-        var pointer = CGPoint(x: 10_000, y: 10_000)
-        let controller = NotchController(settings: AppSettings()) { pointer }
+        let pointer = PointerLocation(CGPoint(x: 10_000, y: 10_000))
+        let controller = NotchController(settings: AppSettings()) { pointer.value }
         controller.attach(registry)
         let stub = try await harness.registerStub(in: registry)
         let second = try await harness.registerSecond(in: registry)
@@ -368,7 +419,7 @@ struct NotchControllerTests {
         controller.pointerEnteredShape()
         #expect(controller.hoverHoldSize != nil)
 
-        pointer = CGPoint(x: 0, y: -10)
+        pointer.value = CGPoint(x: 0, y: -10)
         controller.pointerEnteredShape()
         #expect(controller.hoverHoldSize == nil)
 
@@ -379,7 +430,7 @@ struct NotchControllerTests {
         await Task.yield()
         #expect(controller.hoverHoldSize == nil)
 
-        pointer = CGPoint(x: 10_000, y: 10_000)
+        pointer.value = CGPoint(x: 10_000, y: 10_000)
         registry.select("test.stub")
         await Task.yield()
         registry.select("test.second")
@@ -409,6 +460,21 @@ struct NotchControllerTests {
         #expect(!controller.navigate(.forward))
     }
 
+    @Test func acceptsFileDropsOnlyWhileAnEnabledPluginTakesThem() async throws {
+        let harness = Harness()
+        let registry = harness.makeRegistry()
+        let controller = makeController()
+        controller.attach(registry)
+        try await harness.registerStub(in: registry)
+        #expect(!controller.acceptsFileDrops)
+
+        try await harness.registerSecond(in: registry) { $0.acceptsFileDrops = true }
+        #expect(controller.acceptsFileDrops)
+
+        await registry.setEnabled(false, for: "test.second")
+        #expect(!controller.acceptsFileDrops)
+    }
+
     @Test func dragSwitchesToFirstDropAcceptingPluginUnlessDisabled() async throws {
         let harness = Harness()
         let registry = harness.makeRegistry()
@@ -434,5 +500,14 @@ struct NotchControllerTests {
         controller.switchesToDropTargetOnDrag = false
         controller.isDragTargeted = true
         #expect(registry.selectedID == "test.stub")
+    }
+}
+
+@MainActor
+private final class PointerLocation {
+    var value: CGPoint
+
+    init(_ value: CGPoint) {
+        self.value = value
     }
 }
