@@ -12,7 +12,7 @@ struct TmuxClient: Sendable, Equatable {
     static func parse(_ output: String) -> [TmuxClient] {
         output.split(separator: "\n").compactMap { line in
             let fields = line.split(separator: " ", maxSplits: 3, omittingEmptySubsequences: false)
-            guard fields.count == 4, let pid = Int32(fields[1]), let activity = Int(fields[2]) else { return nil }
+            guard fields.count == 4, !fields[0].isEmpty, let pid = Int32(fields[1]), let activity = Int(fields[2]) else { return nil }
             return TmuxClient(tty: String(fields[0]), pid: pid, activity: activity, session: String(fields[3]))
         }
     }

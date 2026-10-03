@@ -9,6 +9,7 @@ struct TerminalTargetingTests {
     /dev/ttys003 300 1800 my session
     /dev/ttys004 400 1000 work
     bad line
+     500 2100 control
     """
 
     @Test func parsesListClientsOutput() {
