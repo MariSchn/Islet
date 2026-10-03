@@ -1,21 +1,28 @@
 import Foundation
 
-struct HTTPRequest: Sendable, Equatable {
-    var method: String
-    var path: String
-    var headers: [String: String]
-    var body: Data
+public struct HTTPRequest: Sendable, Equatable {
+    public var method: String
+    public var path: String
+    public var headers: [String: String]
+    public var body: Data
 
-    enum ParseResult: Sendable, Equatable {
+    public init(method: String, path: String, headers: [String: String] = [:], body: Data = Data()) {
+        self.method = method
+        self.path = path
+        self.headers = headers
+        self.body = body
+    }
+
+    public enum ParseResult: Sendable, Equatable {
         case incomplete
         case invalid
         case tooLarge(remainingBody: Int)
         case complete(HTTPRequest)
     }
 
-    static let maxHeaderSize = 16 << 10
+    public static let maxHeaderSize = 16 << 10
 
-    static func parse(_ data: Data, maxBodySize: Int) -> ParseResult {
+    public static func parse(_ data: Data, maxBodySize: Int) -> ParseResult {
         guard let headerEnd = data.range(of: Data("\r\n\r\n".utf8)) else {
             return data.count > maxHeaderSize ? .invalid : .incomplete
         }
@@ -42,26 +49,32 @@ struct HTTPRequest: Sendable, Equatable {
         return .complete(HTTPRequest(method: String(requestLine[0]), path: String(requestLine[1]), headers: headers, body: Data(body)))
     }
 
-    var bearerToken: String? {
+    public var bearerToken: String? {
         guard let value = headers["authorization"], value.hasPrefix("Bearer ") else { return nil }
         return String(value.dropFirst("Bearer ".count))
     }
 }
 
-struct HTTPResponse: Sendable {
-    var status: Int
-    var contentType: String
-    var body: Data
+public struct HTTPResponse: Sendable {
+    public var status: Int
+    public var contentType: String
+    public var body: Data
 
-    static func json(_ status: Int = 200, _ body: String = "{}") -> HTTPResponse {
+    public init(status: Int, contentType: String, body: Data) {
+        self.status = status
+        self.contentType = contentType
+        self.body = body
+    }
+
+    public static func json(_ status: Int = 200, _ body: String = "{}") -> HTTPResponse {
         HTTPResponse(status: status, contentType: "application/json", body: Data(body.utf8))
     }
 
-    static func text(_ body: String) -> HTTPResponse {
+    public static func text(_ body: String) -> HTTPResponse {
         HTTPResponse(status: 200, contentType: "text/plain; charset=utf-8", body: Data(body.utf8))
     }
 
-    var serialized: Data {
+    public var serialized: Data {
         let reason: String
         switch status {
         case 200: reason = "OK"

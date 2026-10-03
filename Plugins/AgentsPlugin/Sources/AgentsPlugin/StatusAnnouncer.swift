@@ -7,8 +7,8 @@ struct StatusAnnouncer {
 
     private var categories: [String: Category] = [:]
 
-    mutating func announcement(for sessions: [AgentSession]) -> PillAnnouncement? {
-        let changed = sessions.filter { categories[$0.id] != Self.category(of: $0.state) }
+    mutating func announcement(for sessions: [AgentSession], muted: Set<String> = []) -> PillAnnouncement? {
+        let changed = sessions.filter { categories[$0.id] != Self.category(of: $0.state) && !muted.contains($0.id) }
         categories = Dictionary(sessions.map { ($0.id, Self.category(of: $0.state)) }, uniquingKeysWith: { first, _ in first })
         let announcements = changed.compactMap(Self.announcement(for:))
         return announcements.first { $0.priority == .attention } ?? announcements.first

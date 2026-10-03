@@ -48,6 +48,10 @@ The notch window registers only for the pasteboard types `.fileURL`, `.URL`, `.s
 context.observe({ [unowned context] in context.isScreenVisible }) { controller.isScreenVisible = $0 }
 ```
 
+## Local servers
+
+Plugins that accept requests from scripts or tools on the same machine use `LocalHTTPServer` (see the [API reference](api-reference.md#localhttpserver)). Start it in `activate()` and stop it in `deactivate()`, since the port stays bound otherwise. Handlers run off the main actor: hop to the main actor to touch plugin state, and check `Task.isCancelled` after long awaits, because the task is cancelled when the client disconnects. Show a failed `start` (port in use) to the user instead of swallowing it.
+
 ## Logging
 
 Log through `context.logger`, an `os.Logger` whose category is your plugin id. Mark values that are safe to show in Console with `privacy: .public`; everything else is redacted outside of debugging:

@@ -218,6 +218,34 @@ private struct AnimatedList: View {
 
 - `Duration.milliseconds: Double`: a `Duration` as fractional milliseconds.
 
+## LocalHTTPServer
+
+```swift
+public actor LocalHTTPServer {
+    public init(port: UInt16, maxBodySize: Int = 16 << 20, requestTimeout: Duration = .seconds(10), replyTimeout: Duration = .seconds(60))
+    public func start(handler: @escaping @Sendable (HTTPRequest) async -> HTTPResponse) async throws
+    public func stop() async
+    public var isListening: Bool { get }
+    public nonisolated let port: UInt16
+}
+```
+
+A small HTTP/1.1 server bound to `127.0.0.1` only, for plugins that expose a local API. `start` throws when the port is in use. Each connection carries one request and is closed after the response (no keep-alive, no TLS).
+
+- A request that has not arrived completely within `requestTimeout` is closed, one that cannot be parsed gets `400`, and one whose body exceeds `maxBodySize` gets `413`.
+- The handler's response is sent when it returns. If it takes longer than `replyTimeout`, or the client disconnects, the connection is closed and the handler's task is cancelled; no response is sent then.
+- `HTTPRequest` has `method`, `path`, lowercased `headers`, `body` and `bearerToken`. `HTTPResponse` has `json(_:_:)` and `text(_:)` helpers.
+
+```swift
+let server = LocalHTTPServer(port: 7400)
+try await server.start { request in
+    guard request.bearerToken == token else { return .json(401, #"{"error":"unauthorized"}"#) }
+    return .json()
+}
+```
+
+Start it in `activate()` and stop it in `deactivate()`.
+
 ## Host-side types
 
 Plugins don't need these at runtime, but they are public and useful in tests:
