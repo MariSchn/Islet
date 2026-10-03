@@ -144,7 +144,7 @@ final class AgentSessionStore {
             session.activity = event.activityDescription.map { "Denied: \($0)" } ?? "Denied a tool call"
             Self.record(event, in: &session, at: timestamp)
         case .permissionRequest:
-            let request = event.toolName.flatMap { PendingRequest(toolName: $0, toolInput: event.toolInput, agentType: event.agentType) }
+            let request = event.toolName.flatMap { PendingRequest(toolName: $0, toolInput: event.toolInput, agentType: event.agentType, permissionSuggestions: event.permissionSuggestions) }
             if let request, event.isInAutoMode, case .permission = request.kind {
                 session.activity = event.activityDescription
                 session.state = .working
@@ -254,7 +254,10 @@ final class AgentSessionStore {
         resolve(requestID, with: decision)
         sessions[index].pendingRequests.removeAll { $0.id == requestID }
         sessions[index].updatedAt = now()
-        if decision == .deny {
+        switch decision {
+        case .allow, .allowAlways, .answers:
+            break
+        case .deny:
             sessions[index].activity = "Denied \(request.toolName)"
         }
         settleState(at: index)

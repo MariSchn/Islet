@@ -287,6 +287,10 @@ private struct RequestView: View {
                     .frame(maxWidth: .infinity, minHeight: AgentsPlugin.requestDetailHeight, maxHeight: AgentsPlugin.requestDetailHeight, alignment: .topLeading)
                 HStack(spacing: AgentsPlugin.requestSpacing) {
                     RequestButton("Allow", systemImage: "checkmark", tint: .green) { decide(.allow) }
+                    if request.alwaysAllowRule != nil {
+                        RequestButton("Always allow", systemImage: "checkmark.circle", tint: .green) { decide(.allowAlways) }
+                            .help(request.alwaysAllowDescription ?? "")
+                    }
                     RequestButton("Deny", systemImage: "xmark", tint: .red) { decide(.deny) }
                 }
             }

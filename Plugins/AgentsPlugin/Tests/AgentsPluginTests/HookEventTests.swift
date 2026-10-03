@@ -79,6 +79,22 @@ struct HookEventTests {
         #expect(try HookEvent.decode(Data(#"{"session_id":"a","hook_event_name":"SessionStart","session_title":""}"#.utf8)).title == nil)
     }
 
+    @Test func decodesPermissionSuggestionsAndIgnoresMalformedOnes() throws {
+        let json = """
+        {"session_id":"abc","hook_event_name":"PermissionRequest","tool_name":"Bash","permission_suggestions":[{"type":"addRules","rules":[{"toolName":"Bash","ruleContent":"rm -rf node_modules"}],"behavior":"allow","destination":"localSettings"}]}
+        """
+        let event = try HookEvent.decode(Data(json.utf8))
+        let suggestion = try #require(event.permissionSuggestions?.first)
+        #expect(suggestion["type"]?.stringValue == "addRules")
+        #expect(suggestion["behavior"]?.stringValue == "allow")
+        #expect(suggestion["destination"]?.stringValue == "localSettings")
+        #expect(suggestion["rules"]?.arrayValue?.first?["toolName"]?.stringValue == "Bash")
+        #expect(suggestion["rules"]?.arrayValue?.first?["ruleContent"]?.stringValue == "rm -rf node_modules")
+
+        let malformed = Data(#"{"session_id":"abc","hook_event_name":"PermissionRequest","permission_suggestions":"nope"}"#.utf8)
+        #expect(try HookEvent.decode(malformed).permissionSuggestions == nil)
+    }
+
     @Test func describesFailedTurns() throws {
         let rateLimit = try HookEvent.decode(Data(#"{"session_id":"a","hook_event_name":"StopFailure","error":"rate_limit","last_assistant_message":"API Error: Rate limit reached"}"#.utf8))
         #expect(rateLimit.kind == .stopFailure)

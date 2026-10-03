@@ -559,6 +559,33 @@ struct AgentSessionStoreTests {
         #expect(store.sessions.first?.activity == "Denied Bash")
     }
 
+    @Test func alwaysAllowReturnsTheSuggestedRule() async throws {
+        let store = AgentSessionStore()
+        let suggestion: JSONValue = .object([
+            "type": .string("addRules"),
+            "rules": .array([.object(["toolName": .string("Bash"), "ruleContent": .string("ls -la /tmp")])]),
+            "behavior": .string("allow"),
+            "destination": .string("localSettings"),
+        ])
+        let event = HookEvent(
+            kind: .permissionRequest,
+            sessionID: "a",
+            cwd: "/x/one",
+            toolName: "Bash",
+            toolInput: .object(["command": .string("ls -la /tmp")]),
+            permissionSuggestions: [suggestion]
+        )
+        async let reply = store.handle(event)
+        try await waitForPendingRequest(in: store)
+        let request = try #require(store.sessions.first?.pendingRequest)
+        #expect(request.alwaysAllowRule == suggestion)
+        store.decide(request.id, .allowAlways)
+        #expect(await reply.body.contains(#""updatedPermissions""#))
+        #expect(store.sessions.first?.pendingRequest == nil)
+        #expect(store.sessions.first?.state == .working)
+        #expect(store.sessions.first?.activity == nil)
+    }
+
     @Test func questionsAreAnsweredThroughUpdatedInput() async throws {
         let store = AgentSessionStore()
         let input: JSONValue = .object([
