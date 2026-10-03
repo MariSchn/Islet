@@ -27,6 +27,7 @@ public final class MediaPlugin: IsletPlugin {
 
     private let context: PluginContext
     let controller: MediaController
+    let outputs = AudioOutputs()
     private(set) var player: MediaPlayer
 
     public init(context: PluginContext) {
@@ -43,15 +44,17 @@ public final class MediaPlugin: IsletPlugin {
     }
 
     public func activate() async throws {
+        outputs.start()
         controller.start()
     }
 
     public func deactivate() async {
         controller.stop()
+        outputs.stop()
     }
 
     public func makeScreen() -> AnyView {
-        AnyView(MediaScreen(controller: controller))
+        AnyView(MediaScreen(controller: controller, outputs: outputs))
     }
 
     public func makeSettingsView() -> AnyView? {

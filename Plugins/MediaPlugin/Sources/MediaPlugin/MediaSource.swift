@@ -23,12 +23,14 @@ struct MediaCapabilities: Sendable, Equatable {
     var repeatModes: [RepeatMode]
     var canBrowsePlaylists: Bool
     var canSetVolume: Bool
+    var canFavorite: Bool
 
-    init(canShuffle: Bool = false, repeatModes: [RepeatMode] = [], canBrowsePlaylists: Bool = false, canSetVolume: Bool = false) {
+    init(canShuffle: Bool = false, repeatModes: [RepeatMode] = [], canBrowsePlaylists: Bool = false, canSetVolume: Bool = false, canFavorite: Bool = false) {
         self.canShuffle = canShuffle
         self.repeatModes = repeatModes
         self.canBrowsePlaylists = canBrowsePlaylists
         self.canSetVolume = canSetVolume
+        self.canFavorite = canFavorite
     }
 
     var canRepeat: Bool {
@@ -67,6 +69,7 @@ protocol MediaSource: Sendable {
     func setShuffling(_ shuffling: Bool) async throws
     func setRepeatMode(_ mode: RepeatMode) async throws
     func setVolume(_ volume: Int) async throws
+    func setFavorite(_ favorite: Bool) async throws
     func playlists() async throws -> [MediaPlaylist]
     func play(_ playlist: MediaPlaylist) async throws
     func artwork(at url: URL) async throws -> Data
@@ -95,6 +98,10 @@ extension MediaSource {
     }
 
     func setVolume(_ volume: Int) async throws {
+        throw UnsupportedMediaCommand(sourceName: displayName)
+    }
+
+    func setFavorite(_ favorite: Bool) async throws {
         throw UnsupportedMediaCommand(sourceName: displayName)
     }
 

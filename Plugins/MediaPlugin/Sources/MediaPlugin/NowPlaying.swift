@@ -11,8 +11,9 @@ struct NowPlaying: Equatable, Sendable {
     var isShuffling: Bool
     var repeatMode: RepeatMode
     var volume: Int
+    var isFavorite: Bool
 
-    init(title: String, artist: String, album: String = "", artworkURL: URL? = nil, isPlaying: Bool, position: TimeInterval = 0, duration: TimeInterval = 0, isShuffling: Bool = false, repeatMode: RepeatMode = .off, volume: Int = 0) {
+    init(title: String, artist: String, album: String = "", artworkURL: URL? = nil, isPlaying: Bool, position: TimeInterval = 0, duration: TimeInterval = 0, isShuffling: Bool = false, repeatMode: RepeatMode = .off, volume: Int = 0, isFavorite: Bool = false) {
         self.title = title
         self.artist = artist
         self.album = album
@@ -23,6 +24,7 @@ struct NowPlaying: Equatable, Sendable {
         self.isShuffling = isShuffling
         self.repeatMode = repeatMode
         self.volume = volume
+        self.isFavorite = isFavorite
     }
 
     var progress: Double {
