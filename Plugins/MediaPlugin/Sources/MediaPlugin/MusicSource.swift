@@ -98,7 +98,11 @@ struct MusicSource: MediaSource {
         else
             set repeatMode to "off"
         end if
-        return {name of t, artist of t, album of t, persistent ID of t, player state is playing, player position, duration of t, shuffle enabled, repeatMode, sound volume, favorited of t}
+        set isFavorite to false
+        try
+            set isFavorite to favorited of t
+        end try
+        return {name of t, artist of t, album of t, persistent ID of t, player state is playing, player position, duration of t, shuffle enabled, repeatMode, sound volume, isFavorite}
         """)
     static let playPauseScript = script("playpause")
     static let nextTrackScript = script("next track")
