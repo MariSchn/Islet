@@ -131,7 +131,6 @@ public final class NotchPanel: NSPanel {
 
     private func giveUpKeyFocus() {
         guard isKeyWindow, isVisible else { return }
-        NotchSpace.shared.remove(self)
         orderOut(nil)
         orderFrontRegardless()
         NotchSpace.shared.add(self)
