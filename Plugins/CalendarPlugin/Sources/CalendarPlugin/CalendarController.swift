@@ -99,6 +99,7 @@ final class CalendarController {
                 guard let delay = self?.delayUntilNextMinute else { return }
                 try? await Task.sleep(for: delay)
                 guard !Task.isCancelled, let self else { return }
+                referenceDate = now()
                 minuteTick += 1
             }
         }
