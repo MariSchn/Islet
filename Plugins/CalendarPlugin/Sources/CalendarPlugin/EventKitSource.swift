@@ -52,7 +52,8 @@ final class EventKitSource: CalendarSource {
                 isAllDay: event.isAllDay,
                 calendarID: event.calendar.calendarIdentifier,
                 color: Self.resolved(event.calendar.color),
-                location: event.location
+                location: event.location,
+                meetingURL: meetingLink(url: event.url, location: event.location, notes: event.notes)
             )
         }
     }

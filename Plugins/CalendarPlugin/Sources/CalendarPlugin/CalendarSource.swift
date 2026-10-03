@@ -25,6 +25,9 @@ struct CalendarEvent: Sendable, Equatable, Identifiable {
     var calendarID: String
     var color: Color.Resolved
     var location: String?
+    var meetingURL: URL? = nil
+
+    static let joinLeadTime: TimeInterval = 15 * 60
 
     var id: String {
         "\(identifier)@\(start.timeIntervalSinceReferenceDate)"
@@ -36,6 +39,10 @@ struct CalendarEvent: Sendable, Equatable, Identifiable {
 
     func remainingMinutes(at now: Date) -> Int {
         max(Int((end.timeIntervalSince(now) / 60).rounded(.up)), 0)
+    }
+
+    func showsJoin(at now: Date) -> Bool {
+        meetingURL != nil && !isAllDay && now < end && start.timeIntervalSince(now) <= Self.joinLeadTime
     }
 
     func timeLabel(at now: Date) -> String {
