@@ -1,8 +1,8 @@
 import AgentsPlugin
 import AppKit
 import CalendarPlugin
-import GitHubPlugin
 import DownloadsPlugin
+import GitHubPlugin
 import HelloPlugin
 import IsletCore
 import IsletHost
@@ -10,8 +10,8 @@ import MediaPlugin
 import os
 import ScriptsPlugin
 import ShelfPlugin
-import TimerPlugin
 import SystemMonitorPlugin
+import TimerPlugin
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
