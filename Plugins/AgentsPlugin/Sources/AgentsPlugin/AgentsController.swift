@@ -66,6 +66,20 @@ final class AgentsController {
         store.onAlert = { alerter.handle($0) }
         interruptions = InterruptionMonitor { store.markInterrupted($0) }
         processes = ProcessMonitor { store.removeExitedSessions(isRunning: ProcessMonitor.isRunning) }
+        alerter.onOpenSession = { [weak self] in self?.showTerminal(forSession: $0) }
+    }
+
+    func terminal(for session: AgentSession) -> InstalledTerminal? {
+        session.terminal.flatMap(InstalledTerminal.lookup)
+    }
+
+    func showTerminal(for session: AgentSession) {
+        terminal(for: session)?.activate(tty: session.isRemote ? nil : session.tty, cwd: session.isRemote ? nil : session.cwd)
+    }
+
+    func showTerminal(forSession id: String) {
+        guard let session = store.sessions.first(where: { $0.id == id }) else { return }
+        showTerminal(for: session)
     }
 
     func start() async {

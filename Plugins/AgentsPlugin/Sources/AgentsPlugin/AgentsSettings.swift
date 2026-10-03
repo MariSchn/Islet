@@ -67,7 +67,7 @@ struct AgentsSettings: View {
             } header: {
                 Text("Alerts")
             } footer: {
-                Text("Alerts fire when a session asks for permission, has a question or waits for input, and when it finishes its turn. Notifications need permission from macOS the first time they are enabled.")
+                Text("Alerts fire when a session asks for permission, has a question or waits for input, and when it finishes its turn. Notifications need permission from macOS the first time they are enabled; clicking one shows the session in its terminal.")
             }
             Section {
                 Picker("Next to the notch", selection: $controller.display.pillContent) {

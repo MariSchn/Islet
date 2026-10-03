@@ -62,9 +62,10 @@ struct AgentsScreen: View {
                     ForEach(controller.store.sessions) { session in
                         SessionRow(
                             session: session,
-                            terminal: session.terminal.flatMap(InstalledTerminal.lookup),
+                            terminal: controller.terminal(for: session),
                             isExpanded: controller.expandedSessionIDs.contains(session.id),
                             historyLength: controller.display.historyLength,
+                            showTerminal: { controller.showTerminal(for: session) },
                             dismiss: { controller.store.dismiss(session.id) },
                             toggleExpanded: { controller.toggleExpanded(session.id) },
                             decide: { controller.decide($0, $1) }
@@ -84,6 +85,7 @@ private struct SessionRow: View {
     let terminal: InstalledTerminal?
     let isExpanded: Bool
     let historyLength: Int
+    let showTerminal: () -> Void
     let dismiss: () -> Void
     let toggleExpanded: () -> Void
     let decide: (UUID, PermissionDecision) -> Void
@@ -121,7 +123,7 @@ private struct SessionRow: View {
                 HStack(spacing: 6) {
                     SessionTitle(session: session)
                     if let terminal {
-                        Button { terminal.activate(tty: session.isRemote ? nil : session.tty, cwd: session.isRemote ? nil : session.cwd) } label: {
+                        Button(action: showTerminal) {
                             Image(nsImage: terminal.icon)
                                 .resizable()
                                 .frame(width: 16, height: 16)
