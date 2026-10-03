@@ -102,6 +102,7 @@ public final class NotchController {
 
     public func attach(_ registry: PluginRegistry) {
         self.registry = registry
+        seenAnnouncementIDs = Set(registry.announcements.map(\.id))
         observeRegistry()
     }
 

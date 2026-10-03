@@ -268,6 +268,27 @@ struct NotchControllerTests {
         #expect(controller.announcement == nil)
     }
 
+    @Test func notchesCreatedLaterDoNotReplayEarlierAnnouncements() async throws {
+        let harness = Harness()
+        let registry = harness.makeRegistry()
+        let first = makeController()
+        first.announcementDuration = .milliseconds(50)
+        first.attach(registry)
+        let stub = try await harness.registerStub(in: registry)
+        stub.context.announce(PillAnnouncement(text: "Build finished"))
+        await Task.yield()
+        #expect(first.announcement != nil)
+
+        let second = makeController()
+        second.attach(registry)
+        #expect(second.announcement == nil)
+
+        let next = PillAnnouncement(text: "Needs you")
+        stub.context.announce(next)
+        await Task.yield()
+        #expect(second.announcement == next)
+    }
+
     @Test func hidesTheShapeOnlyWhileIdleAndNotAlwaysDrawn() async throws {
         let harness = Harness()
         let registry = harness.makeRegistry()
