@@ -133,8 +133,8 @@ private struct PluginTabCarousel: View {
     let animation: Animation
 
     private static let step: CGFloat = 34
-    private static let buttonWidth: CGFloat = 30
     private static let fadeWidth: CGFloat = 16
+    private static let selectedInset: CGFloat = NotchGeometry.navigationSideMinWidth / 2
 
     var body: some View {
         let entries = registry.enabledEntries
@@ -142,14 +142,14 @@ private struct PluginTabCarousel: View {
         ZStack {
             ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
                 let distance = index - (selectedIndex ?? 0)
-                let offset = CGFloat(distance) * Self.step
+                let offset = width / 2 - Self.selectedInset + CGFloat(distance) * Self.step
                 NotchBarButton(systemImage: entry.manifest.systemImage, isSelected: index == selectedIndex) {
                     registry.select(entry.id)
                 }
                 .help(entry.manifest.displayName)
                 .opacity(index == selectedIndex ? 1 : 0.45)
                 .offset(x: offset)
-                .allowsHitTesting(abs(offset) + Self.buttonWidth / 2 <= width / 2)
+                .allowsHitTesting(abs(offset) <= width / 2)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
