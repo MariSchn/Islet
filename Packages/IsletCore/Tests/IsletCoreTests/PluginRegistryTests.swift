@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Testing
+import UniformTypeIdentifiers
 import IsletCore
 import IsletTestSupport
 
@@ -394,15 +395,117 @@ struct PluginRegistryTests {
         #expect(stub.screenBuilds == 1)
     }
 
-    @Test func preferredDropTargetIsFirstEnabledPluginAcceptingDrops() async throws {
+    @Test func dropTargetIsFirstEnabledPluginAcceptingADraggedType() async throws {
         let registry = harness.makeRegistry()
         try await harness.registerStub(in: registry)
-        #expect(registry.preferredDropTarget == nil)
+        #expect(registry.dropTarget(for: [.fileURL]) == nil)
 
-        try await harness.registerSecond(in: registry) { $0.acceptsFileDrops = true }
-        #expect(registry.preferredDropTarget?.id == "test.second")
+        try await harness.registerSecond(in: registry) { $0.acceptedDropTypes = [.fileURL] }
+        #expect(registry.dropTarget(for: [.fileURL])?.id == "test.second")
+        #expect(registry.dropTarget(for: []) == nil)
 
         await registry.setEnabled(false, for: "test.second")
-        #expect(registry.preferredDropTarget == nil)
+        #expect(registry.dropTarget(for: [.fileURL]) == nil)
+    }
+
+    @Test func dropTargetMatchesByConformance() async throws {
+        let registry = harness.makeRegistry()
+        try await harness.registerStub(in: registry)
+        try await harness.registerSecond(in: registry) { $0.acceptedDropTypes = [.image] }
+        #expect(registry.dropTarget(for: [.png])?.id == "test.second")
+        #expect(registry.dropTarget(for: [.plainText, .png])?.id == "test.second")
+        #expect(registry.dropTarget(for: [.plainText]) == nil)
+
+        let other = harness.makeRegistry()
+        try await harness.registerStub(in: other)
+        try await harness.registerSecond(in: other) { $0.acceptedDropTypes = [.plainText] }
+        #expect(other.dropTarget(for: [.fileURL]) == nil)
+    }
+
+    private let thirdManifest = PluginManifest(id: "test.third", displayName: "Third", systemImage: "triangle")
+
+    @discardableResult
+    private func registerThird(in registry: PluginRegistry, configure: (StubPlugin) -> Void = { _ in }) async throws -> StubPlugin {
+        var created: StubPlugin?
+        try await registry.register(manifest: thirdManifest) { context in
+            let plugin = StubPlugin(context: context)
+            configure(plugin)
+            created = plugin
+            return plugin
+        }
+        return try #require(created)
+    }
+
+    private func registerThree(in registry: PluginRegistry) async throws {
+        try await harness.registerStub(in: registry)
+        try await harness.registerSecond(in: registry)
+        try await registerThird(in: registry)
+    }
+
+    @Test func defaultOrderIsRegistrationOrder() async throws {
+        let registry = harness.makeRegistry()
+        try await registerThree(in: registry)
+
+        #expect(registry.orderedEntries.map(\.id) == ["test.stub", "test.second", "test.third"])
+        #expect(registry.enabledEntries.map(\.id) == ["test.stub", "test.second", "test.third"])
+    }
+
+    @Test func moveReordersEntriesAndIsRestoredByANewRegistry() async throws {
+        let first = harness.makeRegistry()
+        try await registerThree(in: first)
+        await first.setEnabled(false, for: "test.second")
+
+        first.move("test.third", by: -2)
+        #expect(first.orderedEntries.map(\.id) == ["test.third", "test.stub", "test.second"])
+        #expect(first.enabledEntries.map(\.id) == ["test.third", "test.stub"])
+
+        first.move("test.stub", by: 10)
+        #expect(first.orderedEntries.map(\.id) == ["test.third", "test.second", "test.stub"])
+        first.move("test.third", by: -1)
+        first.move("unknown.plugin", by: 1)
+        #expect(first.orderedEntries.map(\.id) == ["test.third", "test.second", "test.stub"])
+
+        let second = harness.makeRegistry()
+        try await registerThree(in: second)
+        #expect(second.orderedEntries.map(\.id) == ["test.third", "test.second", "test.stub"])
+        #expect(second.enabledEntries.map(\.id) == ["test.third", "test.stub"])
+    }
+
+    @Test func unknownStoredIDsAreIgnoredAndLaterPluginsAreAppended() async throws {
+        harness.defaults.set(["gone.plugin", "test.second", "test.stub"], forKey: "islet.pluginOrder")
+        let registry = harness.makeRegistry()
+        try await harness.registerStub(in: registry)
+        try await registerThird(in: registry)
+        #expect(registry.orderedEntries.map(\.id) == ["test.stub", "test.third"])
+
+        try await harness.registerSecond(in: registry)
+        #expect(registry.orderedEntries.map(\.id) == ["test.second", "test.stub", "test.third"])
+
+        let plain = Harness()
+        let later = plain.makeRegistry()
+        try await plain.registerStub(in: later)
+        try await plain.registerSecond(in: later)
+        later.move("test.second", by: -1)
+        try await registerThird(in: later)
+        #expect(later.orderedEntries.map(\.id) == ["test.second", "test.stub", "test.third"])
+    }
+
+    @Test func neighborsAndDropTargetFollowTheOrder() async throws {
+        let registry = harness.makeRegistry()
+        try await harness.registerStub(in: registry)
+        try await harness.registerSecond(in: registry) { $0.acceptedDropTypes = [.fileURL] }
+        try await registerThird(in: registry) { $0.acceptedDropTypes = [.fileURL] }
+        #expect(registry.dropTarget(for: [.fileURL])?.id == "test.second")
+
+        registry.move("test.third", by: -2)
+        #expect(registry.dropTarget(for: [.fileURL])?.id == "test.third")
+
+        registry.select("test.third")
+        #expect(!registry.selectNeighbor(.backward))
+        #expect(registry.selectNeighbor(.forward))
+        #expect(registry.selectedID == "test.stub")
+        #expect(registry.selectNeighbor(.forward))
+        #expect(registry.selectedID == "test.second")
+        #expect(!registry.selectNeighbor(.forward))
     }
 }

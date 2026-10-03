@@ -7,6 +7,7 @@ import os
 final class ShelfStore {
     private(set) var items: [ShelfItem] = []
     var copyMode: ShelfCopyMode = .never
+    var showsCountPill = false
 
     private let directory: URL
     private let fileURL: URL
@@ -95,6 +96,55 @@ final class ShelfStore {
         items.insert(contentsOf: added, at: 0)
         save()
         return added
+    }
+
+    @discardableResult
+    func addText(_ text: String) -> ShelfItem? {
+        guard let data = text.data(using: .utf8) else { return nil }
+        return addOwned(
+            data: data,
+            fileName: ShelfItemNaming.textFileName(for: text),
+            kind: .text,
+            title: ShelfItemNaming.firstLine(of: text)
+        )
+    }
+
+    @discardableResult
+    func addLink(_ url: URL) -> ShelfItem? {
+        guard let data = try? PropertyListSerialization.data(
+            fromPropertyList: ["URL": url.absoluteString],
+            format: .xml,
+            options: 0
+        ) else { return nil }
+        return addOwned(
+            data: data,
+            fileName: ShelfItemNaming.linkFileName(for: url),
+            kind: .link,
+            title: ShelfItemNaming.linkTitle(for: url)
+        )
+    }
+
+    @discardableResult
+    func addImage(pngData: Data, date: Date = .now) -> ShelfItem? {
+        addOwned(data: pngData, fileName: ShelfItemNaming.imageFileName(date: date), kind: .image, title: nil)
+    }
+
+    private func addOwned(data: Data, fileName: String, kind: ShelfItemKind, title: String?) -> ShelfItem? {
+        let id = UUID()
+        let folder = ownedFolder(for: id)
+        let file = folder.appending(path: fileName)
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try data.write(to: file)
+        } catch {
+            logger.error("Failed to write \(file.path, privacy: .public): \(error, privacy: .public)")
+            try? FileManager.default.removeItem(at: folder)
+            return nil
+        }
+        let item = ShelfItem(id: id, url: file, ownsFile: true, kind: kind, title: title)
+        items.insert(item, at: 0)
+        save()
+        return item
     }
 
     func remove(_ id: ShelfItem.ID) {

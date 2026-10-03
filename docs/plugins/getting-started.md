@@ -123,7 +123,7 @@ static let builtInPlugins: [any IsletPlugin.Type] = [
 ]
 ```
 
-The order of the list is the order of the tabs in the notch's navigation row. Each plugin is registered on its own, so a plugin that fails to register (for example because of a duplicate or invalid id) is logged and skipped without affecting the others.
+The order of the list is the default order of the tabs in the notch's navigation row; users can change it in Settings › Plugins, and plugins they haven't placed yet are added after the ones they have. Each plugin is registered on its own, so a plugin that fails to register (for example because of a duplicate or invalid id) is logged and skipped without affecting the others.
 
 New plugins are enabled by default. Users can turn them off under Settings › Plugins.
 
@@ -137,7 +137,7 @@ pkill -x Islet; sleep 1; open DerivedData/Build/Products/Debug/Islet.app
 
 You can also open `Islet.xcodeproj` and run the `Islet` scheme. Re-run `xcodegen generate` whenever you change `project.yml`. Files inside the package are picked up by SwiftPM without regenerating.
 
-Hover over the notch to expand it, then click the plugin's icon in the left part of the navigation row, or swipe horizontally with two fingers to switch between plugins. Swipes over a horizontally scrollable `ScrollView` whose content is wider than the view scroll it instead of switching plugins.
+Hover over the notch to expand it (or click it, when Settings › Notch › Open on is set to Click, or press the shortcut chosen there), then click the plugin's icon in the left part of the navigation row, or swipe horizontally with two fingers to switch between plugins. After opening the notch with the shortcut, the Left and Right arrow keys switch plugins and Escape closes it; arrow keys typed into a text field stay with the text field. Swipes over a horizontally scrollable `ScrollView` whose content is wider than the view scroll it instead of switching plugins.
 
 ## Next steps
 
