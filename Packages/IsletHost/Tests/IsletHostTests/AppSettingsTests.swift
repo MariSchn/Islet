@@ -14,6 +14,23 @@ struct AppSettingsTests {
         #expect(settings.displayPlacement == .builtIn)
         #expect(settings.showsMenuBarIcon)
         #expect(settings.pillSelection == .lastViewed)
+        #expect(settings.openTrigger == .hover)
+    }
+
+    @Test func persistsOpenTriggerAndResetsIt() {
+        let suite = "AppSettingsTests." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+            try? FileManager.default.removeItem(at: URL.libraryDirectory.appending(path: "Preferences/\(suite).plist"))
+        }
+
+        let first = AppSettings(defaults: defaults)
+        first.openTrigger = .click
+        #expect(AppSettings(defaults: defaults).openTrigger == .click)
+
+        first.resetAll()
+        #expect(AppSettings(defaults: defaults).openTrigger == .hover)
     }
 
     @Test func persistsNotchSizeDisplayMenuBarIconAndPillSelection() {

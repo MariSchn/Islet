@@ -72,6 +72,10 @@ public final class NotchController {
         !isExpanded && pill == nil && announcement == nil && !settings.drawsIdleNotchShape
     }
 
+    public var highlightsHoveredShape: Bool {
+        settings.openTrigger == .click && isHovering && !isExpanded && announcement == nil
+    }
+
     public var navigationSideWidth: CGFloat {
         geometry.navigationSideWidth(for: contentSize)
     }
@@ -193,6 +197,11 @@ public final class NotchController {
         isExpanded = true
     }
 
+    public func clicked() {
+        guard !isExpanded else { return }
+        expand()
+    }
+
     public func collapse() {
         hoverTask?.cancel()
         isExpanded = false
@@ -210,10 +219,12 @@ public final class NotchController {
             isExpanded = true
             return
         }
+        if target, settings.openTrigger != .hover { return }
         let delay = target ? animation.expandDelay : animation.collapseDelay
         hoverTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: delay)
-            guard !Task.isCancelled, let self, self.wantsExpansion == target else { return }
+            guard !Task.isCancelled, let self, self.wantsExpansion == target,
+                  !target || self.settings.openTrigger == .hover else { return }
             self.isExpanded = target
         }
     }

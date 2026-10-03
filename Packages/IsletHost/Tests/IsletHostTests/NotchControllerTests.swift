@@ -73,6 +73,59 @@ struct NotchControllerTests {
         }
     }
 
+    @Test func clickModeHoverOnlyHighlights() async throws {
+        let controller = makeController()
+        controller.settings.openTrigger = .click
+
+        controller.isHovering = true
+        #expect(controller.highlightsHoveredShape)
+        try await Task.sleep(for: settle)
+        #expect(!controller.isExpanded)
+        #expect(controller.highlightsHoveredShape)
+
+        controller.isHovering = false
+        #expect(!controller.highlightsHoveredShape)
+    }
+
+    @Test func clickModeClickExpandsAndLeavingCollapsesAfterDelay() async throws {
+        let controller = makeController()
+        controller.settings.openTrigger = .click
+        controller.isHovering = true
+
+        controller.clicked()
+        #expect(controller.isExpanded)
+        #expect(!controller.highlightsHoveredShape)
+
+        let leftAt = ContinuousClock.now
+        controller.isHovering = false
+        #expect(controller.isExpanded)
+        try await waitUntil { !controller.isExpanded }
+        #expect(ContinuousClock.now - leftAt >= collapseDelay)
+    }
+
+    @Test func clickModeFileDragStillExpands() async throws {
+        let controller = makeController()
+        controller.settings.openTrigger = .click
+
+        controller.isDragTargeted = true
+        #expect(controller.isExpanded)
+
+        controller.isDragTargeted = false
+        try await waitUntil { !controller.isExpanded }
+    }
+
+    @Test func hoverModeStillExpandsOnHoverWithoutHighlight() async throws {
+        let controller = makeController()
+        controller.settings.openTrigger = .hover
+
+        controller.isHovering = true
+        #expect(!controller.highlightsHoveredShape)
+        try await waitUntil { controller.isExpanded }
+
+        controller.isHovering = false
+        try await waitUntil { !controller.isExpanded }
+    }
+
     @Test func explicitCollapseCancelsPendingExpand() async throws {
         let controller = makeController()
 

@@ -26,6 +26,9 @@ public final class AppSettings {
     public var pillSelection: PillSelection {
         didSet { save(pillSelection, forKey: Keys.pillSelection) }
     }
+    public var openTrigger: NotchOpenTrigger {
+        didSet { save(openTrigger, forKey: Keys.openTrigger) }
+    }
 
     private let defaults: UserDefaults?
 
@@ -43,6 +46,7 @@ public final class AppSettings {
         static let displayPlacement = "islet.settings.displayPlacement"
         static let showsMenuBarIcon = "islet.settings.showsMenuBarIcon"
         static let pillSelection = "islet.settings.pillSelection"
+        static let openTrigger = "islet.settings.openTrigger"
     }
 
     public init(defaults: UserDefaults? = nil) {
@@ -54,6 +58,7 @@ public final class AppSettings {
         displayPlacement = Self.load(NotchDisplayPlacement.self, forKey: Keys.displayPlacement, from: defaults) ?? .default
         showsMenuBarIcon = Self.load(Bool.self, forKey: Keys.showsMenuBarIcon, from: defaults) ?? Defaults.showsMenuBarIcon
         pillSelection = Self.load(PillSelection.self, forKey: Keys.pillSelection, from: defaults) ?? .default
+        openTrigger = Self.load(NotchOpenTrigger.self, forKey: Keys.openTrigger, from: defaults) ?? .default
     }
 
     public func resetAnimation() {
@@ -68,6 +73,7 @@ public final class AppSettings {
         displayPlacement = .default
         showsMenuBarIcon = Defaults.showsMenuBarIcon
         pillSelection = .default
+        openTrigger = .default
     }
 
     private static func load<T: Decodable>(_ type: T.Type, forKey key: String, from defaults: UserDefaults?) -> T? {

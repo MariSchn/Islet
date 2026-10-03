@@ -269,6 +269,18 @@ struct NotchSettingsView: View {
                 Text("How large the notch grows when it expands. Larger sizes also enlarge the plugin content.")
             }
             Section {
+                Picker("Open on", selection: $settings.openTrigger) {
+                    ForEach(NotchOpenTrigger.allCases) { trigger in
+                        Text(trigger.displayName).tag(trigger)
+                    }
+                }
+                .pickerStyle(.segmented)
+            } header: {
+                Text("Opening")
+            } footer: {
+                Text("With Click, hovering only highlights the notch.")
+            }
+            Section {
                 Toggle("Always draw the notch shape", isOn: $settings.drawsIdleNotchShape)
             } header: {
                 Text("Appearance")
