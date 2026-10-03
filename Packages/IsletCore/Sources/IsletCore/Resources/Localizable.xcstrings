@@ -1,0 +1,66 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "Last viewed plugin": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zuletzt angesehenes Plugin"
+          }
+        }
+      }
+    },
+    "Latest activity": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neueste Aktivität"
+          }
+        }
+      }
+    },
+    "Most important": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wichtigste"
+          }
+        }
+      }
+    },
+    "Shows the plugin that was open when the notch collapsed. If it has nothing to show, the most important activity is shown instead and stays until it ends.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeigt das Plugin, das beim Einklappen des Notchs geöffnet war. Hat es nichts anzuzeigen, wird stattdessen die wichtigste Aktivität gezeigt, bis sie endet."
+          }
+        }
+      }
+    },
+    "Shows the plugin with the most important activity, so a working agent is shown before music.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeigt das Plugin mit der wichtigsten Aktivität, sodass ein arbeitender Agent vor Musik angezeigt wird."
+          }
+        }
+      }
+    },
+    "Shows whatever started most recently, for example music that just started playing or an agent that just started working.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeigt, was zuletzt begonnen hat, zum Beispiel gerade gestartete Musik oder einen Agenten, der gerade zu arbeiten begonnen hat."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

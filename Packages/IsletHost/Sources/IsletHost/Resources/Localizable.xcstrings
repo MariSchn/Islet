@@ -1,0 +1,736 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "%@ A chosen display falls back to the built-in display while it is disconnected.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ Ein gewähltes Display fällt auf das integrierte Display zurück, solange es nicht angeschlossen ist."
+          }
+        }
+      }
+    },
+    "%@ Anything that needs you, like a permission request, is always shown. Opening the notch shows the plugin from the pill.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ Alles, was dich braucht, etwa eine Berechtigungsanfrage, wird immer angezeigt. Beim Öffnen des Notchs wird das Plugin der Pille gezeigt."
+          }
+        }
+      }
+    },
+    "%@ failed to start: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ konnte nicht gestartet werden: %@"
+          }
+        }
+      }
+    },
+    "All displays": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Displays"
+          }
+        }
+      }
+    },
+    "All settings": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Einstellungen"
+          }
+        }
+      }
+    },
+    "Always draw the notch shape": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notch-Form immer zeichnen"
+          }
+        }
+      }
+    },
+    "Animation": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Animation"
+          }
+        }
+      }
+    },
+    "Appearance": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erscheinungsbild"
+          }
+        }
+      }
+    },
+    "Bounciness": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elastizität"
+          }
+        }
+      }
+    },
+    "Built-in display": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Integriertes Display"
+          }
+        }
+      }
+    },
+    "Choose which plugins run and appear in the notch.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wähle, welche Plugins laufen und im Notch erscheinen."
+          }
+        }
+      }
+    },
+    "Click": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klick"
+          }
+        }
+      }
+    },
+    "Collapse": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einklappen"
+          }
+        }
+      }
+    },
+    "Collapsed Pill": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eingeklappte Pille"
+          }
+        }
+      }
+    },
+    "Curve": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kurve"
+          }
+        }
+      }
+    },
+    "Default": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standard"
+          }
+        }
+      }
+    },
+    "Delay": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verzögerung"
+          }
+        }
+      }
+    },
+    "Disabled plugins are removed from the notch and stop running. Plugins with their own settings get a tab in the sidebar while enabled. Use the arrows to change the order of the plugins in the notch.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deaktivierte Plugins werden aus dem Notch entfernt und nicht mehr ausgeführt. Plugins mit eigenen Einstellungen erhalten, solange sie aktiviert sind, einen Tab in der Seitenleiste. Mit den Pfeilen änderst du die Reihenfolge der Plugins im Notch."
+          }
+        }
+      }
+    },
+    "Displays": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Displays"
+          }
+        }
+      }
+    },
+    "Drag & Drop": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drag & Drop"
+          }
+        }
+      }
+    },
+    "Duration": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dauer"
+          }
+        }
+      }
+    },
+    "Ease out": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ease-out"
+          }
+        }
+      }
+    },
+    "Expand": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausklappen"
+          }
+        }
+      }
+    },
+    "Extra Large": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sehr groß"
+          }
+        }
+      }
+    },
+    "General": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allgemein"
+          }
+        }
+      }
+    },
+    "Hover": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Darüberfahren"
+          }
+        }
+      }
+    },
+    "How large the notch grows when it expands. Larger sizes also enlarge the plugin content.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wie groß der Notch beim Ausklappen wird. Größere Stufen vergrößern auch den Plugin-Inhalt."
+          }
+        }
+      }
+    },
+    "How long the pointer has to rest on or leave the notch before it reacts.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wie lange der Zeiger auf dem Notch ruhen oder ihn verlassen muss, bevor er reagiert."
+          }
+        }
+      }
+    },
+    "How the notch expands and collapses.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wie der Notch ein- und ausklappt."
+          }
+        }
+      }
+    },
+    "Islet Settings": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Islet-Einstellungen"
+          }
+        }
+      }
+    },
+    "Keeps a black notch visible even while nothing is shown. When off, the shape can briefly flash while switching Spaces.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeigt einen schwarzen Notch auch dann, wenn nichts angezeigt wird. Ist die Option aus, kann die Form beim Wechseln von Spaces kurz aufblitzen."
+          }
+        }
+      }
+    },
+    "Large": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Groß"
+          }
+        }
+      }
+    },
+    "Menu Bar": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Menüleiste"
+          }
+        }
+      }
+    },
+    "Move %@ down": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ nach unten bewegen"
+          }
+        }
+      }
+    },
+    "Move %@ up": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ nach oben bewegen"
+          }
+        }
+      }
+    },
+    "No display is connected.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Es ist kein Display angeschlossen."
+          }
+        }
+      }
+    },
+    "No plugins enabled": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Plugins aktiviert"
+          }
+        }
+      }
+    },
+    "Notch": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notch"
+          }
+        }
+      }
+    },
+    "Off": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus"
+          }
+        }
+      }
+    },
+    "Open Login Items": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anmeldeobjekte öffnen"
+          }
+        }
+      }
+    },
+    "Open at login": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beim Anmelden öffnen"
+          }
+        }
+      }
+    },
+    "Open on": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öffnen bei"
+          }
+        }
+      }
+    },
+    "Opening": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öffnen"
+          }
+        }
+      }
+    },
+    "Plugin Settings": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plugin-Einstellungen"
+          }
+        }
+      }
+    },
+    "Plugin not available": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plugin nicht verfügbar"
+          }
+        }
+      }
+    },
+    "Plugins": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plugins"
+          }
+        }
+      }
+    },
+    "Primary display": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hauptdisplay"
+          }
+        }
+      }
+    },
+    "Reset": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurücksetzen"
+          }
+        }
+      }
+    },
+    "Reset all settings?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Einstellungen zurücksetzen?"
+          }
+        }
+      }
+    },
+    "Reset…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurücksetzen …"
+          }
+        }
+      }
+    },
+    "Restores every setting in the General, Notch and Animation tabs to its default. Plugin settings are not affected.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Setzt jede Einstellung in den Tabs „Allgemein“, „Notch“ und „Animation“ auf den Standard zurück. Plugin-Einstellungen bleiben unverändert."
+          }
+        }
+      }
+    },
+    "Settings for the %@ plugin.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einstellungen für das Plugin „%@“."
+          }
+        }
+      }
+    },
+    "Shortcut": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tastenkürzel"
+          }
+        }
+      }
+    },
+    "Show": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anzeigen"
+          }
+        }
+      }
+    },
+    "Show icon in the menu bar": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Symbol in der Menüleiste anzeigen"
+          }
+        }
+      }
+    },
+    "Show on": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anzeigen auf"
+          }
+        }
+      }
+    },
+    "Size": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Größe"
+          }
+        }
+      }
+    },
+    "Size, appearance and placement of the notch.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Größe, Erscheinungsbild und Platzierung des Notchs."
+          }
+        }
+      }
+    },
+    "Small": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klein"
+          }
+        }
+      }
+    },
+    "Spring": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Feder"
+          }
+        }
+      }
+    },
+    "Spring animations overshoot slightly; lower bounciness makes them wobble more.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Feder-Animationen schwingen leicht über; eine niedrigere Elastizität lässt sie stärker nachwippen."
+          }
+        }
+      }
+    },
+    "Starts Islet automatically when you log in. You can also change this under System Settings › General › Login Items.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Startet Islet automatisch bei der Anmeldung. Du kannst das auch unter Systemeinstellungen › Allgemein › Anmeldeobjekte ändern."
+          }
+        }
+      }
+    },
+    "Startup": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start"
+          }
+        }
+      }
+    },
+    "Startup, menu bar and drag & drop behavior.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verhalten beim Start, in der Menüleiste und bei Drag & Drop."
+          }
+        }
+      }
+    },
+    "Switch to a plugin that accepts files": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zu einem Plugin wechseln, das Dateien annimmt"
+          }
+        }
+      }
+    },
+    "The notch is currently shown on %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Notch wird derzeit auf %@ angezeigt."
+          }
+        }
+      }
+    },
+    "The notch is currently shown on %lld displays.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Notch wird derzeit auf %lld Displays angezeigt."
+          }
+        }
+      }
+    },
+    "This restores the General, Notch and Animation settings to their defaults.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dadurch werden die Einstellungen für „Allgemein“, „Notch“ und „Animation“ auf ihre Standardwerte zurückgesetzt."
+          }
+        }
+      }
+    },
+    "When you drag files over the notch, the plugin that can take them is shown automatically.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wenn du Dateien über den Notch ziehst, wird automatisch das Plugin angezeigt, das sie annehmen kann."
+          }
+        }
+      }
+    },
+    "With Click, hovering only highlights the notch. The shortcut opens the notch on the display with the pointer from any app; ← and → switch plugins and Esc closes it.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bei „Klick“ wird der Notch beim Darüberfahren nur hervorgehoben. Das Tastenkürzel öffnet den Notch aus jeder App auf dem Display mit dem Zeiger; ← und → wechseln die Plugins, Esc schließt ihn."
+          }
+        }
+      }
+    },
+    "Without the icon, open the settings from the gear in the expanded notch or by opening Islet again from Finder or Spotlight.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ohne das Symbol öffnest du die Einstellungen über das Zahnrad im ausgeklappten Notch oder indem du Islet erneut über den Finder oder Spotlight öffnest."
+          }
+        }
+      }
+    },
+    "macOS needs your approval before Islet can open at login.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "macOS braucht deine Bestätigung, bevor Islet beim Anmelden geöffnet werden kann."
+          }
+        }
+      }
+    },
+    "⌃⌥Space": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "⌃⌥Leertaste"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

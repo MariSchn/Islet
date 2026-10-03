@@ -10,7 +10,7 @@ public final class SettingsWindowController {
         let hosting = NSHostingController(rootView: SettingsView(settings: settings, registry: registry))
         hosting.sizingOptions = [.minSize]
         window = NSWindow(contentViewController: hosting)
-        window.title = "Islet Settings"
+        window.title = String(localized: "Islet Settings", bundle: .module)
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.toolbarStyle = .unified

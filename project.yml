@@ -1,6 +1,7 @@
 name: Islet
 options:
   bundleIdPrefix: com.marischn
+  developmentLanguage: en
   deploymentTarget:
     macOS: "15.0"
   createIntermediateGroups: true

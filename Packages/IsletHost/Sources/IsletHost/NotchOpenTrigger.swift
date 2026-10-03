@@ -1,3 +1,5 @@
+import Foundation
+
 public enum NotchOpenTrigger: String, Sendable, Codable, CaseIterable, Identifiable {
     case hover
     case click
@@ -8,8 +10,8 @@ public enum NotchOpenTrigger: String, Sendable, Codable, CaseIterable, Identifia
 
     public var displayName: String {
         switch self {
-        case .hover: "Hover"
-        case .click: "Click"
+        case .hover: String(localized: "Hover", bundle: .module)
+        case .click: String(localized: "Click", bundle: .module)
         }
     }
 }

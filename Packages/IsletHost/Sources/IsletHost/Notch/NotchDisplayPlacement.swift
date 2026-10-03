@@ -1,4 +1,5 @@
 import AppKit
+import Foundation
 
 public struct NotchDisplay: Sendable, Hashable, Identifiable {
     public let id: String
@@ -60,9 +61,9 @@ public enum NotchDisplayPlacement: Sendable, Hashable, Codable {
 
     public var displayName: String {
         switch self {
-        case .builtIn: "Built-in display"
-        case .primary: "Primary display"
-        case .all: "All displays"
+        case .builtIn: String(localized: "Built-in display", bundle: .module)
+        case .primary: String(localized: "Primary display", bundle: .module)
+        case .all: String(localized: "All displays", bundle: .module)
         case .display(_, let name): name
         }
     }

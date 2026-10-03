@@ -1,3 +1,5 @@
+import Foundation
+
 public enum NotchShortcut: String, Sendable, Codable, CaseIterable, Identifiable {
     case off
     case controlOptionSpace
@@ -11,8 +13,8 @@ public enum NotchShortcut: String, Sendable, Codable, CaseIterable, Identifiable
 
     public var displayName: String {
         switch self {
-        case .off: "Off"
-        case .controlOptionSpace: "⌃⌥Space"
+        case .off: String(localized: "Off", bundle: .module)
+        case .controlOptionSpace: String(localized: "⌃⌥Space", bundle: .module)
         case .controlOptionN: "⌃⌥N"
         case .controlCommandN: "⌃⌘N"
         case .controlOptionI: "⌃⌥I"

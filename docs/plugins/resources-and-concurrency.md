@@ -22,6 +22,33 @@ let url = Bundle.module.url(forResource: "defaults", withExtension: "json")
 
 SF Symbols need no bundling. Use them by name in `PluginManifest.systemImage`, `PillStatus.systemImage` and your views.
 
+## Localization
+
+User-visible strings are localized through a string catalog per package. Declare the default language, add `Resources/Localizable.xcstrings` to the target and process the folder:
+
+```swift
+let package = Package(
+    name: "CounterPlugin",
+    defaultLocalization: "en",
+    ...
+    targets: [
+        .target(name: "CounterPlugin", dependencies: ["IsletCore"], resources: [.process("Resources")])
+    ]
+)
+```
+
+Strings in a package are looked up in the main bundle unless you pass the package's bundle, so always use `bundle: .module`:
+
+```swift
+Text("Nothing here yet", bundle: .module)
+Toggle(String(localized: "Show seconds", bundle: .module), isOn: $showsSeconds)
+let title = String(localized: "Read \(fileName)", bundle: .module)
+```
+
+`Text` takes `bundle:` directly. Controls such as `Toggle`, `Button`, `Picker` and `Label`, and modifiers such as `.help` and `.accessibilityLabel`, take a plain `String`, so pass them `String(localized:bundle:)`. Without `bundle: .module` the lookup falls back to the app's catalog and shows the English text.
+
+Catalog keys are the English strings; interpolations become `%@` (strings) and `%lld` (integers). Give every key a German entry with state `translated`. Keep file names, commands and other data out of the translated text by interpolating them. The built-in plugins have a completeness test that fails when a key has no translated German entry; copy it from any built-in plugin's `LocalizationTests.swift`.
+
 ## File drops
 
 Plugins list the content types they accept in `acceptedDropTypes` (`[UTType]`, empty by default). A drag expands the notch while at least one enabled plugin accepts it: a plugin matches when some dragged type conforms to one of its accepted types, so `.image` matches a dragged `.png` and `.fileURL` matches a dragged file. If the user has "Switch to a plugin that accepts files" turned on (Settings › General, on by default), the notch also switches to the first enabled plugin, in tab order, that matches.

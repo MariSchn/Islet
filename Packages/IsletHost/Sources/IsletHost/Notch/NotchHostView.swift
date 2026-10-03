@@ -60,7 +60,7 @@ private struct PluginCarousel: View {
         let placements = placements
         ZStack(alignment: .top) {
             if placements.isEmpty {
-                Text("No plugins enabled")
+                Text("No plugins enabled", bundle: .module)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -94,7 +94,7 @@ private struct PluginScreen: View {
         case .active:
             entry.screen
         case .failed(let error):
-            Label("\(entry.manifest.displayName) failed to start: \(error.localizedDescription)", systemImage: "exclamationmark.triangle")
+            Label(String(localized: "\(entry.manifest.displayName) failed to start: \(error.localizedDescription)", bundle: .module), systemImage: "exclamationmark.triangle")
                 .foregroundStyle(.orange)
         case .inactive, .activating, .deactivating:
             ProgressView()
@@ -119,7 +119,7 @@ private struct NotchNavigationBar: View {
             HStack(spacing: 4) {
                 Spacer(minLength: 0)
                 NotchBarButton(systemImage: "gearshape", isSelected: false, action: openSettings)
-                    .help("Islet Settings")
+                    .help(String(localized: "Islet Settings", bundle: .module))
             }
             .padding(.trailing, 8)
             .frame(width: sideWidth)
