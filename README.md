@@ -17,7 +17,7 @@ Islet turns the notch into a home for small, glanceable tools. Every screen is a
 
 <br>
 
-<img src="docs/assets/islet-demo.gif" width="880" alt="Islet in action: the collapsed notch announces that an agent needs you, expands on hover, the permission is approved from the notch, and the notch switches to the music player">
+<img src="docs/assets/notch-demo.gif" width="880" alt="Islet in action: the collapsed notch announces that an agent needs you, expands on hover, the permission is approved from the notch, and the notch switches to the music player">
 
 </div>
 
