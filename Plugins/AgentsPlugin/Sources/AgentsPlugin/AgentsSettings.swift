@@ -138,7 +138,7 @@ struct AgentsSettings: View {
             } header: {
                 Text("Remote machines")
             } footer: {
-                Text("Add the config line to the machine's Host entry in ~/.ssh/config (or pass -R \(controller.installer.port):127.0.0.1:\(controller.installer.port) to ssh) so the remote can reach Islet through the tunnel, then run the install command once on the remote machine. Its code stops working after \(Int(HookServer.installCodeLifetime.components.seconds / 60)) minutes, so copy a fresh one for each machine. Sessions there show the host name and are marked unreachable when no updates arrive for \(Int(AgentSessionStore.unreachableTimeout / 60)) minutes.")
+                Text("Add the config line to the machine's Host entry in ~/.ssh/config (or pass -R \(controller.installer.port):127.0.0.1:\(controller.installer.port) to ssh) so the remote can reach Islet through the tunnel, then run the install command once on the remote machine. Its code works once and expires after \(Int(HookServer.installCodeLifetime.components.seconds / 60)) minutes, so copy a fresh command for each machine. Sessions there show the host name and are marked unreachable when no updates arrive for \(Int(AgentSessionStore.unreachableTimeout / 60)) minutes.")
             }
         }
         .onAppear { controller.refreshInstallState() }

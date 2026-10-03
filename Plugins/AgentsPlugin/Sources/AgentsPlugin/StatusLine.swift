@@ -20,7 +20,7 @@ struct StatusLineUpdate: Sendable, Equatable {
 
     private static func window(_ value: Any?) -> UsageWindow? {
         guard let object = value as? [String: Any], let used = object["used_percentage"] as? Double else { return nil }
-        let resetsAt = (object["resets_at"] as? Double).map { Date(timeIntervalSince1970: $0) }
+        let resetsAt = (object["resets_at"] as? Double).flatMap { (1...1e11).contains($0) ? Date(timeIntervalSince1970: $0) : nil }
         return UsageWindow(utilization: used, resetsAt: resetsAt)
     }
 }

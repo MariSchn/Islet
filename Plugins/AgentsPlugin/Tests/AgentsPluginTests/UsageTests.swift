@@ -18,6 +18,8 @@ struct UsageTests {
         #expect(partial.usage == ClaudeUsage(fiveHour: nil, sevenDay: UsageWindow(utilization: 2, resetsAt: nil)))
 
         #expect(try StatusLineUpdate.decode(Data(#"{"session_id":"s1"}"#.utf8)).usage == nil)
+        let implausible = try StatusLineUpdate.decode(Data(#"{"session_id":"s1","rate_limits":{"five_hour":{"used_percentage":5,"resets_at":1e300},"seven_day":{"used_percentage":5,"resets_at":-3}}}"#.utf8))
+        #expect(implausible.usage == ClaudeUsage(fiveHour: UsageWindow(utilization: 5, resetsAt: nil), sevenDay: UsageWindow(utilization: 5, resetsAt: nil)))
         #expect(throws: (any Error).self) { try StatusLineUpdate.decode(Data(#"{"session_name":"x"}"#.utf8)) }
         #expect(throws: (any Error).self) { try StatusLineUpdate.decode(Data("[]".utf8)) }
     }

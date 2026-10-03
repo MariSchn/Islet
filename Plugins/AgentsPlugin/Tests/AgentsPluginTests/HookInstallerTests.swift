@@ -240,6 +240,19 @@ struct HookInstallerTests {
         #expect(installer.isInstalled)
     }
 
+    @Test func writesThroughADanglingRelativeSymlink() throws {
+        let installer = try makeInstaller()
+        let dotfiles = installer.directory.appending(path: "dotfiles", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: dotfiles, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(atPath: installer.settingsURL.path, withDestinationPath: "dotfiles/settings.json")
+
+        try installer.install()
+
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: installer.settingsURL.path) == "dotfiles/settings.json")
+        let settings = try JSONSerialization.jsonObject(with: Data(contentsOf: dotfiles.appending(path: "settings.json"))) as? [String: Any]
+        #expect(settings?["hooks"] != nil)
+    }
+
     @Test func refusesToOverwriteSettingsThatAreNotAnObject() throws {
         let installer = try makeInstaller()
         try "[1, 2]".write(to: installer.settingsURL, atomically: true, encoding: .utf8)

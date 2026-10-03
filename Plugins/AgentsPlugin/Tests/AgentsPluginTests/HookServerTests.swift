@@ -67,18 +67,13 @@ struct HookServerTests {
         #expect(await received.events.count == 2)
     }
 
-    @Test func installCodesOnlyFetchTheInstallScriptAndExpire() async throws {
+    @Test func installCodesFetchTheInstallScriptOnceAndExpire() async throws {
         let port = try freePort()
-        let server = HookServer(port: port, token: "secret", installScript: "#!/bin/sh\n", installCodeLifetime: .milliseconds(300)) { _ in .empty }
+        let server = HookServer(port: port, token: "secret", installScript: "#!/bin/sh\n") { _ in .empty }
         try await server.start()
         defer { Task { await server.stop() } }
         let code = await server.issueInstallCode()
         #expect(code != "secret")
-
-        var install = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/install")!)
-        install.setValue("Bearer \(code)", forHTTPHeaderField: "Authorization")
-        let (_, accepted) = try await URLSession.shared.data(for: install)
-        #expect((accepted as? HTTPURLResponse)?.statusCode == 200)
 
         var hook = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/hook")!)
         hook.httpMethod = "POST"
@@ -87,9 +82,21 @@ struct HookServerTests {
         let (_, hookResponse) = try await URLSession.shared.data(for: hook)
         #expect((hookResponse as? HTTPURLResponse)?.statusCode == 401)
 
-        try await Task.sleep(for: .milliseconds(400))
-        let (_, expired) = try await URLSession.shared.data(for: install)
-        #expect((expired as? HTTPURLResponse)?.statusCode == 401)
+        var install = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/install")!)
+        install.setValue("Bearer \(code)", forHTTPHeaderField: "Authorization")
+        let (_, accepted) = try await URLSession.shared.data(for: install)
+        #expect((accepted as? HTTPURLResponse)?.statusCode == 200)
+        let (_, reused) = try await URLSession.shared.data(for: install)
+        #expect((reused as? HTTPURLResponse)?.statusCode == 401)
+
+        let expiringPort = try freePort()
+        let expiring = HookServer(port: expiringPort, token: "secret", installScript: "#!/bin/sh\n", installCodeLifetime: .zero) { _ in .empty }
+        try await expiring.start()
+        defer { Task { await expiring.stop() } }
+        var expired = URLRequest(url: URL(string: "http://127.0.0.1:\(expiringPort)/install")!)
+        expired.setValue("Bearer \(await expiring.issueInstallCode())", forHTTPHeaderField: "Authorization")
+        let (_, expiredResponse) = try await URLSession.shared.data(for: expired)
+        #expect((expiredResponse as? HTTPURLResponse)?.statusCode == 401)
     }
 
     @Test func repliesWaitForTheHandlerAndCancelWhenTheClientLeaves() async throws {

@@ -106,7 +106,7 @@ actor HookServer {
     private func isAuthorized(_ request: HTTPRequest) -> Bool {
         guard let presented = request.bearerToken else { return false }
         if presented == token { return true }
-        guard request.method == "GET", request.path == Self.installPath, let expiry = installCodes[presented] else { return false }
+        guard request.method == "GET", request.path == Self.installPath, let expiry = installCodes.removeValue(forKey: presented) else { return false }
         return expiry > .now
     }
 
