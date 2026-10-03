@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct CalendarScreen: View {
@@ -77,6 +78,15 @@ private struct EventRow: View {
                 }
             }
             Spacer(minLength: 0)
+            if event.showsJoin(at: now), let url = event.meetingURL {
+                Button {
+                    NSWorkspace.shared.open(url)
+                } label: {
+                    Label("Join", systemImage: "video.fill")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
         }
     }
 }
