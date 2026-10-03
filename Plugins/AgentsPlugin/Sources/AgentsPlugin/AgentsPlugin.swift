@@ -122,10 +122,12 @@ public final class AgentsPlugin: IsletPlugin {
         var contextAlert = ContextAlert()
         var reviewAlert = ReviewAlert()
         context.observe({ controller.store.sessions }) { [unowned context] sessions in
-            if let announcement = announcer.announcement(for: sessions), controller.shouldAnnounce(announcement) {
+            controller.pruneMutedSessions()
+            let muted = controller.mutedSessionIDs
+            if let announcement = announcer.announcement(for: sessions, muted: muted), controller.shouldAnnounce(announcement) {
                 context.announce(announcement)
             }
-            let detailsAnnouncements = contextAlert.announcements(for: sessions) + reviewAlert.announcements(for: sessions)
+            let detailsAnnouncements = contextAlert.announcements(for: sessions, muted: muted) + reviewAlert.announcements(for: sessions, muted: muted)
             if controller.alerts.announcesInNotch {
                 for announcement in detailsAnnouncements {
                     context.announce(announcement)

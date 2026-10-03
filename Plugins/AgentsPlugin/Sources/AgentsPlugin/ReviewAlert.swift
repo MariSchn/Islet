@@ -8,10 +8,10 @@ struct ReviewAlert {
 
     private var seen: [String: Seen] = [:]
 
-    mutating func announcements(for sessions: [AgentSession]) -> [PillAnnouncement] {
+    mutating func announcements(for sessions: [AgentSession], muted: Set<String> = []) -> [PillAnnouncement] {
         var announcements: [PillAnnouncement] = []
         for session in sessions {
-            if let announcement = announcement(for: session) {
+            if let announcement = announcement(for: session), !muted.contains(session.id) {
                 announcements.append(announcement)
             }
         }

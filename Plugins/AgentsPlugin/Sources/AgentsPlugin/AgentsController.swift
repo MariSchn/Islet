@@ -15,6 +15,7 @@ final class AgentsController {
     private(set) var statusLineState: StatusLineInstaller.State
     private(set) var serverError: String?
     private(set) var expandedSessionIDs: Set<String> = []
+    private(set) var mutedSessionIDs: Set<String> = []
     let usage: UsageMonitor
     var showsUsage: Bool {
         get { usage.isEnabled }
@@ -30,6 +31,23 @@ final class AgentsController {
     func shouldAnnounce(_ announcement: PillAnnouncement) -> Bool {
         alerts.announcesInNotch && (announcement.priority == .attention || display.pillShowsFinished)
     }
+    func shouldAlert(_ alert: AgentSessionStore.Alert) -> Bool {
+        !mutedSessionIDs.contains(alert.session.id)
+    }
+
+    func toggleMute(_ sessionID: String) {
+        if !mutedSessionIDs.insert(sessionID).inserted {
+            mutedSessionIDs.remove(sessionID)
+        }
+    }
+
+    func pruneMutedSessions() {
+        let ids = Set(store.sessions.map(\.id))
+        if !mutedSessionIDs.isSubset(of: ids) {
+            mutedSessionIDs.formIntersection(ids)
+        }
+    }
+
     var display: DisplaySettings
     var alerts: AlertSettings {
         didSet { alerter.settings = alerts }
@@ -73,10 +91,13 @@ final class AgentsController {
         self.alerter = alerter
         self.alerts = alerts
         self.display = display
-        store.onAlert = { alerter.handle($0) }
         interruptions = InterruptionMonitor { store.markInterrupted($0) }
         processes = ProcessMonitor { store.removeExitedSessions(isRunning: ProcessMonitor.isRunning) }
         alerter.onOpenSession = { [weak self] in self?.showTerminal(forSession: $0) }
+        store.onAlert = { [weak self] alert in
+            guard self?.shouldAlert(alert) ?? true else { return }
+            alerter.handle(alert)
+        }
     }
 
     func makeRemoteInstallCommand() async -> String {
