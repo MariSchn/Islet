@@ -26,13 +26,13 @@ struct AppSettingsTests {
 
         let first = AppSettings(defaults: defaults)
         first.notchSize = .large
-        first.displayPlacement = .named("Studio Display")
+        first.displayPlacement = .display(id: "37D8832A-2D66-02CA-B9F7-8F30A301B230", name: "Studio Display")
         first.showsMenuBarIcon = false
         first.pillSelection = .latestActivity
 
         let second = AppSettings(defaults: defaults)
         #expect(second.notchSize == .large)
-        #expect(second.displayPlacement == .named("Studio Display"))
+        #expect(second.displayPlacement == .display(id: "37D8832A-2D66-02CA-B9F7-8F30A301B230", name: "Studio Display"))
         #expect(!second.showsMenuBarIcon)
         #expect(second.pillSelection == .latestActivity)
 

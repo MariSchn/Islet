@@ -214,11 +214,18 @@ struct NotchSettingsView: View {
 
     private var placementOptions: [NotchDisplayPlacement] {
         var options: [NotchDisplayPlacement] = [.builtIn, .primary, .all]
-        options += displays.map { .named($0.name) }
-        if case .named(let name) = settings.displayPlacement, !displays.contains(where: { $0.name == name }) {
-            options.append(.named(name))
+        options += displays.map { .display(id: $0.id, name: $0.name) }
+        if case .display(let id, _) = settings.displayPlacement, !displays.contains(where: { $0.id == id }) {
+            options.append(settings.displayPlacement)
         }
         return options
+    }
+
+    private func label(for placement: NotchDisplayPlacement) -> String {
+        guard case .display(let id, let name) = placement else { return placement.displayName }
+        let namesakes = displays.filter { $0.name == name }
+        guard namesakes.count > 1, let index = namesakes.firstIndex(where: { $0.id == id }) else { return name }
+        return "\(name) (\(index + 1))"
     }
 
     private var placementSummary: String {
@@ -265,13 +272,13 @@ struct NotchSettingsView: View {
             Section {
                 Picker("Show on", selection: $settings.displayPlacement) {
                     ForEach(placementOptions, id: \.self) { placement in
-                        Text(placement.displayName).tag(placement)
+                        Text(label(for: placement)).tag(placement)
                     }
                 }
             } header: {
                 Text("Displays")
             } footer: {
-                Text("\(placementSummary) Choosing a display by name falls back to the built-in display while it is disconnected.")
+                Text("\(placementSummary) A chosen display falls back to the built-in display while it is disconnected.")
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)) { _ in
