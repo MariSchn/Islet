@@ -45,6 +45,14 @@ public final class GitHubPlugin: IsletPlugin {
         context.derive(\.contentSize) { Self.contentSize(for: controller.phase.snapshot) }
         context.derive(\.pillStatus) { controller.pillStatus }
         context.observe({ controller.showsPill }) { settings.set($0, forKey: Self.showsPillKey) }
+        var previous: GitHubSnapshot?
+        context.observe({ controller.phase }) { [unowned context] phase in
+            let current = phase.snapshot
+            defer { previous = current }
+            if let current, let announcement = GitHubChanges.announcement(from: previous, to: current) {
+                context.announce(announcement)
+            }
+        }
         context.observe({ [unowned context] in context.isScreenVisible }) { controller.isScreenVisible = $0 }
     }
 
