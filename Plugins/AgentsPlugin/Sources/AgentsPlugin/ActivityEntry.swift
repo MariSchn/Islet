@@ -1,6 +1,6 @@
 import Foundation
 
-struct ActivityEntry: Identifiable, Sendable, Equatable {
+struct ActivityEntry: Identifiable, Sendable, Equatable, Codable {
     static let limit = 10
 
     let id: UUID

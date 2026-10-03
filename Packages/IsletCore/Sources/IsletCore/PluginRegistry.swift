@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import SwiftUI
+import UniformTypeIdentifiers
 
 public enum PluginState: Sendable {
     case inactive
@@ -67,21 +68,45 @@ public final class PluginRegistry {
     public private(set) var disabledIDs: Set<String>
     public private(set) var selectedID: String?
 
+    private var order: [String]
     private var expandedNotches: Set<ObjectIdentifier> = []
     private let storageRoot: URL
     private let userDefaults: UserDefaults
     private let disabledKey = "islet.disabledPlugins"
     private let selectedKey = "islet.selectedPlugin"
+    private let orderKey = "islet.pluginOrder"
 
     public init(storageRoot: URL, userDefaults: UserDefaults = .standard) {
         self.storageRoot = storageRoot
         self.userDefaults = userDefaults
         self.disabledIDs = Set(userDefaults.stringArray(forKey: disabledKey) ?? [])
         self.selectedID = userDefaults.string(forKey: selectedKey)
+        self.order = userDefaults.stringArray(forKey: orderKey) ?? []
+    }
+
+    public var orderedEntries: [PluginEntry] {
+        var remaining = entries
+        var ordered: [PluginEntry] = []
+        for id in order {
+            if let index = remaining.firstIndex(where: { $0.id == id }) {
+                ordered.append(remaining.remove(at: index))
+            }
+        }
+        return ordered + remaining
     }
 
     public var enabledEntries: [PluginEntry] {
-        entries.filter { !disabledIDs.contains($0.id) }
+        orderedEntries.filter { !disabledIDs.contains($0.id) }
+    }
+
+    public func move(_ id: String, by offset: Int) {
+        var ids = orderedEntries.map(\.id)
+        guard let index = ids.firstIndex(of: id) else { return }
+        let target = min(max(index + offset, 0), ids.count - 1)
+        guard target != index else { return }
+        ids.insert(ids.remove(at: index), at: target)
+        order = ids
+        userDefaults.set(ids, forKey: orderKey)
     }
 
     public func activePill(_ selection: PillSelection, keeping heldID: String? = nil) -> PillStatus? {
@@ -123,8 +148,12 @@ public final class PluginRegistry {
         enabledEntries.first { $0.id == selectedID }?.context.contentSize
     }
 
-    public var preferredDropTarget: PluginEntry? {
-        enabledEntries.first { $0.plugin.acceptsFileDrops }
+    public func dropTarget(for draggedTypes: [UTType]) -> PluginEntry? {
+        enabledEntries.first { entry in
+            entry.plugin.acceptedDropTypes.contains { accepted in
+                draggedTypes.contains { $0.conforms(to: accepted) }
+            }
+        }
     }
 
     public func entry(for id: String) -> PluginEntry? {

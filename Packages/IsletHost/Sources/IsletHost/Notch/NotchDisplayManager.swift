@@ -18,6 +18,18 @@ public final class NotchDisplayManager {
         panels.map(\.controller)
     }
 
+    public func toggleNotch(at point: CGPoint) {
+        if panels.contains(where: { $0.controller.isExpanded }) {
+            panels.forEach { $0.controller.collapse() }
+            return
+        }
+        let panel = panels.first { panel in
+            let frame = panel.controller.screenGeometry.screenFrame
+            return (frame.minX...frame.maxX).contains(point.x) && (frame.minY...frame.maxY).contains(point.y)
+        } ?? panels.first
+        panel?.expandPinned()
+    }
+
     public func start() {
         NotificationCenter.default.addObserver(
             self,

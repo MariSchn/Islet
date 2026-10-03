@@ -269,6 +269,23 @@ struct NotchSettingsView: View {
                 Text("How large the notch grows when it expands. Larger sizes also enlarge the plugin content.")
             }
             Section {
+                Picker("Open on", selection: $settings.openTrigger) {
+                    ForEach(NotchOpenTrigger.allCases) { trigger in
+                        Text(trigger.displayName).tag(trigger)
+                    }
+                }
+                .pickerStyle(.segmented)
+                Picker("Shortcut", selection: $settings.openShortcut) {
+                    ForEach(NotchShortcut.allCases) { shortcut in
+                        Text(shortcut.displayName).tag(shortcut)
+                    }
+                }
+            } header: {
+                Text("Opening")
+            } footer: {
+                Text("With Click, hovering only highlights the notch. The shortcut opens the notch on the display with the pointer from any app; ← and → switch plugins and Esc closes it.")
+            }
+            Section {
                 Toggle("Always draw the notch shape", isOn: $settings.drawsIdleNotchShape)
             } header: {
                 Text("Appearance")
@@ -403,20 +420,45 @@ struct PluginsSettingsView: View {
     var body: some View {
         Form {
             Section {
-                ForEach(registry.entries) { entry in
-                    Toggle(isOn: Binding(
-                        get: { registry.isEnabled(entry.id) },
-                        set: { enabled in Task { await registry.setEnabled(enabled, for: entry.id) } }
-                    )) {
-                        Label {
-                            Text(entry.manifest.displayName)
-                        } icon: {
-                            SettingsIcon(systemImage: entry.manifest.systemImage, tint: .teal, size: 24)
+                let entries = registry.orderedEntries
+                ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                    HStack(spacing: 12) {
+                        VStack(spacing: 0) {
+                            Button {
+                                registry.move(entry.id, by: -1)
+                            } label: {
+                                Image(systemName: "chevron.up")
+                                    .frame(width: 18, height: 12)
+                                    .contentShape(Rectangle())
+                            }
+                            .disabled(index == 0)
+                            .accessibilityLabel("Move \(entry.manifest.displayName) up")
+                            Button {
+                                registry.move(entry.id, by: 1)
+                            } label: {
+                                Image(systemName: "chevron.down")
+                                    .frame(width: 18, height: 12)
+                                    .contentShape(Rectangle())
+                            }
+                            .disabled(index == entries.count - 1)
+                            .accessibilityLabel("Move \(entry.manifest.displayName) down")
+                        }
+                        .buttonStyle(.borderless)
+                        .font(.system(size: 9, weight: .semibold))
+                        Toggle(isOn: Binding(
+                            get: { registry.isEnabled(entry.id) },
+                            set: { enabled in Task { await registry.setEnabled(enabled, for: entry.id) } }
+                        )) {
+                            Label {
+                                Text(entry.manifest.displayName)
+                            } icon: {
+                                SettingsIcon(systemImage: entry.manifest.systemImage, tint: .teal, size: 24)
+                            }
                         }
                     }
                 }
             } footer: {
-                Text("Disabled plugins are removed from the notch and stop running. Plugins with their own settings get a tab in the sidebar while enabled.")
+                Text("Disabled plugins are removed from the notch and stop running. Plugins with their own settings get a tab in the sidebar while enabled. Use the arrows to change the order of the plugins in the notch.")
             }
         }
     }

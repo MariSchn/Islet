@@ -5,6 +5,18 @@ import Testing
 
 @MainActor
 struct AgentSessionStoreTests {
+    @Test func storesAndUpdatesTheTmuxLocation() {
+        let store = AgentSessionStore()
+        let first = TmuxLocation(socket: "/tmp/tmux-501/default", serverPID: 10, pane: "%1")
+        let second = TmuxLocation(socket: "/tmp/tmux-501/default", serverPID: 10, pane: "%2")
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s1", prompt: "go", tmux: first))
+        #expect(store.sessions[0].tmux == first)
+        store.apply(HookEvent(kind: .stop, sessionID: "s1"))
+        #expect(store.sessions[0].tmux == first)
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s1", prompt: "again", tmux: second))
+        #expect(store.sessions[0].tmux == second)
+    }
+
     @Test func recordsRecentToolCallsAndPlans() {
         let store = AgentSessionStore()
         let read = JSONValue.object(["file_path": .string("/a/b.swift")])
@@ -96,6 +108,45 @@ struct AgentSessionStoreTests {
 
         store.apply(HookEvent(kind: .stop, sessionID: "shown", title: "from transcript"))
         #expect(store.sessions.first { $0.id == "shown" }?.displayName == "renamed")
+    }
+
+    @Test func statusLineDetailsKeepPreviousValuesWhenFieldsAreMissing() throws {
+        let store = AgentSessionStore()
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "hidden", cwd: "/tmp/hidden"))
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "shown", cwd: "/tmp/shown", prompt: "go"))
+        let full = SessionDetails(contextPercentage: 40, model: "Opus 4.7", effort: "high", fastMode: true)
+        store.applyStatusLine(StatusLineUpdate(sessionID: "shown", sessionName: "named", details: full))
+        store.applyStatusLine(StatusLineUpdate(sessionID: "hidden", sessionName: "early", details: full))
+        store.applyStatusLine(StatusLineUpdate(sessionID: "shown", sessionName: nil))
+        #expect(store.sessions[0].details == full)
+        #expect(store.sessions[0].displayName == "named")
+
+        let cleared = try StatusLineUpdate.decode(Data(#"{"session_id":"shown","context_window":{"used_percentage":null},"model":{"display_name":""}}"#.utf8))
+        store.applyStatusLine(cleared)
+        #expect(store.sessions[0].details == full)
+
+        store.applyStatusLine(StatusLineUpdate(sessionID: "shown", details: SessionDetails(contextPercentage: 12, model: "Sonnet", fastMode: false)))
+        #expect(store.sessions[0].details == SessionDetails(contextPercentage: 12, model: "Sonnet", effort: "high", fastMode: false))
+
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "hidden", prompt: "go"))
+        #expect(store.sessions.first { $0.id == "hidden" }?.details == full)
+        #expect(store.sessions.first { $0.id == "hidden" }?.displayName == "early")
+    }
+
+    @Test func aMissingPullRequestClearsThePreviousOne() throws {
+        let store = AgentSessionStore()
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s", cwd: "/tmp/proj", prompt: "go"))
+        let open = try StatusLineUpdate.decode(Data(#"{"session_id":"s","model":{"display_name":"Opus"},"worktree":{"name":"my-feature"},"pr":{"number":42,"url":"https://example.com/42","review_state":"pending"}}"#.utf8))
+        store.applyStatusLine(open)
+        #expect(store.sessions[0].details.worktree == "my-feature")
+        #expect(store.sessions[0].details.pullRequest?.number == 42)
+        #expect(store.sessions[0].details.model == "Opus")
+
+        let closed = try StatusLineUpdate.decode(Data(#"{"session_id":"s"}"#.utf8))
+        store.applyStatusLine(closed)
+        #expect(store.sessions[0].details.worktree == nil)
+        #expect(store.sessions[0].details.pullRequest == nil)
+        #expect(store.sessions[0].details.model == "Opus")
     }
 
     @Test func walksThroughSessionLifecycle() {
@@ -557,6 +608,33 @@ struct AgentSessionStoreTests {
         store.decide(try #require(store.sessions.first?.pendingRequest?.id), .deny)
         #expect(await denied.body.contains(#""behavior":"deny""#))
         #expect(store.sessions.first?.activity == "Denied Bash")
+    }
+
+    @Test func alwaysAllowReturnsTheSuggestedRule() async throws {
+        let store = AgentSessionStore()
+        let suggestion: JSONValue = .object([
+            "type": .string("addRules"),
+            "rules": .array([.object(["toolName": .string("Bash"), "ruleContent": .string("ls -la /tmp")])]),
+            "behavior": .string("allow"),
+            "destination": .string("localSettings"),
+        ])
+        let event = HookEvent(
+            kind: .permissionRequest,
+            sessionID: "a",
+            cwd: "/x/one",
+            toolName: "Bash",
+            toolInput: .object(["command": .string("ls -la /tmp")]),
+            permissionSuggestions: [suggestion]
+        )
+        async let reply = store.handle(event)
+        try await waitForPendingRequest(in: store)
+        let request = try #require(store.sessions.first?.pendingRequest)
+        #expect(request.alwaysAllowRule == suggestion)
+        store.decide(request.id, .allowAlways)
+        #expect(await reply.body.contains(#""updatedPermissions""#))
+        #expect(store.sessions.first?.pendingRequest == nil)
+        #expect(store.sessions.first?.state == .working)
+        #expect(store.sessions.first?.activity == nil)
     }
 
     @Test func questionsAreAnsweredThroughUpdatedInput() async throws {

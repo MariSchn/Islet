@@ -24,15 +24,17 @@ SF Symbols need no bundling. Use them by name in `PluginManifest.systemImage`, `
 
 ## File drops
 
-Files dragged over the notch expand it while at least one enabled plugin has `acceptsFileDrops` set to `true`; other drags, such as text, links or images, are ignored. If the user has "Switch to a plugin that accepts files" turned on (Settings › General, on by default), the notch also switches to the first enabled plugin whose `acceptsFileDrops` is `true`.
+Plugins list the content types they accept in `acceptedDropTypes` (`[UTType]`, empty by default). A drag expands the notch while at least one enabled plugin accepts it: a plugin matches when some dragged type conforms to one of its accepted types, so `.image` matches a dragged `.png` and `.fileURL` matches a dragged file. If the user has "Switch to a plugin that accepts files" turned on (Settings › General, on by default), the notch also switches to the first enabled plugin, in tab order, that matches.
 
-`acceptsFileDrops` only decides whether the notch reacts to file drags and which plugin it switches to. To receive the files, your screen handles the drop itself, as `ShelfScreen` does:
+The notch window registers only for the pasteboard types `.fileURL`, `.URL`, `.string`, `.tiff` and `.png`. Drags that carry none of these never reach plugins.
+
+`acceptedDropTypes` only decides whether the notch reacts to a drag and which plugin it switches to. To receive the files, your screen handles the drop itself, as `ShelfScreen` does:
 
 ```swift
 .onDrop(of: [.fileURL], isTargeted: $isTargeted) { providers in
     Task { @MainActor in
         let urls = await loadFileURLs(from: providers)
-        store.add(urls)
+        await store.add(urls)
     }
     return true
 }
@@ -45,6 +47,10 @@ Files dragged over the notch expand it while at least one enabled plugin has `ac
 ```swift
 context.observe({ [unowned context] in context.isScreenVisible }) { controller.isScreenVisible = $0 }
 ```
+
+## Local servers
+
+Plugins that accept requests from scripts or tools on the same machine use `LocalHTTPServer` (see the [API reference](api-reference.md#localhttpserver)). Start it in `activate()` and stop it in `deactivate()`, since the port stays bound otherwise. Handlers run off the main actor: hop to the main actor to touch plugin state, and check `Task.isCancelled` after long awaits, because the task is cancelled when the client disconnects. Show a failed `start` (port in use) to the user instead of swallowing it.
 
 ## Logging
 
@@ -77,7 +83,7 @@ The app and all packages build in the Swift 6 language mode with strict concurre
   }
   ```
 
-- Move blocking work (file IO, parsing, image decoding) off the main actor with `Task.detached` or an `actor`, and hop back to the main actor to update state. `MediaController` decodes artwork with `await Task.detached { ... }.value`. `ShelfStore` checks file reachability in a detached task.
+- Move blocking work (file IO, parsing, image decoding) off the main actor with `Task.detached` or an `actor`, and hop back to the main actor to update state. `MediaController` decodes artwork with `await Task.detached { ... }.value`. `ShelfStore` checks file reachability in a detached task, and copies a dropped file there before inserting the item.
 - Values that cross actors must be `Sendable`. `PillStatus` and `PillAnnouncement` are, which is why their colors are `Color.Resolved` instead of `Color`.
 - For dependencies you want to replace in tests, use a `Sendable` protocol, as `MediaSource` does in `MediaPlugin`.
 

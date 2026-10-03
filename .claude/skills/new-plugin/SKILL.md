@@ -106,7 +106,7 @@ Replace the counter with the real feature, keeping these rules:
 - Persist preferences with `context.settings` and save them with `context.observe`; put data files in `context.storageDirectory`.
 - Log through `context.logger`, never `print` or `NSLog`.
 - If the height depends on content, compute it in a static function from the same constants the views use and derive `contentSize` from it.
-- Return `makeSettingsView()` only when there is something to configure, and set `acceptsFileDrops` only for plugins that handle dropped files.
+- Return `makeSettingsView()` only when there is something to configure, and set `acceptedDropTypes` only for plugins that handle dropped content.
 
 ## 3. Add tests
 
@@ -158,7 +158,7 @@ In `project.yml`:
 - under `targets.Islet.dependencies`: `- package: <Name>Plugin`
 - under `schemes.Islet.test.targets`: `- package: <Name>Plugin/<Name>PluginTests`
 
-In `App/AppDelegate.swift`, add `import <Name>Plugin` in alphabetical order and append `<Name>Plugin.self` to `builtInPlugins`. The list order is the tab order in the notch.
+In `App/AppDelegate.swift`, add `import <Name>Plugin` in alphabetical order and append `<Name>Plugin.self` to `builtInPlugins`. The list order is the default tab order in the notch; users can reorder the tabs in Settings › Plugins.
 
 If the plugin controls other apps through Apple events, check that `NSAppleEventsUsageDescription` in `project.yml` still describes why.
 

@@ -16,20 +16,20 @@ public protocol IsletPlugin: AnyObject {
 
     func makeScreen() -> AnyView
 
-    var acceptsFileDrops: Bool { get }
+    var acceptedDropTypes: [UTType] { get }
 
     func makeSettingsView() -> AnyView?
 }
 ```
 
-`manifest`, `init(context:)` and `makeScreen()` are required. The defaults for the rest are: `activate()` and `deactivate()` do nothing, `acceptsFileDrops` is `false`, and `makeSettingsView()` returns `nil`.
+`manifest`, `init(context:)` and `makeScreen()` are required. The defaults for the rest are: `activate()` and `deactivate()` do nothing, `acceptedDropTypes` is empty, and `makeSettingsView()` returns `nil`.
 
 | Member | Called | Purpose |
 | --- | --- | --- |
 | `activate()` | When the plugin is registered while enabled, and each time the user enables it again. | Start work: load state, start timers, servers or observers, set `contentSize` and `pillStatus`. Throwing puts the plugin in the failed state (see [Lifecycle](#lifecycle)). |
 | `deactivate()` | When the user disables the plugin, and when the app quits. | Stop everything `activate()` started. On quit, the host waits at most 2 seconds for all plugins together. |
 | `makeScreen()` | Once, the first time the host needs the screen. The result is cached for the lifetime of the app. | Return the expanded view. Because it is built only once, it has to observe your model rather than capture values. |
-| `acceptsFileDrops` | Whenever the user drags files over the notch. | `true` makes the notch react to file drags and switch to this plugin during one (see [File drops](resources-and-concurrency.md#file-drops)). |
+| `acceptedDropTypes` | Whenever the user drags content over the notch. | The types you accept make the notch react to matching drags and switch to this plugin during one (see [Drops](resources-and-concurrency.md#file-drops)). |
 | `makeSettingsView()` | Once, when the settings window first lists plugin settings. Cached like the screen. | Return a view for the plugin's settings tab, or `nil` for no tab. |
 
 `init(context:)` is called when the host registers the plugin with `PluginRegistry.register(_:)`. It runs even for plugins the user has disabled, so keep it cheap and start work in `activate()`. Setting up `derive` and `observe` in the initializer is fine: they only read your model.
@@ -218,11 +218,39 @@ private struct AnimatedList: View {
 
 - `Duration.milliseconds: Double`: a `Duration` as fractional milliseconds.
 
+## LocalHTTPServer
+
+```swift
+public actor LocalHTTPServer {
+    public init(port: UInt16, maxBodySize: Int = 16 << 20, requestTimeout: Duration = .seconds(10), replyTimeout: Duration = .seconds(60))
+    public func start(handler: @escaping @Sendable (HTTPRequest) async -> HTTPResponse) async throws
+    public func stop() async
+    public var isListening: Bool { get }
+    public nonisolated let port: UInt16
+}
+```
+
+A small HTTP/1.1 server bound to `127.0.0.1` only, for plugins that expose a local API. `start` throws when the port is in use. Each connection carries one request and is closed after the response (no keep-alive, no TLS).
+
+- A request that has not arrived completely within `requestTimeout` is closed, one that cannot be parsed gets `400`, and one whose body exceeds `maxBodySize` gets `413`.
+- The handler's response is sent when it returns. If it takes longer than `replyTimeout`, or the client disconnects, the connection is closed and the handler's task is cancelled; no response is sent then.
+- `HTTPRequest` has `method`, `path`, lowercased `headers`, `body` and `bearerToken`. `HTTPResponse` has `json(_:_:)` and `text(_:)` helpers.
+
+```swift
+let server = LocalHTTPServer(port: 7400)
+try await server.start { request in
+    guard request.bearerToken == token else { return .json(401, #"{"error":"unauthorized"}"#) }
+    return .json()
+}
+```
+
+Start it in `activate()` and stop it in `deactivate()`.
+
 ## Host-side types
 
 Plugins don't need these at runtime, but they are public and useful in tests:
 
-- `PluginRegistry(storageRoot: URL, userDefaults: UserDefaults = .standard)` owns all plugins. `register(_:) async throws -> PluginEntry` (discardable result) registers and activates a plugin type; `register(manifest:make:)` does the same with a factory closure. `setEnabled(_:for:) async`, `isEnabled(_:)`, `entry(for:)`, `entries`, `enabledEntries` and `selectedID` expose the rest of its state. `deactivateAll()` deactivates every plugin, and `setNotchExpanded(_:by:)` is how the host reports an open notch.
+- `PluginRegistry(storageRoot: URL, userDefaults: UserDefaults = .standard)` owns all plugins. `register(_:) async throws -> PluginEntry` (discardable result) registers and activates a plugin type; `register(manifest:make:)` does the same with a factory closure. `setEnabled(_:for:) async`, `isEnabled(_:)`, `entry(for:)`, `entries` (registration order), `orderedEntries` (the user's order from Settings › Plugins, stored under `islet.pluginOrder`, then any remaining entries in registration order), `enabledEntries` (`orderedEntries` without disabled plugins) and `selectedID` expose the rest of its state. `move(_:by:)` moves an entry within `orderedEntries`, clamped to the ends, and stores the order. `deactivateAll()` deactivates every plugin, and `setNotchExpanded(_:by:)` is how the host reports an open notch.
 - `PluginEntry` exposes `manifest`, `context`, `plugin`, `state`, and the cached `screen` and `settingsView`.
 - `PluginState.isActive` is `true` only for `.active`.
 - `PillSelection` is the user's choice of how the collapsed pill is picked (see [Collapsed pill](collapsed-pill.md#which-plugins-pill-is-shown)).

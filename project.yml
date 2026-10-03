@@ -17,6 +17,18 @@ packages:
     path: Plugins/MediaPlugin
   AgentsPlugin:
     path: Plugins/AgentsPlugin
+  CalendarPlugin:
+    path: Plugins/CalendarPlugin
+  GitHubPlugin:
+    path: Plugins/GitHubPlugin
+  TimerPlugin:
+    path: Plugins/TimerPlugin
+  SystemMonitorPlugin:
+    path: Plugins/SystemMonitorPlugin
+  DownloadsPlugin:
+    path: Plugins/DownloadsPlugin
+  ScriptsPlugin:
+    path: Plugins/ScriptsPlugin
 targets:
   Islet:
     type: application
@@ -30,6 +42,12 @@ targets:
       - package: ShelfPlugin
       - package: MediaPlugin
       - package: AgentsPlugin
+      - package: CalendarPlugin
+      - package: GitHubPlugin
+      - package: TimerPlugin
+      - package: SystemMonitorPlugin
+      - package: DownloadsPlugin
+      - package: ScriptsPlugin
     info:
       path: App/Info.plist
       properties:
@@ -38,6 +56,8 @@ targets:
         LSMinimumSystemVersion: "15.0"
         NSHumanReadableCopyright: ""
         NSAppleEventsUsageDescription: Islet controls your music player to show what's playing, and your terminal to bring an agent's session to the front.
+        NSCalendarsFullAccessUsageDescription: Islet shows your upcoming events in the notch.
+        NSDownloadsFolderUsageDescription: Islet shows the progress of your downloads in the notch and lists recent downloads so you can drag them elsewhere.
     settings:
       base:
         PRODUCT_NAME: Islet
@@ -62,3 +82,9 @@ schemes:
         - package: ShelfPlugin/ShelfPluginTests
         - package: MediaPlugin/MediaPluginTests
         - package: AgentsPlugin/AgentsPluginTests
+        - package: CalendarPlugin/CalendarPluginTests
+        - package: GitHubPlugin/GitHubPluginTests
+        - package: TimerPlugin/TimerPluginTests
+        - package: SystemMonitorPlugin/SystemMonitorPluginTests
+        - package: DownloadsPlugin/DownloadsPluginTests
+        - package: ScriptsPlugin/ScriptsPluginTests
