@@ -12,6 +12,12 @@ final class AgentSessionStore {
     enum Alert: Sendable, Equatable {
         case needsAttention(AgentSession)
         case finished(AgentSession)
+
+        var session: AgentSession {
+            switch self {
+            case .needsAttention(let session), .finished(let session): session
+            }
+        }
     }
 
     private(set) var sessions: [AgentSession] = []
