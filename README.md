@@ -29,7 +29,7 @@ The notch sits in the most valuable spot on your screen and does nothing. Islet 
 
 - 🧩 **Everything is a plugin.** The built-in screens use exactly the same public API as yours. Nothing is special-cased.
 - ⚡️ **One class and a SwiftUI view.** No window or AppKit code required, no private APIs. Islet handles the notch shape, hover, animations, displays and settings for you.
-- 🎁 **Useful out of the box.** A control centre for coding agents, a music player and a file shelf ship as ready-made plugins, and double as reference implementations.
+- 🎁 **Useful out of the box.** A control centre for coding agents, a music player, a file shelf and download progress ship as ready-made plugins, and double as reference implementations.
 - 🪄 **Feels like part of macOS.** Smooth animations, a collapsed status pill, every display, a settings tab per plugin. Your plugin gets all of it for free.
 
 <br>
@@ -102,7 +102,7 @@ Pomodoro timer · next meeting from your calendar · CI and pull request status 
 
 ## 🎁 Built-in plugins
 
-Islet comes with three ready-made plugins, plus the minimal Hello example in Debug builds. They are ordinary plugins built on the same API as yours: use them as they are, switch off the ones you don't need, or read their source as examples.
+Islet comes with four ready-made plugins, plus the minimal Hello example in Debug builds. They are ordinary plugins built on the same API as yours: use them as they are, switch off the ones you don't need, or read their source as examples.
 
 ### 🤖 Agents
 
@@ -133,6 +133,12 @@ A control centre for your coding agents. Islet installs lightweight hooks for **
 - Drag files onto the notch and Islet switches to the Shelf automatically.
 - Drag them back out into any app, open them or reveal them in Finder.
 - The Shelf survives restarts and dims files that were moved or deleted.
+
+### ⬇️ Downloads
+
+- Downloads in your Downloads folder show up in the collapsed notch: a ring that fills while one file downloads, or the number of downloads and their combined progress.
+- Browsers that don't report progress show the file's name and growing size instead.
+- A short announcement when a download finishes, and the last eight downloads in the notch, ready to drag into any app, open or reveal in Finder.
 
 <br>
 
@@ -184,6 +190,7 @@ Or open `Islet.xcodeproj` in Xcode and press <kbd>⌘</kbd> <kbd>R</kbd>. To kee
 
 1. **Agents:** open **Settings › Agents** and press **Install** next to **Claude Code hooks** (or **Codex hooks**), then restart any sessions that were already running. Codex additionally needs its hooks feature enabled in `~/.codex/config.toml` and the hooks trusted once via `/hooks`. For live session names and usage limits, also install the **status line** integration in the same tab (your existing status line keeps working) and turn on **Show Claude usage limits**. Agents on other machines need an SSH port forward and a one-time install command, both shown under **Remote machines**.
 2. **Media:** choose **Spotify** or **Music** under **Settings › Media**, press play, and allow Islet to control the player when macOS asks.
+3. **Downloads:** allow Islet to read your Downloads folder when macOS asks. If you declined, the Downloads screen links to **System Settings › Privacy & Security › Files and Folders**.
 
 <br>
 
@@ -197,6 +204,7 @@ flowchart LR
         agents["Agents"]
         media["Media"]
         shelf["Shelf"]
+        downloads["Downloads"]
     end
     core["<b>IsletCore</b><br/>plugin API · registry<br/>pill · settings store"]
     host["<b>IsletHost</b><br/>notch windows · animations<br/>settings · displays"]

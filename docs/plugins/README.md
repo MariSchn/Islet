@@ -29,6 +29,7 @@ All built-in plugins live in `Plugins/` and use only the public `IsletCore` API,
 - `ShelfPlugin`: file drops (`acceptsFileDrops`), state that persists as JSON in `context.storageDirectory`, a width derived from the number of items, and logging through `context.logger`.
 - `MediaPlugin`: polling in `activate()`/`deactivate()` that slows down while its screen is hidden (`context.isScreenVisible`), a derived pill with artwork and tint, interchangeable data sources with per-source capabilities, a height that grows while a list is open, and stubbed sources in tests.
 - `AgentsPlugin`: a local server started in `activate()`, a pill and content size derived from its session store, a ring pill, announcements driven by `context.observe`, bundled resources (`Bundle.module`) and a large settings pane.
+- `DownloadsPlugin`: watching files of other apps with `Progress.addSubscriber(forFileURL:withPublishingHandler:)` and a `DispatchSource` on a folder, both started in `activate()` and stopped in `deactivate()`, a ring pill derived from its monitor, announcements driven by `context.observe`, and a test that registers the plugin with `register(manifest:make:)` to point it at a temporary folder.
 
 ## Checklist for a new plugin
 
