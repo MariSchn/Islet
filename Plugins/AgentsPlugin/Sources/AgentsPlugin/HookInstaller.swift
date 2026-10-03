@@ -107,8 +107,8 @@ struct HookInstaller: Sendable {
         """
     }
 
-    var remoteInstallCommand: String {
-        "curl -sf -H 'Authorization: Bearer \(token)' http://127.0.0.1:\(port)\(HookServer.installPath) | sh"
+    func remoteInstallCommand(code: String) -> String {
+        "curl -sf -H 'Authorization: Bearer \(code)' http://127.0.0.1:\(port)\(HookServer.installPath) | sh"
     }
 
     var sshConfigSnippet: String {

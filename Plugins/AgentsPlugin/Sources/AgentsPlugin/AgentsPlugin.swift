@@ -86,7 +86,7 @@ public final class AgentsPlugin: IsletPlugin {
         if let stored: String = settings.value(forKey: Self.tokenKey) {
             token = stored
         } else {
-            token = Self.makeToken()
+            token = HookServer.makeToken()
             settings.set(token, forKey: Self.tokenKey)
         }
         var display = Self.load(DisplaySettings(), Self.displayKeys, from: settings)
@@ -149,9 +149,5 @@ public final class AgentsPlugin: IsletPlugin {
         for entry in keys {
             settings.set(value[keyPath: entry.value], forKey: entry.key)
         }
-    }
-
-    private static func makeToken() -> String {
-        (0..<32).map { _ in "0123456789abcdef".randomElement()! }.reduce(into: "") { $0.append($1) }
     }
 }

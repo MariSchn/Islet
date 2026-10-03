@@ -69,6 +69,10 @@ final class AgentsController {
         alerter.onOpenSession = { [weak self] in self?.showTerminal(forSession: $0) }
     }
 
+    func makeRemoteInstallCommand() async -> String {
+        installer.remoteInstallCommand(code: await server.issueInstallCode())
+    }
+
     func terminal(for session: AgentSession) -> InstalledTerminal? {
         session.terminal.flatMap(InstalledTerminal.lookup)
     }

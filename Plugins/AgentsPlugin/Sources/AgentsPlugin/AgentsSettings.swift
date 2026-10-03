@@ -133,12 +133,12 @@ struct AgentsSettings: View {
                 Text("Shows how much of the 5-hour and 7-day Claude quota is used above the session list. The numbers come from Claude Code's status line and update while you use Claude Code.")
             }
             Section {
-                CopyableCommand(title: "SSH config", text: controller.installer.sshConfigSnippet)
-                CopyableCommand(title: "Install on the remote", text: controller.installer.remoteInstallCommand)
+                CopyableCommand(title: "SSH config") { [snippet = controller.installer.sshConfigSnippet] in snippet }
+                CopyableCommand(title: "Install on the remote", makeText: controller.makeRemoteInstallCommand)
             } header: {
                 Text("Remote machines")
             } footer: {
-                Text("Add the config line to the machine's Host entry in ~/.ssh/config (or pass -R \(controller.installer.port):127.0.0.1:\(controller.installer.port) to ssh) so the remote can reach Islet through the tunnel, then run the install command once on the remote machine. Sessions there show the host name and are marked unreachable when no updates arrive for \(Int(AgentSessionStore.unreachableTimeout / 60)) minutes.")
+                Text("Add the config line to the machine's Host entry in ~/.ssh/config (or pass -R \(controller.installer.port):127.0.0.1:\(controller.installer.port) to ssh) so the remote can reach Islet through the tunnel, then run the install command once on the remote machine. Its code stops working after \(Int(HookServer.installCodeLifetime.components.seconds / 60)) minutes, so copy a fresh one for each machine. Sessions there show the host name and are marked unreachable when no updates arrive for \(Int(AgentSessionStore.unreachableTimeout / 60)) minutes.")
             }
         }
         .onAppear { controller.refreshInstallState() }
@@ -203,7 +203,8 @@ private struct StatusLineRow: View {
 
 private struct CopyableCommand: View {
     let title: String
-    let text: String
+    let makeText: () async -> String
+    @State private var text = ""
     @State private var copied = false
 
     var body: some View {
@@ -216,15 +217,17 @@ private struct CopyableCommand: View {
                     .truncationMode(.middle)
                     .foregroundStyle(.secondary)
                 Button(copied ? "Copied" : "Copy") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(text, forType: .string)
-                    copied = true
                     Task {
+                        text = await makeText()
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(text, forType: .string)
+                        copied = true
                         try? await Task.sleep(for: .seconds(1.5))
                         copied = false
                     }
                 }
             }
         }
+        .task { text = await makeText() }
     }
 }

@@ -276,8 +276,9 @@ struct HookInstallerTests {
         #expect(stop?.count == 2)
         let command = ((stop?.last?["hooks"] as? [[String: Any]])?.first?["command"] as? String) ?? ""
         #expect(command == "'\(remoteInstaller.scriptURL.path)'")
-        #expect(installer.remoteInstallCommand.contains("Bearer deadbeef"))
-        #expect(installer.remoteInstallCommand.contains("127.0.0.1:7365/install"))
+        #expect(installer.remoteInstallCommand(code: "c0de").contains("Bearer c0de"))
+        #expect(!installer.remoteInstallCommand(code: "c0de").contains("deadbeef"))
+        #expect(installer.remoteInstallCommand(code: "c0de").contains("127.0.0.1:7365/install"))
         #expect(installer.sshConfigSnippet == "RemoteForward 7365 127.0.0.1:7365")
     }
 
