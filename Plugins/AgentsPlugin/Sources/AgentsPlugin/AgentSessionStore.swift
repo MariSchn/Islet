@@ -228,15 +228,19 @@ final class AgentSessionStore {
     }
 
     func applyStatusLine(_ update: StatusLineUpdate) {
-        guard let name = update.sessionName else { return }
         if let index = sessions.firstIndex(where: { $0.id == update.sessionID }) {
-            if sessions[index].title != name || !sessions[index].hasStatusLineTitle {
+            if let name = update.sessionName, sessions[index].title != name || !sessions[index].hasStatusLineTitle {
                 sessions[index].title = name
                 sessions[index].hasStatusLineTitle = true
             }
-        } else if hiddenSessions[update.sessionID] != nil {
-            hiddenSessions[update.sessionID]?.title = name
-            hiddenSessions[update.sessionID]?.hasStatusLineTitle = true
+            sessions[index].details = sessions[index].details.merging(update.details)
+        } else if var session = hiddenSessions[update.sessionID] {
+            if let name = update.sessionName {
+                session.title = name
+                session.hasStatusLineTitle = true
+            }
+            session.details = session.details.merging(update.details)
+            hiddenSessions[update.sessionID] = session
         }
     }
 

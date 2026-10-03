@@ -98,6 +98,29 @@ struct AgentSessionStoreTests {
         #expect(store.sessions.first { $0.id == "shown" }?.displayName == "renamed")
     }
 
+    @Test func statusLineDetailsKeepPreviousValuesWhenFieldsAreMissing() throws {
+        let store = AgentSessionStore()
+        store.apply(HookEvent(kind: .sessionStart, sessionID: "hidden", cwd: "/tmp/hidden"))
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "shown", cwd: "/tmp/shown", prompt: "go"))
+        let full = SessionDetails(contextPercentage: 40, model: "Opus 4.7", effort: "high", fastMode: true)
+        store.applyStatusLine(StatusLineUpdate(sessionID: "shown", sessionName: "named", details: full))
+        store.applyStatusLine(StatusLineUpdate(sessionID: "hidden", sessionName: "early", details: full))
+        store.applyStatusLine(StatusLineUpdate(sessionID: "shown", sessionName: nil))
+        #expect(store.sessions[0].details == full)
+        #expect(store.sessions[0].displayName == "named")
+
+        let cleared = try StatusLineUpdate.decode(Data(#"{"session_id":"shown","context_window":{"used_percentage":null},"model":{"display_name":""}}"#.utf8))
+        store.applyStatusLine(cleared)
+        #expect(store.sessions[0].details == full)
+
+        store.applyStatusLine(StatusLineUpdate(sessionID: "shown", details: SessionDetails(contextPercentage: 12, model: "Sonnet", fastMode: false)))
+        #expect(store.sessions[0].details == SessionDetails(contextPercentage: 12, model: "Sonnet", effort: "high", fastMode: false))
+
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "hidden", prompt: "go"))
+        #expect(store.sessions.first { $0.id == "hidden" }?.details == full)
+        #expect(store.sessions.first { $0.id == "hidden" }?.displayName == "early")
+    }
+
     @Test func walksThroughSessionLifecycle() {
         let store = AgentSessionStore()
         store.apply(HookEvent(kind: .sessionStart, sessionID: "s1", cwd: "/tmp/proj"))

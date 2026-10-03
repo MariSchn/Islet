@@ -115,8 +115,12 @@ public final class AgentsPlugin: IsletPlugin {
             Self.contentSize(for: controller.store.sessions, expanded: controller.expandedSessionIDs, showsUsage: controller.showsUsageBar, historyLength: controller.display.historyLength)
         }
         var announcer = StatusAnnouncer()
+        var contextAlert = ContextAlert()
         context.observe({ controller.store.sessions }) { [unowned context] sessions in
             if let announcement = announcer.announcement(for: sessions), controller.shouldAnnounce(announcement) {
+                context.announce(announcement)
+            }
+            for announcement in contextAlert.announcements(for: sessions) where controller.alerts.announcesInNotch {
                 context.announce(announcement)
             }
             controller.interruptions.track(sessions)

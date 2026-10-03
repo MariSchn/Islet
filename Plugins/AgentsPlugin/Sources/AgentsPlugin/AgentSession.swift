@@ -47,6 +47,7 @@ struct AgentSession: Identifiable, Sendable, Equatable {
     var pendingRequests: [PendingRequest] = []
     var activities: [ActivityEntry] = []
     var plan: String?
+    var details = SessionDetails()
     var startedAt: Date
     var turnStartedAt: Date
     var updatedAt: Date
@@ -60,5 +61,31 @@ struct AgentSession: Identifiable, Sendable, Equatable {
     var projectName: String {
         guard let cwd, !cwd.isEmpty else { return agent.displayName }
         return (cwd as NSString).lastPathComponent
+    }
+}
+
+struct SessionDetails: Sendable, Equatable {
+    var contextPercentage: Double?
+    var model: String?
+    var effort: String?
+    var fastMode: Bool?
+
+    var badgeText: String? {
+        let parts = [model, effort, fastMode == true ? "fast" : nil].compactMap { $0 }
+        guard !parts.isEmpty else { return nil }
+        return parts.joined(separator: " · ")
+    }
+
+    func merging(_ update: SessionDetails) -> SessionDetails {
+        SessionDetails(
+            contextPercentage: update.contextPercentage ?? contextPercentage,
+            model: update.model ?? model,
+            effort: update.effort ?? effort,
+            fastMode: update.fastMode ?? fastMode
+        )
+    }
+
+    static func percentText(_ value: Double) -> String {
+        String(Int(value.rounded()))
     }
 }

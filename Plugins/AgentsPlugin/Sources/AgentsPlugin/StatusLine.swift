@@ -4,6 +4,7 @@ struct StatusLineUpdate: Sendable, Equatable {
     var sessionID: String
     var sessionName: String?
     var usage: ClaudeUsage?
+    var details = SessionDetails()
 
     struct Invalid: Error {}
 
@@ -15,7 +16,28 @@ struct StatusLineUpdate: Sendable, Equatable {
         let usage = (object["rate_limits"] as? [String: Any]).map { limits in
             ClaudeUsage(fiveHour: window(limits["five_hour"]), sevenDay: window(limits["seven_day"]))
         }
-        return StatusLineUpdate(sessionID: sessionID, sessionName: name, usage: usage)
+        return StatusLineUpdate(sessionID: sessionID, sessionName: name, usage: usage, details: details(from: object))
+    }
+
+    private static func details(from object: [String: Any]) -> SessionDetails {
+        let context = object["context_window"] as? [String: Any]
+        let model = object["model"] as? [String: Any]
+        let effort = object["effort"] as? [String: Any]
+        return SessionDetails(
+            contextPercentage: double(context?["used_percentage"]),
+            model: string(model?["display_name"]),
+            effort: string(effort?["level"]),
+            fastMode: object["fast_mode"] as? Bool
+        )
+    }
+
+    private static func string(_ value: Any?) -> String? {
+        (value as? String).flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    private static func double(_ value: Any?) -> Double? {
+        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        return number.doubleValue
     }
 
     private static func window(_ value: Any?) -> UsageWindow? {

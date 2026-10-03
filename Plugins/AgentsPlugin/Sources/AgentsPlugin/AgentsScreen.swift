@@ -122,6 +122,7 @@ private struct SessionRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     SessionTitle(session: session)
+                        .layoutPriority(-1)
                     if let terminal {
                         Button(action: showTerminal) {
                             Image(nsImage: terminal.icon)
@@ -142,6 +143,16 @@ private struct SessionRow: View {
                             .help(session.isUnreachable ? "No updates from \(host) for a while. Is the SSH tunnel still up?" : "Running on \(host)")
                     }
                     Spacer(minLength: 0)
+                    if let badge = session.details.badgeText {
+                        Text(badge)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                            .fixedSize()
+                    }
+                    if let percentage = session.details.contextPercentage {
+                        ContextMeter(percentage: percentage)
+                    }
                     AgentBadge(agent: session.agent)
                     StateLabel(session: session)
                     ZStack {
@@ -473,6 +484,29 @@ enum SessionColors {
     static let idleTint = Color.Resolved(red: 0.56, green: 0.56, blue: 0.58)
     static let failedTint = Color.Resolved(red: 1, green: 0.27, blue: 0.23)
     static let working = Color(workingTint)
+}
+
+private struct ContextMeter: View {
+    let percentage: Double
+
+    var body: some View {
+        Capsule()
+            .fill(.quaternary)
+            .frame(width: 36, height: 4)
+            .overlay(alignment: .leading) {
+                Capsule()
+                    .fill(fill)
+                    .frame(width: 36 * CGFloat(min(max(percentage, 0), 100)) / 100)
+            }
+            .fixedSize()
+            .help("Context \(SessionDetails.percentText(percentage))% used")
+    }
+
+    private var fill: Color {
+        if percentage >= 85 { return .orange }
+        if percentage >= 70 { return .yellow }
+        return .secondary
+    }
 }
 
 private struct AgentBadge: View {
