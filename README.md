@@ -30,6 +30,8 @@ The notch sits in the most valuable spot on your screen and does nothing. Islet 
 - 🧩 **Everything is a plugin.** The built-in screens use exactly the same public API as yours. Nothing is special-cased.
 - ⚡️ **One class and a SwiftUI view.** No window or AppKit code required, no private APIs. Islet handles the notch shape, hover, animations, displays and settings for you.
 - 🎁 **Useful out of the box.** A control centre for coding agents, a music player, a file shelf and your GitHub pull requests ship as ready-made plugins, and double as reference implementations.
+
+- 🎁 **Useful out of the box.** A control centre for coding agents, a music player, a file shelf and download progress ship as ready-made plugins, and double as reference implementations.
 - 🪄 **Feels like part of macOS.** Smooth animations, a collapsed status pill, every display, a settings tab per plugin. Your plugin gets all of it for free.
 
 <br>
@@ -157,6 +159,12 @@ A control centre for your coding agents. Islet installs lightweight hooks for **
 - The closed notch stays quiet until something needs attention: sustained high CPU, memory pressure, a low battery, a hot Mac or an almost full startup disk, each announced once. Optionally shows a CPU ring all the time.
 - Choose which rows to show under **Settings › System**. Samples every second while the screen is open and every five seconds otherwise.
 
+### ⬇️ Downloads
+
+- Downloads in your Downloads folder show up in the collapsed notch: a ring that fills while one file downloads, or the number of downloads and their combined progress.
+- Browsers that don't report progress show the file's name and growing size instead.
+- A short announcement when a download finishes, and the last eight downloads in the notch, ready to drag into any app, open or reveal in Finder.
+
 <br>
 
 ## 🪄 The notch
@@ -209,6 +217,8 @@ Or open `Islet.xcodeproj` in Xcode and press <kbd>⌘</kbd> <kbd>R</kbd>. To kee
 2. **Media:** choose **Spotify** or **Music** under **Settings › Media**, press play, and allow Islet to control the player when macOS asks.
 3. **GitHub:** install the GitHub CLI (`brew install gh`) and log in once with `gh auth login`.
 
+3. **Downloads:** allow Islet to read your Downloads folder when macOS asks. If you declined, the Downloads screen links to **System Settings › Privacy & Security › Files and Folders**.
+
 <br>
 
 ## 🏗 Architecture
@@ -224,6 +234,8 @@ flowchart LR
         timer["Timer"]
 
         system["System"]
+
+        downloads["Downloads"]
     end
     core["<b>IsletCore</b><br/>plugin API · registry<br/>pill · settings store"]
     host["<b>IsletHost</b><br/>notch windows · animations<br/>settings · displays"]
