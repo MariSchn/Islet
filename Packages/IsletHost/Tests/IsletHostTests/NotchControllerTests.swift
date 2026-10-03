@@ -57,14 +57,20 @@ struct NotchControllerTests {
         let controller = makeController()
 
         controller.isHovering = true
-        try await Task.sleep(for: expandDelay * 2)
-        #expect(controller.isExpanded)
+        try await waitUntil { controller.isExpanded }
 
+        let leftAt = ContinuousClock.now
         controller.isHovering = false
-        try await Task.sleep(for: expandDelay * 2 / 3)
-        #expect(controller.isExpanded)
-        try await Task.sleep(for: settle)
-        #expect(!controller.isExpanded)
+        try await waitUntil { !controller.isExpanded }
+        #expect(ContinuousClock.now - leftAt > expandDelay)
+    }
+
+    private func waitUntil(_ condition: () -> Bool) async throws {
+        let deadline = ContinuousClock.now + .seconds(2)
+        while !condition() {
+            try #require(ContinuousClock.now < deadline)
+            await Task.yield()
+        }
     }
 
     @Test func explicitCollapseCancelsPendingExpand() async throws {
