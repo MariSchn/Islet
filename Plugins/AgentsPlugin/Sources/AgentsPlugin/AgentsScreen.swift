@@ -67,6 +67,8 @@ struct AgentsScreen: View {
                             isExpanded: controller.expandedSessionIDs.contains(session.id),
                             historyLength: controller.display.historyLength,
                             showTerminal: { controller.showTerminal(for: session) },
+                            isMuted: controller.mutedSessionIDs.contains(session.id),
+                            toggleMute: { controller.toggleMute(session.id) },
                             dismiss: { controller.store.dismiss(session.id) },
                             toggleExpanded: { controller.toggleExpanded(session.id) },
                             decide: { controller.decide($0, $1) }
@@ -91,6 +93,8 @@ private struct SessionRow: View {
     let isExpanded: Bool
     let historyLength: Int
     let showTerminal: () -> Void
+    let isMuted: Bool
+    let toggleMute: () -> Void
     let dismiss: () -> Void
     let toggleExpanded: () -> Void
     let decide: (UUID, PermissionDecision) -> Void
@@ -159,7 +163,23 @@ private struct SessionRow: View {
                         ContextMeter(percentage: percentage)
                     }
                     AgentBadge(agent: session.agent)
+                    if isMuted {
+                        Image(systemName: "bell.slash")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                            .help("Muted")
+                    }
                     StateLabel(session: session)
+                    Button(action: toggleMute) {
+                        Image(systemName: isMuted ? "bell.slash" : "bell")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(isMuted ? "Unmute" : "Mute")
+                    .opacity(isHovering ? 1 : 0)
+                    .frame(width: isHovering ? nil : 0)
+                    .clipped()
                     ZStack {
                         Image(systemName: "chevron.down")
                             .font(.system(size: 10, weight: .semibold))

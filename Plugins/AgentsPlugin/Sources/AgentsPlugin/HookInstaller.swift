@@ -93,6 +93,8 @@ struct HookInstaller: Sendable {
           -H "X-Islet-Terminal: $terminal" \\
           -H "X-Islet-TTY: $tty" \\
           -H "X-Islet-PID: $agent_pid" \\
+          -H "X-Islet-Tmux: $TMUX" \\
+          -H "X-Islet-Tmux-Pane: $TMUX_PANE" \\
           -H "X-Islet-Title: $title" \\
           --data-binary "@$body" 2>/dev/null <<'ISLET_CONFIG' &
         header = "Authorization: Bearer \(token)"

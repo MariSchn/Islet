@@ -12,6 +12,12 @@ final class AgentSessionStore {
     enum Alert: Sendable, Equatable {
         case needsAttention(AgentSession)
         case finished(AgentSession)
+
+        var session: AgentSession {
+            switch self {
+            case .needsAttention(let session), .finished(let session): session
+            }
+        }
     }
 
     private(set) var sessions: [AgentSession] = []
@@ -112,6 +118,7 @@ final class AgentSessionStore {
         if let terminal = event.terminal { session.terminal = terminal }
         if let tty = event.tty { session.tty = tty }
         if let pid = event.pid { session.pid = pid }
+        if let tmux = event.tmux { session.tmux = tmux }
         if let transcriptPath = event.transcriptPath { session.transcriptPath = transcriptPath }
         if let title = event.title, !session.hasStatusLineTitle { session.title = title }
         session.updatedAt = timestamp
