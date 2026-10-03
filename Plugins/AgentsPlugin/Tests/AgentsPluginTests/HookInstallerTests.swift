@@ -73,7 +73,7 @@ struct HookInstallerTests {
         }
     }
 
-    @Test func scriptSkipsTheTranscriptOnToolEvents() throws {
+    @Test func scriptOnlyReadsTheTranscriptWhenTheTitleCanChange() throws {
         let installer = try makeInstaller()
         try installer.install()
         let transcript = installer.directory.appending(path: "transcript.jsonl")
@@ -82,7 +82,7 @@ struct HookInstallerTests {
         let fakeCurl = installer.directory.appending(path: "curl")
         try "#!/bin/sh\nprintf '%s\\n' \"$@\" > '\(capture.path)'\n".write(to: fakeCurl, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeCurl.path)
-        for (event, expectedTitle) in [("PreToolUse", ""), ("PostToolUseFailure", ""), ("UserPromptSubmit", "named")] {
+        for (event, expectedTitle) in [("PreToolUse", ""), ("PostToolUseFailure", ""), ("PermissionRequest", ""), ("Notification", ""), ("UserPromptSubmit", "named"), ("Stop", "named")] {
             let process = Process()
             process.executableURL = URL(filePath: "/bin/sh")
             process.arguments = [installer.scriptURL.path]
