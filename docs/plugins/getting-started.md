@@ -123,7 +123,7 @@ static let builtInPlugins: [any IsletPlugin.Type] = [
 ]
 ```
 
-The order of the list is the order of the tabs in the notch's navigation row. Each plugin is registered on its own, so a plugin that fails to register (for example because of a duplicate or invalid id) is logged and skipped without affecting the others.
+The order of the list is the default order of the tabs in the notch's navigation row; users can change it in Settings › Plugins, and plugins they haven't placed yet are added after the ones they have. Each plugin is registered on its own, so a plugin that fails to register (for example because of a duplicate or invalid id) is logged and skipped without affecting the others.
 
 New plugins are enabled by default. Users can turn them off under Settings › Plugins.
 
