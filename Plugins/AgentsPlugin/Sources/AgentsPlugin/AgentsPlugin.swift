@@ -54,7 +54,7 @@ public final class AgentsPlugin: IsletPlugin {
         case .permission:
             return 2 * requestPadding + requestDetailHeight + requestSpacing + requestButtonHeight
         case .question(let questions):
-            let options = questions.map { CGFloat($0.options.count) * requestButtonHeight + CGFloat($0.options.count - 1) * requestSpacing + ($0.multiSelect ? requestSpacing + requestButtonHeight : 0) }
+            let options = questions.map { CGFloat($0.options.count + 1) * requestButtonHeight + CGFloat($0.options.count) * requestSpacing + ($0.multiSelect ? requestSpacing + requestButtonHeight : 0) }
             return 2 * requestPadding + questionDetailHeight + requestSpacing + (options.max() ?? 0)
         }
     }
@@ -122,10 +122,12 @@ public final class AgentsPlugin: IsletPlugin {
         var contextAlert = ContextAlert()
         var reviewAlert = ReviewAlert()
         context.observe({ controller.store.sessions }) { [unowned context] sessions in
-            if let announcement = announcer.announcement(for: sessions), controller.shouldAnnounce(announcement) {
+            controller.pruneMutedSessions()
+            let muted = controller.mutedSessionIDs
+            if let announcement = announcer.announcement(for: sessions, muted: muted), controller.shouldAnnounce(announcement) {
                 context.announce(announcement)
             }
-            let detailsAnnouncements = contextAlert.announcements(for: sessions) + reviewAlert.announcements(for: sessions)
+            let detailsAnnouncements = contextAlert.announcements(for: sessions, muted: muted) + reviewAlert.announcements(for: sessions, muted: muted)
             if controller.alerts.announcesInNotch {
                 for announcement in detailsAnnouncements {
                     context.announce(announcement)

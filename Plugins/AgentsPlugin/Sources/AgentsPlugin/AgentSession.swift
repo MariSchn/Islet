@@ -37,6 +37,7 @@ struct AgentSession: Identifiable, Sendable, Equatable, Codable {
     var terminal: TerminalApp?
     var tty: String?
     var pid: Int32?
+    var tmux: TmuxLocation?
     var transcriptPath: String?
     var cwd: String?
     var title: String?
@@ -53,7 +54,7 @@ struct AgentSession: Identifiable, Sendable, Equatable, Codable {
     var updatedAt: Date
 
     enum CodingKeys: String, CodingKey {
-        case id, agent, host, isRemote, isUnreachable, terminal, tty, pid, transcriptPath, cwd, title, hasStatusLineTitle
+        case id, agent, host, isRemote, isUnreachable, terminal, tty, pid, tmux, transcriptPath, cwd, title, hasStatusLineTitle
         case task, activity, state, activities, plan, details, startedAt, turnStartedAt, updatedAt
     }
 

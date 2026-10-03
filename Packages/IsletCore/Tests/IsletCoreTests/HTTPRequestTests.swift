@@ -1,7 +1,6 @@
 import Foundation
-import IsletCore
 import Testing
-@testable import AgentsPlugin
+@testable import IsletCore
 
 struct HTTPRequestTests {
     @Test func parsesPostWithBodyAndWaitsForCompleteBody() {
