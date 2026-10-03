@@ -29,9 +29,7 @@ The notch sits in the most valuable spot on your screen and does nothing. Islet 
 
 - 🧩 **Everything is a plugin.** The built-in screens use exactly the same public API as yours. Nothing is special-cased.
 - ⚡️ **One class and a SwiftUI view.** No window or AppKit code required, no private APIs. Islet handles the notch shape, hover, animations, displays and settings for you.
-- 🎁 **Useful out of the box.** A control centre for coding agents, a music player, a file shelf and your GitHub pull requests ship as ready-made plugins, and double as reference implementations.
-
-- 🎁 **Useful out of the box.** A control centre for coding agents, a music player, a file shelf and download progress ship as ready-made plugins, and double as reference implementations.
+- 🎁 **Useful out of the box.** A control centre for coding agents, a music player, a file shelf, your GitHub pull requests and download progress ship as ready-made plugins, and double as reference implementations.
 - 🪄 **Feels like part of macOS.** Smooth animations, a collapsed status pill, every display, a settings tab per plugin. Your plugin gets all of it for free.
 
 <br>
