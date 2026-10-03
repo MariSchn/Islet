@@ -8,7 +8,8 @@ typealias ArtworkLoader = @Sendable (URL) async throws -> Data
 @MainActor
 @Observable
 final class MediaController {
-    private(set) var source: any MediaSource
+    private(set) var sources: [any MediaSource]
+    private(set) var activeIndex = 0
     private(set) var nowPlaying: NowPlaying?
     private(set) var artwork: CGImage?
     private(set) var tint: Color.Resolved?
@@ -31,13 +32,17 @@ final class MediaController {
     @ObservationIgnored private let pausedInterval: Duration
     @ObservationIgnored private let hiddenInterval: Duration
     @ObservationIgnored private var pollTask: Task<Void, Never>?
-    @ObservationIgnored private var changeTask: Task<Void, Never>?
+    @ObservationIgnored private var changeTasks: [Task<Void, Never>] = []
     @ObservationIgnored private var artworkTask: Task<Void, Never>?
     @ObservationIgnored private var artworkURL: URL?
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var browseGeneration = 0
 
-    init(
+    var source: (any MediaSource)? {
+        sources.indices.contains(activeIndex) ? sources[activeIndex] : nil
+    }
+
+    convenience init(
         source: any MediaSource,
         showsPill: Bool = true,
         playingInterval: Duration = .seconds(1),
@@ -45,7 +50,18 @@ final class MediaController {
         hiddenInterval: Duration = .seconds(15),
         loadArtwork: ArtworkLoader? = nil
     ) {
-        self.source = source
+        self.init(sources: [source], showsPill: showsPill, playingInterval: playingInterval, pausedInterval: pausedInterval, hiddenInterval: hiddenInterval, loadArtwork: loadArtwork)
+    }
+
+    init(
+        sources: [any MediaSource],
+        showsPill: Bool = true,
+        playingInterval: Duration = .seconds(1),
+        pausedInterval: Duration = .seconds(3),
+        hiddenInterval: Duration = .seconds(15),
+        loadArtwork: ArtworkLoader? = nil
+    ) {
+        self.sources = sources
         self.showsPill = showsPill
         self.playingInterval = playingInterval
         self.pausedInterval = pausedInterval
@@ -66,12 +82,7 @@ final class MediaController {
     func start() {
         guard pollTask == nil else { return }
         startPolling()
-        changeTask = Task { [weak self, source] in
-            for await _ in source.stateChanges() {
-                guard let self else { return }
-                await refresh()
-            }
-        }
+        watchStateChanges()
     }
 
     private func startPolling() {
@@ -85,22 +96,35 @@ final class MediaController {
         }
     }
 
+    private func watchStateChanges() {
+        changeTasks.forEach { $0.cancel() }
+        changeTasks = sources.map { source in
+            Task { [weak self] in
+                for await _ in source.stateChanges() {
+                    guard let self else { return }
+                    await refresh()
+                }
+            }
+        }
+    }
+
     func stop() {
         generation += 1
         pollTask?.cancel()
-        changeTask?.cancel()
+        changeTasks.forEach { $0.cancel() }
         pollTask = nil
-        changeTask = nil
+        changeTasks.removeAll()
         nowPlaying = nil
         errorMessage = nil
         hidePlaylists()
         updateArtwork(for: nil)
     }
 
-    func replaceSource(_ source: any MediaSource) {
+    func replaceSources(_ sources: [any MediaSource]) {
         let wasStarted = pollTask != nil
         stop()
-        self.source = source
+        self.sources = sources
+        activeIndex = 0
         isSourceRunning = false
         playlists = []
         if wasStarted {
@@ -109,30 +133,40 @@ final class MediaController {
     }
 
     func refresh() async {
-        isSourceRunning = source.isRunning
-        guard isSourceRunning else {
+        let sources = self.sources
+        guard !sources.isEmpty else {
+            isSourceRunning = false
             hidePlaylists()
             apply(nowPlaying: nil, error: nil)
             return
         }
         generation += 1
         let requested = generation
-        let outcome: Result<NowPlaying?, any Error>
-        do {
-            outcome = .success(try await source.nowPlaying())
-        } catch {
-            outcome = .failure(error)
+        var polls: [SourcePoll] = []
+        for (index, source) in sources.enumerated() {
+            guard source.isRunning else { continue }
+            let outcome: Result<NowPlaying?, any Error>
+            do {
+                outcome = .success(try await source.nowPlaying())
+            } catch {
+                outcome = .failure(error)
+            }
+            guard requested == generation else { return }
+            polls.append(SourcePoll(index: index, outcome: outcome))
         }
         guard requested == generation else { return }
-        switch outcome {
-        case .success(let nowPlaying):
-            apply(nowPlaying: nowPlaying, error: nil)
-        case .failure(let error as AppleScriptError) where error.isApplicationNotRunning:
+        let chosen = Self.preferredSourceIndex(among: polls, current: activeIndex)
+        if sources.indices.contains(chosen), chosen != activeIndex {
+            hidePlaylists()
+            playlists = []
+            activeIndex = chosen
+        }
+        if let poll = polls.first(where: { $0.index == activeIndex }) {
+            apply(poll: poll)
+        } else {
             isSourceRunning = false
             hidePlaylists()
             apply(nowPlaying: nil, error: nil)
-        case .failure(let error):
-            apply(nowPlaying: nil, error: error.localizedDescription)
         }
     }
 
@@ -153,7 +187,7 @@ final class MediaController {
     }
 
     var capabilities: MediaCapabilities {
-        source.capabilities
+        source?.capabilities ?? .none
     }
 
     func toggleShuffle() async {
@@ -175,7 +209,7 @@ final class MediaController {
     }
 
     func showPlaylists() async {
-        guard capabilities.canBrowsePlaylists, source.isRunning else { return }
+        guard let source = source, source.capabilities.canBrowsePlaylists, source.isRunning else { return }
         browseGeneration += 1
         let requested = browseGeneration
         isBrowsingPlaylists = true
@@ -207,6 +241,7 @@ final class MediaController {
     }
 
     func play(_ playlist: MediaPlaylist) async {
+        guard let source else { return }
         guard source.isRunning else {
             isSourceRunning = false
             hidePlaylists()
@@ -227,11 +262,12 @@ final class MediaController {
         await refresh()
     }
 
-    func launchSource() {
+    func launch(_ source: any MediaSource) {
         source.launch()
     }
 
     private func perform(_ command: (any MediaSource) async throws -> Void) async {
+        guard let source else { return }
         guard source.isRunning else {
             isSourceRunning = false
             apply(nowPlaying: nil, error: nil)
@@ -245,6 +281,21 @@ final class MediaController {
             errorMessage = error.localizedDescription
         }
         await refresh()
+    }
+
+    private func apply(poll: SourcePoll) {
+        switch poll.outcome {
+        case .success(let nowPlaying):
+            isSourceRunning = true
+            apply(nowPlaying: nowPlaying, error: nil)
+        case .failure(let error as AppleScriptError) where error.isApplicationNotRunning:
+            isSourceRunning = false
+            hidePlaylists()
+            apply(nowPlaying: nil, error: nil)
+        case .failure(let error):
+            isSourceRunning = true
+            apply(nowPlaying: nil, error: error.localizedDescription)
+        }
     }
 
     private func apply(nowPlaying: NowPlaying?, error: String?) {
@@ -262,7 +313,11 @@ final class MediaController {
             tint = nil
             return
         }
-        let load = loadArtwork ?? { [source] in try await source.artwork(at: $0) }
+        let source = self.source
+        let load = loadArtwork ?? { [source] in
+            guard let source else { throw CancellationError() }
+            return try await source.artwork(at: $0)
+        }
         artworkTask = Task { [weak self] in
             let loaded: Data?
             do {
@@ -280,4 +335,30 @@ final class MediaController {
             tint = artwork.tint
         }
     }
+
+    private static func preferredSourceIndex(among polls: [SourcePoll], current: Int) -> Int {
+        if let playing = polls.first(where: \.isPlaying) {
+            return playing.index
+        }
+        if polls.contains(where: { $0.index == current && $0.hasTrack }) {
+            return current
+        }
+        if let tracked = polls.first(where: \.hasTrack) {
+            return tracked.index
+        }
+        return current
+    }
+}
+
+private struct SourcePoll {
+    let index: Int
+    let outcome: Result<NowPlaying?, any Error>
+
+    var track: NowPlaying? {
+        if case .success(let nowPlaying) = outcome { return nowPlaying }
+        return nil
+    }
+
+    var isPlaying: Bool { track?.isPlaying == true }
+    var hasTrack: Bool { track != nil }
 }

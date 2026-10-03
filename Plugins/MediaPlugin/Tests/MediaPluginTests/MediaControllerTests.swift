@@ -320,7 +320,7 @@ struct MediaControllerTests {
 
         async let showing: Void = controller.showPlaylists()
         try? await Task.sleep(for: .milliseconds(20))
-        controller.replaceSource(StubSource(capabilities: MediaCapabilities(canBrowsePlaylists: true)))
+        controller.replaceSources([StubSource(capabilities: MediaCapabilities(canBrowsePlaylists: true))])
         await showing
 
         #expect(!controller.isBrowsingPlaylists)
@@ -362,13 +362,93 @@ struct MediaControllerTests {
         await controller.showPlaylists()
         await second.set(NowPlaying(title: "Other", artist: "Band", isPlaying: true))
 
-        controller.replaceSource(second)
+        controller.replaceSources([second])
         await controller.refresh()
 
         #expect(!controller.isBrowsingPlaylists)
         #expect(controller.playlists.isEmpty)
         #expect(controller.nowPlaying?.title == "Other")
         #expect(!controller.capabilities.canBrowsePlaylists)
+    }
+
+    @Test func thePlayingSourceBecomesActive() async {
+        let spotify = StubSource(name: "Spotify", bundleIdentifier: "com.spotify.client")
+        let music = StubSource(name: "Music", bundleIdentifier: "com.apple.Music", capabilities: MediaCapabilities(canBrowsePlaylists: true))
+        let controller = MediaController(sources: [spotify, music])
+        await music.set(NowPlaying(title: "Album", artist: "Band", isPlaying: true))
+        await spotify.set(NowPlaying(title: "Single", artist: "DJ", isPlaying: false))
+
+        await controller.refresh()
+
+        #expect(controller.source?.displayName == "Music")
+        #expect(controller.nowPlaying?.title == "Album")
+        #expect(controller.capabilities.canBrowsePlaylists)
+        #expect(!controller.capabilities.canShuffle)
+        #expect(await spotify.reads == 1)
+        #expect(await music.reads == 1)
+    }
+
+    @Test func theLastActiveSourceStaysWhenBothPause() async {
+        let spotify = StubSource(name: "Spotify", bundleIdentifier: "com.spotify.client", capabilities: MediaCapabilities(canShuffle: true))
+        let music = StubSource(name: "Music", bundleIdentifier: "com.apple.Music")
+        let controller = MediaController(sources: [spotify, music])
+        await music.set(NowPlaying(title: "Album", artist: "Band", isPlaying: true))
+        await controller.refresh()
+
+        await music.set(NowPlaying(title: "Album", artist: "Band", isPlaying: false))
+        await spotify.set(NowPlaying(title: "Single", artist: "DJ", isPlaying: false))
+        await controller.refresh()
+
+        #expect(controller.source?.displayName == "Music")
+        #expect(controller.nowPlaying?.title == "Album")
+        #expect(controller.nowPlaying?.isPlaying == false)
+    }
+
+    @Test func commandsAndCapabilitiesFollowTheActiveSource() async {
+        let spotify = StubSource(name: "Spotify", bundleIdentifier: "com.spotify.client", capabilities: MediaCapabilities(canShuffle: true))
+        let music = StubSource(name: "Music", bundleIdentifier: "com.apple.Music", capabilities: MediaCapabilities(canBrowsePlaylists: true))
+        let controller = MediaController(sources: [spotify, music])
+        await spotify.set(NowPlaying(title: "Single", artist: "DJ", isPlaying: true))
+        await music.set(NowPlaying(title: "Album", artist: "Band", isPlaying: true))
+        await controller.refresh()
+
+        #expect(controller.source?.displayName == "Spotify")
+        #expect(controller.nowPlaying?.title == "Single")
+        #expect(controller.capabilities.canShuffle)
+        #expect(!controller.capabilities.canBrowsePlaylists)
+
+        await controller.playPause()
+        #expect(await spotify.commands == ["playPause"])
+        #expect(await music.commands.isEmpty)
+    }
+
+    @Test func aSourceThatIsNotRunningIsNotRead() async {
+        let spotify = StubSource(name: "Spotify", bundleIdentifier: "com.spotify.client", isRunning: false)
+        let music = StubSource(name: "Music", bundleIdentifier: "com.apple.Music")
+        let controller = MediaController(sources: [spotify, music])
+        await music.set(NowPlaying(title: "Album", artist: "Band", isPlaying: true))
+
+        await controller.refresh()
+
+        #expect(controller.source?.displayName == "Music")
+        #expect(await spotify.reads == 0)
+        #expect(await music.reads == 1)
+    }
+
+    @Test func aChangeFromEitherSourceRefreshesTheActivePlayer() async {
+        let spotify = StubSource(name: "Spotify", bundleIdentifier: "com.spotify.client")
+        let music = StubSource(name: "Music", bundleIdentifier: "com.apple.Music")
+        let controller = MediaController(sources: [spotify, music], playingInterval: .seconds(60), pausedInterval: .seconds(60))
+        await music.set(NowPlaying(title: "Album", artist: "Band", isPlaying: true))
+        controller.start()
+        await waitUntil { controller.nowPlaying?.title == "Album" }
+
+        await spotify.set(NowPlaying(title: "Single", artist: "DJ", isPlaying: true))
+        spotify.notifyChange()
+        await waitUntil { controller.source?.displayName == "Spotify" }
+
+        #expect(controller.nowPlaying?.title == "Single")
+        controller.stop()
     }
 
     private func waitUntil(_ condition: () async -> Bool) async {
@@ -574,10 +654,24 @@ struct AppleScriptCompilationTests {
 
 @MainActor
 struct MediaPlayerSettingTests {
-    @Test func unknownOrMissingSettingFallsBackToSpotify() {
-        #expect(MediaPlayer(setting: nil) == .spotify)
-        #expect(MediaPlayer(setting: "vlc") == .spotify)
+    @Test func unknownOrMissingSettingFallsBackToAutomatic() {
+        #expect(MediaPlayer(setting: nil) == .automatic)
+        #expect(MediaPlayer(setting: "vlc") == .automatic)
+        #expect(MediaPlayer(setting: "spotify") == .spotify)
         #expect(MediaPlayer(setting: "music") == .music)
+    }
+
+    @Test func uninstalledPlayerIsNotCreated() {
+        let spotify = SpotifySource().bundleIdentifier
+        let music = MusicSource().bundleIdentifier
+        #expect(MediaPlayer.automatic.makeSources { _ in false }.isEmpty)
+        #expect(MediaPlayer.spotify.makeSources { _ in false }.isEmpty)
+        #expect(MediaPlayer.music.makeSources { $0 == spotify }.isEmpty)
+        #expect(MediaPlayer.spotify.makeSources { _ in true }.map(\.bundleIdentifier) == [spotify])
+        #expect(MediaPlayer.automatic.makeSources { $0 == music }.map(\.bundleIdentifier) == [music])
+        #expect(MediaPlayer.automatic.makeSources { _ in true }.map(\.bundleIdentifier) == [spotify, music])
+        #expect(MediaPlayer.offered { _ in false } == [.automatic])
+        #expect(MediaPlayer.offered { _ in true } == [.automatic, .spotify, .music])
     }
 
     @Test func selectedPlayerIsPersistedAndRestored() async throws {
@@ -589,7 +683,7 @@ struct MediaPlayerSettingTests {
         defer { try? FileManager.default.removeItem(at: storage) }
 
         let first = try await makePlugin(defaults: defaults, storage: storage)
-        #expect(first.player == .spotify)
+        #expect(first.player == .automatic)
         first.select(.music)
         #expect(defaults.string(forKey: "plugin.\(MediaPlugin.manifest.id).\(MediaPlugin.playerKey)") == "music")
 
@@ -787,8 +881,8 @@ private final class StubRunning {
 }
 
 private struct StubSource: MediaSource {
-    let displayName = "Stub"
-    let bundleIdentifier = "com.example.stub"
+    let displayName: String
+    let bundleIdentifier: String
     let capabilities: MediaCapabilities
     private let running: StubRunning
     private let state = StubState()
@@ -796,7 +890,9 @@ private struct StubSource: MediaSource {
     private let changes: AsyncStream<Void>.Continuation
 
     @MainActor
-    init(isRunning: Bool = true, capabilities: MediaCapabilities = .none) {
+    init(name: String = "Stub", bundleIdentifier: String = "com.example.stub", isRunning: Bool = true, capabilities: MediaCapabilities = .none) {
+        displayName = name
+        self.bundleIdentifier = bundleIdentifier
         running = StubRunning(isRunning)
         self.capabilities = capabilities
         (stream, changes) = AsyncStream.makeStream()

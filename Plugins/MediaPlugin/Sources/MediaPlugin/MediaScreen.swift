@@ -23,11 +23,11 @@ struct MediaScreen: View {
                 Image(systemName: "music.note")
                     .font(.system(size: 28))
                     .foregroundStyle(.secondary)
-                if !controller.isSourceRunning {
-                    Text("\(controller.source.displayName) is not running")
+                if controller.sources.isEmpty {
+                    Text("No supported player installed")
                         .foregroundStyle(.secondary)
-                    Button("Open \(controller.source.displayName)") { controller.launchSource() }
-                        .buttonStyle(.bordered)
+                } else if !controller.isSourceRunning {
+                    UnavailablePlayers(controller: controller)
                 } else {
                     if let error = controller.errorMessage {
                         Text(error)
@@ -46,6 +46,32 @@ struct MediaScreen: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
+
+private struct UnavailablePlayers: View {
+    let controller: MediaController
+
+    var body: some View {
+        if controller.sources.count == 1, let source = controller.source {
+            VStack(spacing: 10) {
+                Text("\(source.displayName) is not running")
+                    .foregroundStyle(.secondary)
+                Button("Open \(source.displayName)") { controller.launch(source) }
+                    .buttonStyle(.bordered)
+            }
+        } else {
+            VStack(spacing: 10) {
+                Text("No player is running")
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    ForEach(Array(controller.sources.enumerated()), id: \.offset) { _, source in
+                        Button("Open \(source.displayName)") { controller.launch(source) }
+                            .buttonStyle(.bordered)
+                    }
+                }
+            }
         }
     }
 }
