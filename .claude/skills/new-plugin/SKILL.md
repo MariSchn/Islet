@@ -23,7 +23,7 @@ Check that `Plugins/<Name>Plugin` doesn't exist yet and that no manifest in `Plu
 `Plugins/<Name>Plugin/Package.swift`:
 
 ```swift
-// swift-tools-version: 6.0
+// swift-tools-version: 6.2
 import PackageDescription
 
 let package = Package(

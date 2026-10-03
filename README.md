@@ -4,7 +4,7 @@ A dynamic notch for macOS, designed as a plugin host: every screen in the notch 
 
 ## Development
 
-Requires Xcode 16+ and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
+Requires Xcode 26+ and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
 
 ```sh
 xcodegen generate
