@@ -44,6 +44,10 @@ final class AgentSessionStore {
         return String(name.prefix { $0 != "." })
     }
 
+    var orderedSessions: [AgentSession] {
+        SessionOrder.sorted(sessions)
+    }
+
     var attentionSessions: [AgentSession] {
         sessions.filter(\.state.requiresAttention)
     }

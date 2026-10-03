@@ -116,7 +116,7 @@ public final class AgentsPlugin: IsletPlugin {
         }
         context.derive(\.pillStatus) { controller.store.pillStatus(for: controller.display) }
         context.derive(\.contentSize) {
-            Self.contentSize(for: controller.store.sessions, expanded: controller.expandedSessionIDs, showsUsage: controller.showsUsageBar, historyLength: controller.display.historyLength)
+            Self.contentSize(for: controller.store.orderedSessions, expanded: controller.expandedSessionIDs, showsUsage: controller.showsUsageBar, historyLength: controller.display.historyLength)
         }
         var announcer = StatusAnnouncer()
         var contextAlert = ContextAlert()

@@ -5,6 +5,7 @@ struct AgentsScreen: View {
     let controller: AgentsController
     @Environment(\.notchAnimation) private var animation
     @State private var installError: String?
+    @State private var frozenOrder: [String]?
 
     var body: some View {
         VStack(spacing: AgentsPlugin.rowSpacing) {
@@ -59,7 +60,7 @@ struct AgentsScreen: View {
         } else {
             ScrollView {
                 VStack(spacing: AgentsPlugin.rowSpacing) {
-                    ForEach(controller.store.sessions) { session in
+                    ForEach(SessionOrder.applying(frozen: frozenOrder, to: controller.store.orderedSessions)) { session in
                         SessionRow(
                             session: session,
                             terminal: controller.terminal(for: session),
@@ -73,6 +74,10 @@ struct AgentsScreen: View {
                     }
                 }
                 .animation(animation, value: controller.expandedSessionIDs)
+                .animation(animation, value: SessionOrder.applying(frozen: frozenOrder, to: controller.store.orderedSessions).map(\.id))
+            }
+            .onHover { isHovering in
+                frozenOrder = isHovering ? controller.store.orderedSessions.map(\.id) : nil
             }
             .scrollIndicators(.never)
             .scrollBounceBehavior(.basedOnSize)
