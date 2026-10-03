@@ -6,6 +6,8 @@ struct TimerScreen: View {
 
     var body: some View {
         VStack(spacing: TimerPlugin.sectionSpacing) {
+            PomodoroSection(store: store)
+                .frame(height: TimerPlugin.pomodoroHeight)
             HStack(spacing: 8) {
                 ForEach(TimerPlugin.presetMinutes, id: \.self) { minutes in
                     Button {
@@ -126,6 +128,68 @@ private struct StopwatchRow: View {
         } else {
             Text(timerInterval: TimerRow.reference...Date.distantFuture, pauseTime: TimerRow.reference.addingTimeInterval(store.stopwatch.accumulated), countsDown: false)
                 .foregroundStyle(store.stopwatch.accumulated > 0 ? .primary : .secondary)
+        }
+    }
+}
+
+private struct PomodoroSection: View {
+    let store: TimerStore
+
+    private var state: PomodoroState? {
+        store.pomodoro
+    }
+
+    private var phase: PomodoroPhase {
+        state?.phase ?? .work
+    }
+
+    private var tint: Color {
+        Color(phase.isBreak ? TimerStore.breakTint : TimerStore.workTint)
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(phase.displayName)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(state == nil ? .secondary : .primary)
+                HStack(spacing: 4) {
+                    ForEach(0..<PomodoroSettings.workPhasesPerLongBreak, id: \.self) { index in
+                        Circle()
+                            .fill(index < (state?.completedWorkPhases ?? 0) ? AnyShapeStyle(Color(TimerStore.workTint)) : AnyShapeStyle(.white.opacity(0.2)))
+                            .frame(width: TimerPlugin.pomodoroDotSize, height: TimerPlugin.pomodoroDotSize)
+                    }
+                }
+            }
+            Spacer()
+            remaining
+                .font(.system(size: 22, weight: .medium).monospacedDigit())
+                .foregroundStyle(state?.isRunning == true ? tint : .secondary)
+            Button {
+                state?.isRunning == true ? store.pausePomodoro() : store.startPomodoro()
+            } label: {
+                Image(systemName: state?.isRunning == true ? "pause.fill" : "play.fill")
+            }
+            .help(state?.isRunning == true ? "Pause" : "Start")
+            Button {
+                store.stopPomodoro()
+            } label: {
+                Image(systemName: "stop.fill")
+            }
+            .help("Stop")
+            .disabled(state == nil)
+        }
+        .buttonStyle(.borderless)
+        .padding(.horizontal, 8)
+        .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    @ViewBuilder private var remaining: some View {
+        if let state, let endDate = state.endDate {
+            Text(timerInterval: endDate.addingTimeInterval(-max(state.duration, 0))...endDate, countsDown: true)
+        } else {
+            let seconds = state.map { $0.remaining ?? store.pomodoroSettings.duration(for: $0.phase) } ?? store.pomodoroSettings.duration(for: .work)
+            Text(timerInterval: TimerRow.reference...TimerRow.reference.addingTimeInterval(seconds), pauseTime: TimerRow.reference, countsDown: true)
         }
     }
 }

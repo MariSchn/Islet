@@ -7,7 +7,7 @@ import Testing
 @MainActor
 struct TimerSizingTests {
     @Test func heightGrowsWithTimersUpToFourRows() {
-        let controls: CGFloat = 2 * 12 + 2 * 28 + 32 + 2 * 10
+        let controls: CGFloat = 2 * 12 + 44 + 2 * 28 + 32 + 3 * 10
         #expect(TimerPlugin.contentSize(timerCount: 0) == CGSize(width: 380, height: controls))
         #expect(TimerPlugin.contentSize(timerCount: 1) == CGSize(width: 380, height: controls + 10 + 32))
         #expect(TimerPlugin.contentSize(timerCount: 2) == CGSize(width: 380, height: controls + 10 + 2 * 32 + 4))

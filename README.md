@@ -139,6 +139,7 @@ A control centre for your coding agents. Islet installs lightweight hooks for **
 - Start countdown timers from presets (1, 5, 10 and 25 minutes) or any number of minutes, and pause, resume or cancel each one.
 - The collapsed notch shows the timer ending soonest as a shrinking ring.
 - When a timer ends, Islet plays a sound, announces it and shows an orange pill for a minute or until you open the Timer.
+- **Pomodoro:** work and break phases with a red or green ring in the collapsed notch, a dot for each finished work phase, and a long break after every fourth. Durations and starting the next phase automatically are set under **Settings › Timer**.
 - Timers keep running across restarts. A stopwatch is there too.
 
 <br>
