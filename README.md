@@ -29,9 +29,7 @@ The notch sits in the most valuable spot on your screen and does nothing. Islet 
 
 - 🧩 **Everything is a plugin.** The built-in screens use exactly the same public API as yours. Nothing is special-cased.
 - ⚡️ **One class and a SwiftUI view.** No window or AppKit code required, no private APIs. Islet handles the notch shape, hover, animations, displays and settings for you.
-- 🎁 **Useful out of the box.** A control centre for coding agents, a music player, a file shelf and download progress ship as ready-made plugins, and double as reference implementations.
-
-- 🎁 **Useful out of the box.** A control centre for coding agents, a music player, a file shelf and your GitHub pull requests ship as ready-made plugins, and double as reference implementations.
+- 🎁 **Useful out of the box.** A control centre for coding agents, a music player, a file shelf, your GitHub pull requests and download progress ship as ready-made plugins, and double as reference implementations.
 - 🪄 **Feels like part of macOS.** Smooth animations, a collapsed status pill, every display, a settings tab per plugin. Your plugin gets all of it for free.
 
 <br>
@@ -136,18 +134,13 @@ A control centre for your coding agents. Islet installs lightweight hooks for **
 - Drag them back out into any app, open them or reveal them in Finder.
 - The Shelf survives restarts and dims files that were moved or deleted.
 
-### ⬇️ Downloads
+### 🐙 GitHub
 
-- Downloads in your Downloads folder show up in the collapsed notch: a ring that fills while one file downloads, or the number of downloads and their combined progress.
-- Browsers that don't report progress show the file's name and growing size instead.
-- A short announcement when a download finishes, and the last eight downloads in the notch, ready to drag into any app, open or reveal in Finder.
-
-### 📊 System
-
-- CPU, memory (with memory pressure) and network at a glance, each with a graph of its recent values, plus free disk space and the battery.
-- The three processes using the most CPU right now.
-- The closed notch stays quiet until something needs attention: sustained high CPU, memory pressure, a low battery, a hot Mac or an almost full startup disk, each announced once. Optionally shows a CPU ring all the time.
-- Choose which rows to show under **Settings › System**. Samples every second while the screen is open and every five seconds otherwise.
+- Your open pull requests and the ones waiting for your review, newest first, each with its review state and CI status.
+- The collapsed notch shows a ring with the CI state of your pull requests, and turns orange when checks fail or someone requests your review.
+- A short announcement when checks fail or pass, a pull request is approved or gets change requests, or someone asks for your review.
+- Click a pull request to open it in the browser.
+- Talks to GitHub only through the [GitHub CLI](https://cli.github.com) (`gh`), which keeps its own login. Refreshes every two minutes, every minute while you look at it, and pauses while you are offline.
 
 ### ⏱️ Timer
 
@@ -157,13 +150,18 @@ A control centre for your coding agents. Islet installs lightweight hooks for **
 - **Pomodoro:** work and break phases with a red or green ring in the collapsed notch, a dot for each finished work phase, and a long break after every fourth. Durations and starting the next phase automatically are set under **Settings › Timer**.
 - Timers keep running across restarts. A stopwatch is there too.
 
-### 🐙 GitHub
+### 📊 System
 
-- Your open pull requests and the ones waiting for your review, newest first, each with its review state and CI status.
-- The collapsed notch shows a ring with the CI state of your pull requests, and turns orange when checks fail or someone requests your review.
-- A short announcement when checks fail or pass, a pull request is approved or gets change requests, or someone asks for your review.
-- Click a pull request to open it in the browser.
-- Talks to GitHub only through the [GitHub CLI](https://cli.github.com) (`gh`), which keeps its own login. Refreshes every two minutes, every minute while you look at it, and pauses while you are offline.
+- CPU, memory (with memory pressure) and network at a glance, each with a graph of its recent values, plus free disk space and the battery.
+- The three processes using the most CPU right now.
+- The closed notch stays quiet until something needs attention: sustained high CPU, memory pressure, a low battery, a hot Mac or an almost full startup disk, each announced once. Optionally shows a CPU ring all the time.
+- Choose which rows to show under **Settings › System**. Samples every second while the screen is open and every five seconds otherwise.
+
+### ⬇️ Downloads
+
+- Downloads in your Downloads folder show up in the collapsed notch: a ring that fills while one file downloads, or the number of downloads and their combined progress.
+- Browsers that don't report progress show the file's name and growing size instead.
+- A short announcement when a download finishes, and the last eight downloads in the notch, ready to drag into any app, open or reveal in Finder.
 
 <br>
 
@@ -215,9 +213,9 @@ Or open `Islet.xcodeproj` in Xcode and press <kbd>⌘</kbd> <kbd>R</kbd>. To kee
 
 1. **Agents:** open **Settings › Agents** and press **Install** next to **Claude Code hooks** (or **Codex hooks**), then restart any sessions that were already running. Codex additionally needs its hooks feature enabled in `~/.codex/config.toml` and the hooks trusted once via `/hooks`. For live session names and usage limits, also install the **status line** integration in the same tab (your existing status line keeps working) and turn on **Show Claude usage limits**. Agents on other machines need an SSH port forward and a one-time install command, both shown under **Remote machines**.
 2. **Media:** choose **Spotify** or **Music** under **Settings › Media**, press play, and allow Islet to control the player when macOS asks.
-3. **Downloads:** allow Islet to read your Downloads folder when macOS asks. If you declined, the Downloads screen links to **System Settings › Privacy & Security › Files and Folders**.
-
 3. **GitHub:** install the GitHub CLI (`brew install gh`) and log in once with `gh auth login`.
+
+3. **Downloads:** allow Islet to read your Downloads folder when macOS asks. If you declined, the Downloads screen links to **System Settings › Privacy & Security › Files and Folders**.
 
 <br>
 
@@ -231,11 +229,11 @@ flowchart LR
         agents["Agents"]
         media["Media"]
         shelf["Shelf"]
-        downloads["Downloads"]
+        timer["Timer"]
 
         system["System"]
 
-        timer["Timer"]
+        downloads["Downloads"]
     end
     core["<b>IsletCore</b><br/>plugin API · registry<br/>pill · settings store"]
     host["<b>IsletHost</b><br/>notch windows · animations<br/>settings · displays"]

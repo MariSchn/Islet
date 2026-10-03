@@ -1,8 +1,8 @@
 import AgentsPlugin
 import AppKit
+import CalendarPlugin
 import DownloadsPlugin
 import GitHubPlugin
-import CalendarPlugin
 import HelloPlugin
 import IsletCore
 import IsletHost
@@ -19,12 +19,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ShelfPlugin.self,
         MediaPlugin.self,
         AgentsPlugin.self,
-        ScriptsPlugin.self,
-        DownloadsPlugin.self,
-        SystemMonitorPlugin.self,
-        TimerPlugin.self,
-        GitHubPlugin.self,
         CalendarPlugin.self,
+        GitHubPlugin.self,
+        TimerPlugin.self,
+        SystemMonitorPlugin.self,
+        DownloadsPlugin.self,
+        ScriptsPlugin.self,
     ] + examplePlugins
     #if DEBUG
     private static let examplePlugins: [any IsletPlugin.Type] = [HelloPlugin.self]
