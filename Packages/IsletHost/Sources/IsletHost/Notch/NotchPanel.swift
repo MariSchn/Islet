@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import SwiftUI
 
 @MainActor
@@ -36,6 +37,7 @@ public final class NotchPanel: NSPanel {
             self?.handleScroll(event)
             return event
         }
+        observeExpansion()
     }
 
     deinit {
@@ -77,6 +79,62 @@ public final class NotchPanel: NSPanel {
 
     public override var canBecomeKey: Bool { true }
     public override var canBecomeMain: Bool { false }
+
+    public func expandPinned() {
+        controller.expandPinned()
+        makeKey()
+    }
+
+    public override func keyDown(with event: NSEvent) {
+        let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+        guard !(firstResponder is NSTextView), modifiers.isEmpty else {
+            super.keyDown(with: event)
+            return
+        }
+        switch Int(event.keyCode) {
+        case kVK_LeftArrow: controller.navigate(.backward)
+        case kVK_RightArrow: controller.navigate(.forward)
+        case kVK_Escape: controller.collapse()
+        default:
+            if firstResponder !== self {
+                super.keyDown(with: event)
+            }
+        }
+    }
+
+    public override func moveLeft(_ sender: Any?) {
+        controller.navigate(.backward)
+    }
+
+    public override func moveRight(_ sender: Any?) {
+        controller.navigate(.forward)
+    }
+
+    public override func cancelOperation(_ sender: Any?) {
+        controller.collapse()
+    }
+
+    private func observeExpansion() {
+        withObservationTracking {
+            _ = controller.isExpanded
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                if !self.controller.isExpanded {
+                    self.giveUpKeyFocus()
+                }
+                self.observeExpansion()
+            }
+        }
+    }
+
+    private func giveUpKeyFocus() {
+        guard isKeyWindow, isVisible else { return }
+        NotchSpace.shared.remove(self)
+        orderOut(nil)
+        orderFrontRegardless()
+        NotchSpace.shared.add(self)
+    }
 
     public func show() {
         relayout()
