@@ -19,6 +19,8 @@ packages:
     path: Plugins/AgentsPlugin
   CalendarPlugin:
     path: Plugins/CalendarPlugin
+  GitHubPlugin:
+    path: Plugins/GitHubPlugin
 targets:
   Islet:
     type: application
@@ -33,6 +35,7 @@ targets:
       - package: MediaPlugin
       - package: AgentsPlugin
       - package: CalendarPlugin
+      - package: GitHubPlugin
     info:
       path: App/Info.plist
       properties:
@@ -67,3 +70,4 @@ schemes:
         - package: MediaPlugin/MediaPluginTests
         - package: AgentsPlugin/AgentsPluginTests
         - package: CalendarPlugin/CalendarPluginTests
+        - package: GitHubPlugin/GitHubPluginTests
