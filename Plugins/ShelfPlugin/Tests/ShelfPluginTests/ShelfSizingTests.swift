@@ -36,7 +36,8 @@ struct ShelfSizingTests {
             try Data("\(index)".utf8).write(to: file)
             return file
         }
-        plugin.store.add(files)
+        #expect(plugin.store.copyMode == .temporary)
+        await plugin.store.add(files)
         while entry.context.contentSize != ShelfPlugin.contentSize(forItemCount: 4) {
             try #require(ContinuousClock.now < deadline)
             await Task.yield()

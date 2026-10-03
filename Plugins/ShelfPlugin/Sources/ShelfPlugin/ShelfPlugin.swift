@@ -1,5 +1,6 @@
 import IsletCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor
 public final class ShelfPlugin: IsletPlugin {
@@ -22,11 +23,35 @@ public final class ShelfPlugin: IsletPlugin {
         )
     }
 
+    static let copyModeKey = "copyMode"
+    static let showsCountPillKey = "showsCountPill"
+
+    static func countPill(itemCount: Int, showsCount: Bool) -> PillStatus? {
+        guard showsCount, itemCount > 0 else { return nil }
+        return PillStatus(
+            text: itemCount == 1 ? "1 item" : "\(itemCount) items",
+            systemImage: "tray.full",
+            priority: .ambient
+        )
+    }
+
     let store: ShelfStore
 
     public init(context: PluginContext) {
-        store = ShelfStore(directory: context.storageDirectory, logger: context.logger)
+        let store = ShelfStore(directory: context.storageDirectory, logger: context.logger)
+        store.copyMode = ShelfCopyMode(stored: context.settings.value(forKey: Self.copyModeKey))
+        store.showsCountPill = context.settings.value(forKey: Self.showsCountPillKey) ?? false
+        self.store = store
         context.derive(\.contentSize) { [store] in Self.contentSize(forItemCount: store.items.count) }
+        context.derive(\.pillStatus) { [store] in
+            Self.countPill(itemCount: store.items.count, showsCount: store.showsCountPill)
+        }
+        context.observe({ [store] in store.copyMode }) { [settings = context.settings] mode in
+            settings.set(mode.rawValue, forKey: Self.copyModeKey)
+        }
+        context.observe({ [store] in store.showsCountPill }) { [settings = context.settings] shows in
+            settings.set(shows, forKey: Self.showsCountPillKey)
+        }
     }
 
     public func activate() async throws {
@@ -37,5 +62,28 @@ public final class ShelfPlugin: IsletPlugin {
         AnyView(ShelfScreen(store: store))
     }
 
-    public var acceptsFileDrops: Bool { true }
+    public func makeSettingsView() -> AnyView? {
+        AnyView(ShelfSettings(store: store))
+    }
+
+    public var acceptedDropTypes: [UTType] { Self.acceptedTypes }
+
+    static let acceptedTypes: [UTType] = [.fileURL, .url, .image, .plainText]
+}
+
+private struct ShelfSettings: View {
+    @Bindable var store: ShelfStore
+
+    var body: some View {
+        Form {
+            Section {
+                Picker("Keep a copy of dropped files", selection: $store.copyMode) {
+                    ForEach(ShelfCopyMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                Toggle("Show item count in the closed notch", isOn: $store.showsCountPill)
+            }
+        }
+    }
 }

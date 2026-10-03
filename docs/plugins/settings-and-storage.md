@@ -61,6 +61,6 @@ Two patterns from the built-in plugins:
 let url = context.storageDirectory.appending(path: "state.json")
 ```
 
-`ShelfPlugin` is the reference: `ShelfStore` keeps its items in `shelf.json` in this directory, loads it in `activate()`, and saves after every change. If the file can't be decoded, it is renamed to `shelf.json.corrupt` rather than overwritten, so the user's data is not lost.
+`ShelfPlugin` is the reference: `ShelfStore` keeps its items in `shelf.json` in this directory, loads it in `activate()`, and saves after every change. If the file can't be decoded, it is renamed to `shelf.json.corrupt` rather than overwritten, so the user's data is not lost. Copies of dropped files live in `Items/<id>/` in the same directory and are deleted when the item or the shelf is removed. The preference for when to keep a copy is a `PluginSettings` value, not part of that file.
 
 Islet does not delete the directory when a plugin is disabled.
