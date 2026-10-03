@@ -13,8 +13,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ShelfPlugin.self,
         MediaPlugin.self,
         AgentsPlugin.self,
-        HelloPlugin.self,
-    ]
+    ] + examplePlugins
+    #if DEBUG
+    private static let examplePlugins: [any IsletPlugin.Type] = [HelloPlugin.self]
+    #else
+    private static let examplePlugins: [any IsletPlugin.Type] = []
+    #endif
     private static let terminationTimeout: Duration = .seconds(2)
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Islet", category: "app")
 
