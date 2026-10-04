@@ -8,23 +8,15 @@ struct AgentsSettings: View {
     var body: some View {
         Form {
             Section {
-                InstallRow(title: "Claude Code hooks", isInstalled: controller.isHookInstalled, error: $error) { installed in
-                    installed ? try controller.uninstallHooks(for: .claudeCode) : try controller.installHooks(for: .claudeCode)
-                }
-                if controller.isCodexAvailable {
-                    InstallRow(title: "Codex hooks", isInstalled: controller.isCodexHookInstalled, error: $error) { installed in
-                        installed ? try controller.uninstallHooks(for: .codex) : try controller.installHooks(for: .codex)
-                    }
-                }
-                if controller.isAntigravityAvailable {
-                    InstallRow(title: "Antigravity hooks", isInstalled: controller.isAntigravityHookInstalled, error: $error) { installed in
-                        installed ? try controller.uninstallHooks(for: .antigravity) : try controller.installHooks(for: .antigravity)
+                ForEach(controller.availableAgents, id: \.self) { agent in
+                    InstallRow(title: "\(agent.displayName) hooks", isInstalled: controller.installedHooks.contains(agent), error: $error) {
+                        try controller.toggleHooks(for: agent)
                     }
                 }
                 if let serverError = controller.serverError {
                     Text(serverError).foregroundStyle(.orange)
                 } else {
-                    LabeledContent("Listening on", value: "127.0.0.1:\(controller.installer.port)")
+                    LabeledContent("Listening on", value: "127.0.0.1:\(controller.port)")
                 }
                 if let error {
                     Text(error).foregroundStyle(.red)
@@ -33,34 +25,22 @@ struct AgentsSettings: View {
                 Text("Installing adds a small script to ~/.claude (registered in ~/.claude/settings.json) or ~/.codex (registered in ~/.codex/hooks.json) so the agent reports session activity to Islet; the files are reformatted. Already running sessions need to be restarted. Codex additionally needs the hooks feature enabled in ~/.codex/config.toml and the hooks trusted once via /hooks. Antigravity hooks go to ~/.gemini/config/hooks.json; Antigravity has no hook for permission prompts, so answer those in the terminal. Nothing leaves your Mac.")
             }
             Section {
-                StatusLineRow(title: "Claude Code status line", state: controller.statusLineState, error: $error) {
-                    switch controller.statusLineState {
-                    case .installed, .outdated: try controller.uninstallStatusLine()
-                    case .notInstalled, .replaced: try controller.installStatusLine()
+                ForEach(controller.availableAgents.filter { controller.statusLineStates[$0] != nil }, id: \.self) { agent in
+                    let state = controller.statusLineStates[agent] ?? .notInstalled
+                    StatusLineRow(title: "\(agent.displayName) status line", state: state, error: $error) {
+                        try controller.toggleStatusLine(for: agent)
                     }
-                }
-                if controller.isAntigravityAvailable {
-                    StatusLineRow(title: "Antigravity status line", state: controller.antigravityStatusLineState, error: $error) {
-                        switch controller.antigravityStatusLineState {
-                        case .installed, .outdated: try controller.uninstallStatusLine(for: .antigravity)
-                        case .notInstalled, .replaced: try controller.installStatusLine(for: .antigravity)
-                        }
-                    }
-                    if controller.antigravityStatusLineState == .replaced {
-                        Text("The Antigravity status line was changed outside Islet, so conversation titles, model details and the quota no longer reach Islet. Reinstalling keeps showing your new status line.")
+                    if state == .replaced {
+                        Text("The \(agent.displayName) status line was changed outside Islet, so \(agent == .antigravity ? "conversation titles, model details and the quota" : "usage limits and session names") no longer reach Islet. Reinstalling keeps showing your new status line.")
                             .foregroundStyle(.orange)
-                    }
-                }
-                if controller.statusLineState == .replaced {
-                    Text("The status line was changed outside Islet, so usage limits and session names no longer reach Islet. Reinstalling keeps showing your new status line.")
-                        .foregroundStyle(.orange)
-                } else if controller.statusLineState == .installed, let original = controller.statusLineInstaller.originalCommand {
-                    LabeledContent("Your status line") {
-                        Text(original)
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
+                    } else if state == .installed, let original = controller.statusLineInstaller(for: agent)?.originalCommand {
+                        LabeledContent("Your status line") {
+                            Text(original)
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
                     }
                 }
             } header: {
@@ -133,15 +113,12 @@ struct AgentsSettings: View {
                             Toggle("Time until reset", isOn: $controller.display.showsResetTimes)
                         }
                     }
-                    switch controller.statusLineState {
-                    case .notInstalled, .replaced:
-                        Text("Needs the Claude Code status line above.")
+                    if !hasStatusLine(.claudeCode), !hasStatusLine(.antigravity) {
+                        Text("Needs a status line above.")
                             .foregroundStyle(.orange)
-                    case .installed, .outdated:
-                        if controller.usage.usage == nil {
-                            Text("Appears after your next message in Claude Code. Usage limits are only reported for Claude Pro and Max plans, and not by sessions in projects that set their own status line.")
-                                .foregroundStyle(.secondary)
-                        }
+                    } else if hasStatusLine(.claudeCode), controller.usage.usage == nil {
+                        Text("Appears after your next message in Claude Code. Usage limits are only reported for Claude Pro and Max plans, and not by sessions in projects that set their own status line.")
+                            .foregroundStyle(.secondary)
                     }
                 }
             } header: {
@@ -150,15 +127,22 @@ struct AgentsSettings: View {
                 Text("Shows how much of the 5-hour and 7-day Claude quota is used above the session list. The numbers come from Claude Code's status line and update while you use Claude Code. With the Antigravity status line installed, a second bar shows how much of Antigravity's weekly quota is used.")
             }
             Section {
-                CopyableCommand(title: "SSH config") { [snippet = controller.installer.sshConfigSnippet] in snippet }
+                CopyableCommand(title: "SSH config") { [snippet = controller.sshConfigSnippet] in snippet }
                 CopyableCommand(title: "Install on the remote", makeText: controller.makeRemoteInstallCommand)
             } header: {
                 Text("Remote machines")
             } footer: {
-                Text("Add the config line to the machine's Host entry in ~/.ssh/config (or pass -R \(controller.installer.port):127.0.0.1:\(controller.installer.port) to ssh) so the remote can reach Islet through the tunnel, then run the install command once on the remote machine. Its code works once and expires after \(Int(HookServer.installCodeLifetime.components.seconds / 60)) minutes, so copy a fresh command for each machine. Sessions there show the host name and are marked unreachable when no updates arrive for \(Int(AgentSessionStore.unreachableTimeout / 60)) minutes.")
+                Text("Add the config line to the machine's Host entry in ~/.ssh/config (or pass -R \(controller.port):127.0.0.1:\(controller.port) to ssh) so the remote can reach Islet through the tunnel, then run the install command once on the remote machine. Its code works once and expires after \(Int(HookServer.installCodeLifetime.components.seconds / 60)) minutes, so copy a fresh command for each machine. Sessions there show the host name and are marked unreachable when no updates arrive for \(Int(AgentSessionStore.unreachableTimeout / 60)) minutes.")
             }
         }
         .onAppear { controller.refreshInstallState() }
+    }
+
+    private func hasStatusLine(_ agent: AgentSession.Agent) -> Bool {
+        switch controller.statusLineStates[agent] {
+        case .installed, .outdated: true
+        case .notInstalled, .replaced, nil: false
+        }
     }
 }
 
@@ -169,10 +153,8 @@ private struct InstallRow: View {
     @Binding var error: String?
     let perform: () throws -> Void
 
-    init(title: String, isInstalled: Bool, error: Binding<String?>, toggle: @escaping (Bool) throws -> Void) {
-        self.init(title: title, status: isInstalled ? "Installed" : "Not installed", action: isInstalled ? "Remove" : "Install", error: error) {
-            try toggle(isInstalled)
-        }
+    init(title: String, isInstalled: Bool, error: Binding<String?>, perform: @escaping () throws -> Void) {
+        self.init(title: title, status: isInstalled ? "Installed" : "Not installed", action: isInstalled ? "Remove" : "Install", error: error, perform: perform)
     }
 
     init(title: String, status: String, action: String, error: Binding<String?>, perform: @escaping () throws -> Void) {

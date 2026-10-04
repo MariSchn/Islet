@@ -4,6 +4,12 @@ import os
 struct SessionSnapshot: Codable, Equatable {
     var sessions: [AgentSession]
     var hiddenSessions: [AgentSession]
+    var dismissed: [String: AgentSessionStore.Dismissal]?
+    var costs: CostTracker?
+
+    var sessionIDs: Set<String> {
+        Set(sessions.map(\.id) + hiddenSessions.map(\.id) + (dismissed ?? [:]).keys)
+    }
 }
 
 struct SessionPersistence {

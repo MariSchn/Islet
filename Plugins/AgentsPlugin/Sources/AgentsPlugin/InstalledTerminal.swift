@@ -7,7 +7,7 @@ struct InstalledTerminal {
     let name: String
     let icon: NSImage
 
-    private static var installed: [TerminalApp: InstalledTerminal] = [:]
+    private static var installed: [TerminalApp: InstalledTerminal?] = [:]
     private static let scripts = TerminalScriptRunner()
     private static let commands = TerminalCommandRunner()
     private static let tmuxFallbacks = ["/opt/homebrew/bin/tmux", "/usr/local/bin/tmux", "/usr/bin/tmux"]
@@ -15,7 +15,7 @@ struct InstalledTerminal {
 
     static func lookup(_ app: TerminalApp) -> InstalledTerminal? {
         if let cached = installed[app] { return cached }
-        guard let terminal = InstalledTerminal(app) else { return nil }
+        let terminal = InstalledTerminal(app)
         installed[app] = terminal
         return terminal
     }

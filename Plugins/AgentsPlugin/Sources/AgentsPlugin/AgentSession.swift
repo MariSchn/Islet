@@ -13,6 +13,30 @@ struct AgentSession: Identifiable, Sendable, Equatable, Codable {
             case .antigravity: "Antigravity"
             }
         }
+
+        var hookPath: String {
+            switch self {
+            case .claudeCode: ".claude"
+            case .codex: ".codex"
+            case .antigravity: ".gemini/config"
+            }
+        }
+
+        var statusLinePath: String? {
+            switch self {
+            case .claudeCode: ".claude"
+            case .codex: nil
+            case .antigravity: ".gemini/antigravity-cli"
+            }
+        }
+
+        var installationPath: String? {
+            switch self {
+            case .claudeCode: nil
+            case .codex: ".codex"
+            case .antigravity: ".gemini/antigravity-cli"
+            }
+        }
     }
 
     enum State: Sendable, Equatable, Codable {
@@ -63,7 +87,7 @@ struct AgentSession: Identifiable, Sendable, Equatable, Codable {
     var updatedAt: Date
 
     enum CodingKeys: String, CodingKey {
-        case id, agent, host, isRemote, isUnreachable, terminal, tty, pid, tmux, transcriptPath, model, cwd, title, hasStatusLineTitle
+        case id, agent, host, isRemote, isUnreachable, terminal, tty, pid, tmux, transcriptPath, model, cwd, title, hasStatusLineTitle, hasStatusLineModel
         case task, activity, state, activities, plan, details, startedAt, turnStartedAt, updatedAt
     }
 
@@ -178,5 +202,35 @@ struct SessionDetails: Sendable, Equatable, Codable {
 
     static func percentText(_ value: Double) -> String {
         String(Int(value.rounded()))
+    }
+}
+
+extension AgentSession {
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        agent = try container.decode(Agent.self, forKey: .agent)
+        host = try container.decodeIfPresent(String.self, forKey: .host)
+        isRemote = try container.decodeIfPresent(Bool.self, forKey: .isRemote) ?? false
+        isUnreachable = try container.decodeIfPresent(Bool.self, forKey: .isUnreachable) ?? false
+        terminal = try container.decodeIfPresent(TerminalApp.self, forKey: .terminal)
+        tty = try container.decodeIfPresent(String.self, forKey: .tty)
+        pid = try container.decodeIfPresent(Int32.self, forKey: .pid)
+        tmux = try container.decodeIfPresent(TmuxLocation.self, forKey: .tmux)
+        transcriptPath = try container.decodeIfPresent(String.self, forKey: .transcriptPath)
+        model = try container.decodeIfPresent(String.self, forKey: .model)
+        cwd = try container.decodeIfPresent(String.self, forKey: .cwd)
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+        hasStatusLineTitle = try container.decodeIfPresent(Bool.self, forKey: .hasStatusLineTitle) ?? false
+        hasStatusLineModel = try container.decodeIfPresent(Bool.self, forKey: .hasStatusLineModel) ?? false
+        task = try container.decodeIfPresent(String.self, forKey: .task)
+        activity = try container.decodeIfPresent(String.self, forKey: .activity)
+        state = try container.decode(State.self, forKey: .state)
+        activities = try container.decodeIfPresent([ActivityEntry].self, forKey: .activities) ?? []
+        plan = try container.decodeIfPresent(String.self, forKey: .plan)
+        details = try container.decodeIfPresent(SessionDetails.self, forKey: .details) ?? SessionDetails()
+        startedAt = try container.decode(Date.self, forKey: .startedAt)
+        turnStartedAt = try container.decode(Date.self, forKey: .turnStartedAt)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
     }
 }

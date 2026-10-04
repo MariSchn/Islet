@@ -110,9 +110,7 @@ public final class AgentsPlugin: IsletPlugin {
         display.historyLength = settings.value(forKey: Self.historyLengthKey) ?? display.historyLength
         let controller = AgentsController(
             token: token,
-            claudeDirectory: URL.homeDirectory.appending(path: ".claude", directoryHint: .isDirectory),
-            codexDirectory: URL.homeDirectory.appending(path: ".codex", directoryHint: .isDirectory),
-            antigravityDirectory: URL.homeDirectory.appending(path: ".gemini/config", directoryHint: .isDirectory),
+            home: URL.homeDirectory,
             alerts: Self.load(AlertSettings(), Self.alertKeys, from: settings),
             display: display,
             showsUsage: settings.value(forKey: Self.usageKey) ?? false,
@@ -132,23 +130,10 @@ public final class AgentsPlugin: IsletPlugin {
         context.derive(\.contentSize) {
             Self.contentSize(for: controller.store.orderedSessions, expanded: controller.expandedSessionIDs, showsUsage: controller.showsUsageBar, showsAntigravityQuota: controller.visibleAntigravityQuota != nil, historyLength: controller.display.historyLength)
         }
-        var announcer = StatusAnnouncer()
-        var contextAlert = ContextAlert()
-        var reviewAlert = ReviewAlert()
-        context.observe({ controller.store.sessions }) { [unowned context] sessions in
-            controller.pruneMutedSessions()
-            let muted = controller.mutedSessionIDs
-            if let announcement = announcer.announcement(for: sessions, muted: muted), controller.shouldAnnounce(announcement) {
+        context.observe({ controller.store.sessions }) { [unowned context] _ in
+            for announcement in controller.sessionsDidChange() {
                 context.announce(announcement)
             }
-            let detailsAnnouncements = contextAlert.announcements(for: sessions, muted: muted) + reviewAlert.announcements(for: sessions, muted: muted)
-            if controller.alerts.announcesInNotch {
-                for announcement in detailsAnnouncements {
-                    context.announce(announcement)
-                }
-            }
-            controller.interruptions.track(sessions)
-            controller.sessionsDidChange()
         }
     }
 

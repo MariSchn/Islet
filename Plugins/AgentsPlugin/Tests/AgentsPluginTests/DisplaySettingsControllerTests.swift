@@ -9,7 +9,7 @@ struct DisplaySettingsControllerTests {
         let directory = FileManager.default.temporaryDirectory.appending(path: "DisplaySettingsControllerTests." + UUID().uuidString)
         let usage = UsageMonitor(isEnabled: true)
         usage.receive(ClaudeUsage(fiveHour: UsageWindow(utilization: 40, resetsAt: nil), sevenDay: UsageWindow(utilization: 10, resetsAt: nil)))
-        return AgentsController(token: "t", claudeDirectory: directory, codexDirectory: directory, antigravityDirectory: directory, port: 0, showsUsage: true, usage: usage)
+        return AgentsController(token: "t", home: directory, port: 0, showsUsage: true, usage: usage)
     }
 
     private func waitUntil(_ condition: @MainActor () -> Bool) async throws {

@@ -1,13 +1,23 @@
 import Foundation
 
-struct CostTracker {
+struct CostTracker: Codable, Equatable {
     private var lastCost: [String: Double] = [:]
     private var accumulated = 0.0
     private var day: Date?
-    private let calendar: Calendar
+    var calendar = Calendar.current
+
+    private enum CodingKeys: String, CodingKey {
+        case lastCost, accumulated, day
+    }
 
     init(calendar: Calendar = .current) {
         self.calendar = calendar
+    }
+
+    func keeping(sessionIDs: Set<String>) -> CostTracker {
+        var tracker = self
+        tracker.lastCost = lastCost.filter { sessionIDs.contains($0.key) }
+        return tracker
     }
 
     mutating func total(at date: Date) -> Double {

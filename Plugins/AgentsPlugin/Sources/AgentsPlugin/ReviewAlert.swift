@@ -9,6 +9,8 @@ struct ReviewAlert {
     private var seen: [String: Seen] = [:]
 
     mutating func announcements(for sessions: [AgentSession], muted: Set<String> = []) -> [PillAnnouncement] {
+        let ids = Set(sessions.map(\.id))
+        seen = seen.filter { ids.contains($0.key) }
         var announcements: [PillAnnouncement] = []
         for session in sessions {
             if let announcement = announcement(for: session), !muted.contains(session.id) {

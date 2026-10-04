@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 struct ActivityEntry: Identifiable, Sendable, Equatable, Codable {
@@ -5,7 +6,7 @@ struct ActivityEntry: Identifiable, Sendable, Equatable, Codable {
 
     let id: UUID
     let toolName: String
-    let toolInput: JSONValue?
+    let inputDigest: String
     let title: String
     let detail: String?
     let startedAt: Date
@@ -15,7 +16,7 @@ struct ActivityEntry: Identifiable, Sendable, Equatable, Codable {
     init(event: HookEvent, at timestamp: Date, isComplete: Bool, didFail: Bool = false) {
         id = UUID()
         toolName = event.toolName ?? "Tool"
-        toolInput = event.toolInput
+        inputDigest = Self.digest(of: event.toolInput)
         title = event.activityDescription ?? toolName
         detail = Self.detail(for: event.toolName ?? "", input: event.toolInput)
         startedAt = timestamp
@@ -23,8 +24,11 @@ struct ActivityEntry: Identifiable, Sendable, Equatable, Codable {
         self.didFail = didFail
     }
 
-    func matches(_ event: HookEvent) -> Bool {
-        event.toolName == toolName && event.toolInput == toolInput
+    static func digest(of input: JSONValue?) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        let data = (try? encoder.encode(input)) ?? Data()
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
     var systemImage: String {
@@ -76,5 +80,24 @@ struct ActivityEntry: Identifiable, Sendable, Equatable, Codable {
 
     static func lineCount(_ text: String) -> Int {
         text.isEmpty ? 0 : text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).count
+    }
+}
+
+extension ActivityEntry {
+    private enum LegacyKeys: String, CodingKey {
+        case toolInput
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        toolName = try container.decode(String.self, forKey: .toolName)
+        inputDigest = try container.decodeIfPresent(String.self, forKey: .inputDigest)
+            ?? Self.digest(of: try decoder.container(keyedBy: LegacyKeys.self).decodeIfPresent(JSONValue.self, forKey: .toolInput))
+        title = try container.decode(String.self, forKey: .title)
+        detail = try container.decodeIfPresent(String.self, forKey: .detail)
+        startedAt = try container.decode(Date.self, forKey: .startedAt)
+        isComplete = try container.decode(Bool.self, forKey: .isComplete)
+        didFail = try container.decode(Bool.self, forKey: .didFail)
     }
 }

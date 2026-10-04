@@ -5,11 +5,6 @@ struct UsageWindow: Sendable, Equatable {
     var utilization: Double
     var resetsAt: Date?
 
-    init(utilization: Double, resetsAt: Date?) {
-        self.utilization = utilization
-        self.resetsAt = resetsAt
-    }
-
     static let unused = UsageWindow(utilization: 0, resetsAt: nil)
     static let resetTolerance: TimeInterval = 60
 
@@ -30,17 +25,11 @@ struct ClaudeUsage: Sendable, Equatable {
     var fiveHour: UsageWindow?
     var sevenDay: UsageWindow?
 
-    init(fiveHour: UsageWindow?, sevenDay: UsageWindow?) {
-        self.fiveHour = fiveHour
-        self.sevenDay = sevenDay
-    }
-
     var isEmpty: Bool { fiveHour == nil && sevenDay == nil }
 
     func current(at date: Date) -> ClaudeUsage {
         ClaudeUsage(fiveHour: fiveHour?.current(at: date), sevenDay: sevenDay?.current(at: date))
     }
-
 }
 
 struct AntigravityQuota: Sendable, Equatable {
@@ -103,6 +92,17 @@ final class UsageMonitor {
     var dailyCost: Double {
         _ = costTick
         return costs.total(at: now())
+    }
+
+    func costs(keeping sessionIDs: Set<String>) -> CostTracker {
+        costs.keeping(sessionIDs: sessionIDs)
+    }
+
+    func restore(_ costs: CostTracker) {
+        self.costs = costs
+        self.costs.calendar = calendar
+        costTick += 1
+        scheduleCostReset()
     }
 
     func record(sessionID: String, cost: Double) {
