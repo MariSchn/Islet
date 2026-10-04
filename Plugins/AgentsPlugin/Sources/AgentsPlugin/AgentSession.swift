@@ -4,11 +4,13 @@ struct AgentSession: Identifiable, Sendable, Equatable, Codable {
     enum Agent: String, Sendable, CaseIterable, Codable {
         case claudeCode = "claude-code"
         case codex
+        case antigravity
 
         var displayName: String {
             switch self {
             case .claudeCode: "Claude Code"
             case .codex: "Codex"
+            case .antigravity: "Antigravity"
             }
         }
     }

@@ -16,6 +16,11 @@ struct AgentsSettings: View {
                         installed ? try controller.uninstallHooks(for: .codex) : try controller.installHooks(for: .codex)
                     }
                 }
+                if controller.isAntigravityAvailable {
+                    InstallRow(title: "Antigravity hooks", isInstalled: controller.isAntigravityHookInstalled, error: $error) { installed in
+                        installed ? try controller.uninstallHooks(for: .antigravity) : try controller.installHooks(for: .antigravity)
+                    }
+                }
                 if let serverError = controller.serverError {
                     Text(serverError).foregroundStyle(.orange)
                 } else {
@@ -25,7 +30,7 @@ struct AgentsSettings: View {
                     Text(error).foregroundStyle(.red)
                 }
             } footer: {
-                Text("Installing adds a small script to ~/.claude (registered in ~/.claude/settings.json) or ~/.codex (registered in ~/.codex/hooks.json) so the agent reports session activity to Islet; the files are reformatted. Already running sessions need to be restarted. Codex additionally needs the hooks feature enabled in ~/.codex/config.toml and the hooks trusted once via /hooks. Nothing leaves your Mac.")
+                Text("Installing adds a small script to ~/.claude (registered in ~/.claude/settings.json) or ~/.codex (registered in ~/.codex/hooks.json) so the agent reports session activity to Islet; the files are reformatted. Already running sessions need to be restarted. Codex additionally needs the hooks feature enabled in ~/.codex/config.toml and the hooks trusted once via /hooks. Antigravity hooks go to ~/.gemini/config/hooks.json; Antigravity has no hook for permission prompts, so answer those in the terminal. Nothing leaves your Mac.")
             }
             Section {
                 StatusLineRow(state: controller.statusLineState, error: $error) {

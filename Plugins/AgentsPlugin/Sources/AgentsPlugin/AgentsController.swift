@@ -9,9 +9,11 @@ final class AgentsController {
     let store: AgentSessionStore
     let installer: HookInstaller
     let codexInstaller: HookInstaller
+    let antigravityInstaller: HookInstaller
     let statusLineInstaller: StatusLineInstaller
     private(set) var isHookInstalled: Bool
     private(set) var isCodexHookInstalled: Bool
+    private(set) var isAntigravityHookInstalled: Bool
     private(set) var statusLineState: StatusLineInstaller.State
     private(set) var serverError: String?
     private(set) var expandedSessionIDs: Set<String> = []
@@ -62,7 +64,7 @@ final class AgentsController {
     private var saveTask: Task<Void, Never>?
     private var hasRestored = false
 
-    init(token: String, claudeDirectory: URL, codexDirectory: URL, port: UInt16 = HookServer.defaultPort, alerts: AlertSettings = AlertSettings(), display: DisplaySettings = DisplaySettings(), showsUsage: Bool = false, usage: UsageMonitor? = nil, storageDirectory: URL? = nil, saveDelay: Duration = .seconds(1), logger: Logger = Logger()) {
+    init(token: String, claudeDirectory: URL, codexDirectory: URL, antigravityDirectory: URL, port: UInt16 = HookServer.defaultPort, alerts: AlertSettings = AlertSettings(), display: DisplaySettings = DisplaySettings(), showsUsage: Bool = false, usage: UsageMonitor? = nil, storageDirectory: URL? = nil, saveDelay: Duration = .seconds(1), logger: Logger = Logger()) {
         persistence = storageDirectory.map { SessionPersistence(directory: $0, logger: logger) }
         self.saveDelay = saveDelay
         let store = AgentSessionStore()
@@ -70,9 +72,11 @@ final class AgentsController {
         self.usage = usage ?? UsageMonitor(isEnabled: showsUsage)
         installer = HookInstaller(agent: .claudeCode, directory: claudeDirectory, port: port, token: token)
         codexInstaller = HookInstaller(agent: .codex, directory: codexDirectory, port: port, token: token)
+        antigravityInstaller = HookInstaller(agent: .antigravity, directory: antigravityDirectory, port: port, token: token)
         statusLineInstaller = StatusLineInstaller(directory: claudeDirectory, port: port, token: token)
         isHookInstalled = installer.isInstalled
         isCodexHookInstalled = codexInstaller.isInstalled
+        isAntigravityHookInstalled = antigravityInstaller.isInstalled
         statusLineState = statusLineInstaller.state
         let usage = self.usage
         server = HookServer(port: port, token: token, installScript: HookInstaller.remoteInstallScript(for: [installer, codexInstaller])) { update in
@@ -146,7 +150,7 @@ final class AgentsController {
         } catch {
             serverError = "Could not listen on 127.0.0.1:\(server.port). Is another app using the port?"
         }
-        for installer in [installer, codexInstaller] where installer.needsUpgrade {
+        for installer in [installer, codexInstaller, antigravityInstaller] where installer.needsUpgrade {
             try? installer.install()
         }
         if statusLineInstaller.state == .outdated {
@@ -159,6 +163,10 @@ final class AgentsController {
 
     var isCodexAvailable: Bool {
         isCodexHookInstalled || FileManager.default.fileExists(atPath: codexInstaller.directory.path)
+    }
+
+    var isAntigravityAvailable: Bool {
+        isAntigravityHookInstalled || FileManager.default.fileExists(atPath: antigravityInstaller.directory.deletingLastPathComponent().appending(path: "antigravity-cli").path)
     }
 
     func sessionsDidChange() {
@@ -183,6 +191,7 @@ final class AgentsController {
     func refreshInstallState() {
         isHookInstalled = installer.isInstalled
         isCodexHookInstalled = codexInstaller.isInstalled
+        isAntigravityHookInstalled = antigravityInstaller.isInstalled
         statusLineState = statusLineInstaller.state
         Task { [server] in
             if await !server.isListening, serverError == nil {
@@ -192,7 +201,7 @@ final class AgentsController {
     }
 
     var isAnyHookInstalled: Bool {
-        isHookInstalled || isCodexHookInstalled
+        isHookInstalled || isCodexHookInstalled || isAntigravityHookInstalled
     }
 
     func installHooks(for agent: AgentSession.Agent = .claudeCode) throws {
@@ -219,6 +228,7 @@ final class AgentsController {
         switch agent {
         case .claudeCode: isHookInstalled
         case .codex: isCodexHookInstalled
+        case .antigravity: isAntigravityHookInstalled
         }
     }
 
@@ -226,6 +236,7 @@ final class AgentsController {
         switch agent {
         case .claudeCode: installer
         case .codex: codexInstaller
+        case .antigravity: antigravityInstaller
         }
     }
 

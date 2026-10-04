@@ -2,6 +2,7 @@ import Foundation
 
 struct HookInstaller: Sendable {
     static let scriptName = "islet-hook.sh"
+    static let antigravityHookName = "islet"
     private static let scriptPlaceholder = "__ISLET_SCRIPT__"
 
     let agent: AgentSession.Agent
@@ -20,24 +21,29 @@ struct HookInstaller: Sendable {
         switch agent {
         case .claudeCode: ["SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest", "PermissionDenied", "Notification", "Stop", "StopFailure"]
         case .codex: ["SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PermissionRequest", "Stop"]
+        case .antigravity: ["PreInvocation", "PostToolUse", "Stop"]
         }
     }
 
     var settingsFileName: String {
         switch agent {
         case .claudeCode: "settings.json"
-        case .codex: "hooks.json"
+        case .codex, .antigravity: "hooks.json"
         }
     }
 
     var settingsDescription: String {
-        "~/\(directory.lastPathComponent)/\(settingsFileName)"
+        switch agent {
+        case .claudeCode, .codex: "~/\(directory.lastPathComponent)/\(settingsFileName)"
+        case .antigravity: "~/.gemini/\(directory.lastPathComponent)/\(settingsFileName)"
+        }
     }
 
     private var remoteDirectoryExpression: String {
         switch agent {
         case .claudeCode: "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
         case .codex: "${CODEX_HOME:-$HOME/.codex}"
+        case .antigravity: "$HOME/.gemini/config"
         }
     }
 
@@ -49,8 +55,9 @@ struct HookInstaller: Sendable {
         """
         #!/bin/sh
         timeout="${1:-5}"
+        event="$2"
         payload=$(cat)
-        title=""
+        \(agent == .antigravity ? "printf '{}\\n'\n" : "")title=""
         transcript=""
         case "$(printf '%s' "$payload" | sed -n 's/.*"hook_event_name":"\\([A-Za-z]*\\)".*/\\1/p')" in
           SessionStart|UserPromptSubmit|Stop|StopFailure) transcript=$(printf '%s' "$payload" | sed -n 's/.*"transcript_path":"\\([^"]*\\)".*/\\1/p') ;;
@@ -71,7 +78,7 @@ struct HookInstaller: Sendable {
           [ -n "$1" ] || break
           case "$2" in ""|"?"|"??") ;; *) tty="/dev/$2" ;; esac
           if [ -z "$agent_pid" ]; then
-            case "${3##*/}" in claude|claude-*|node|bun|codex|codex-*|[0-9]*.[0-9]*.[0-9]*) agent_pid=$pid ;; esac
+            case "${3##*/}" in claude|claude-*|node|bun|codex|codex-*|agy|[0-9]*.[0-9]*.[0-9]*) agent_pid=$pid ;; esac
           fi
           if [ -z "$terminal" ] && [ "$(uname)" = Darwin ]; then
             vars=$(ps -E -o command= -p "$pid" 2>/dev/null | tr ' ' '\n')
@@ -89,6 +96,7 @@ struct HookInstaller: Sendable {
           -H "Content-Type: application/json" \\
           -H "Expect:" \\
           -H "X-Islet-Agent: \(agent.rawValue)" \\
+          -H "X-Islet-Event: $event" \\
           -H "X-Islet-Host: $(hostname -s 2>/dev/null || hostname)" \\
           -H "X-Islet-Terminal: $terminal" \\
           -H "X-Islet-TTY: $tty" \\
@@ -96,7 +104,7 @@ struct HookInstaller: Sendable {
           -H "X-Islet-Tmux: $TMUX" \\
           -H "X-Islet-Tmux-Pane: $TMUX_PANE" \\
           -H "X-Islet-Title: $title" \\
-          --data-binary "@$body" 2>/dev/null <<'ISLET_CONFIG' &
+          --data-binary "@$body" \(agent == .antigravity ? ">/dev/null " : "")2>/dev/null <<'ISLET_CONFIG' &
         header = "Authorization: Bearer \(token)"
         ISLET_CONFIG
         request=$!
@@ -159,6 +167,8 @@ struct HookInstaller: Sendable {
                 script += "install_hooks \(arguments)\n"
             case .codex:
                 script += "[ -d \"\(installer.remoteDirectoryExpression)\" ] && install_hooks \(arguments)\n"
+            case .antigravity:
+                continue
             }
         }
         script += "echo \"Restart agent sessions on this machine to report them to Islet.\"\n"
@@ -178,11 +188,18 @@ struct HookInstaller: Sendable {
     }
 
     private var hasAnyHooks: Bool {
+        if agent == .antigravity {
+            return (try? settingsFile.read())??[Self.antigravityHookName] != nil
+        }
         guard let settings = try? settingsFile.read(), let hooks = settings["hooks"] as? [String: Any] else { return false }
         return events.contains { !Self.isletHooks(in: hooks[$0]).isEmpty }
     }
 
     private var hasAllHooks: Bool {
+        if agent == .antigravity {
+            guard let hook = (try? settingsFile.read())??[Self.antigravityHookName] as? [String: Any] else { return false }
+            return NSDictionary(dictionary: hook).isEqual(to: antigravityHook)
+        }
         guard let settings = try? settingsFile.read(), let hooks = settings["hooks"] as? [String: Any] else { return false }
         return events.allSatisfy { event in
             Self.isletHooks(in: hooks[event]).contains { NSDictionary(dictionary: $0).isEqual(to: Self.hookEntry(for: event, script: scriptURL.path)) }
@@ -200,6 +217,11 @@ struct HookInstaller: Sendable {
         }
 
         var settings = try settingsFile.read() ?? [:]
+        if agent == .antigravity {
+            settings[Self.antigravityHookName] = antigravityHook
+            try settingsFile.write(settings)
+            return
+        }
         var hooks = settings["hooks"] as? [String: Any] ?? [:]
         for event in events {
             var groups = Self.withoutIsletHooks(hooks[event])
@@ -211,7 +233,12 @@ struct HookInstaller: Sendable {
     }
 
     func uninstall() throws {
-        if var settings = try settingsFile.read(), var hooks = settings["hooks"] as? [String: Any] {
+        if agent == .antigravity {
+            if var settings = try settingsFile.read(), settings[Self.antigravityHookName] != nil {
+                settings[Self.antigravityHookName] = nil
+                try settingsFile.write(settings)
+            }
+        } else if var settings = try settingsFile.read(), var hooks = settings["hooks"] as? [String: Any] {
             for event in hooks.keys {
                 let groups = Self.withoutIsletHooks(hooks[event])
                 hooks[event] = groups.isEmpty ? nil : groups
@@ -232,6 +259,14 @@ struct HookInstaller: Sendable {
             return ["type": "command", "command": "\(quoted) 2", "timeout": 3]
         default:
             return ["type": "command", "command": quoted, "timeout": 10]
+        }
+    }
+
+    var antigravityHook: [String: Any] {
+        let quoted = "'" + scriptURL.path.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        return events.reduce(into: [String: Any]()) { hook, event in
+            let entry: [String: Any] = ["type": "command", "command": "\(quoted) 2 \(event)", "timeout": 5]
+            hook[event] = event == "PostToolUse" ? [["matcher": "*", "hooks": [entry]]] : [entry]
         }
     }
 

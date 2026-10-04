@@ -31,6 +31,48 @@ struct HookEventTests {
         #expect(!event.isInAutoMode)
     }
 
+    @Test func mapsAntigravityHooksOntoSessionEvents() throws {
+        let common = #""conversationId":"c1","workspacePaths":["/Users/me/projects/islet"],"transcriptPath":"/tmp/t.jsonl","modelName":"gemini-3.8-flash-high""#
+        func decode(_ name: String, _ fields: String = "") throws -> HookEvent {
+            try HookEvent.decode(Data("{\(common)\(fields)}".utf8), agent: "antigravity", eventName: name) { $0 == "/tmp/t.jsonl" ? "Fix the build" : nil }
+        }
+
+        let prompt = try decode("PreInvocation", #","invocationNum":0,"initialNumSteps":1"#)
+        #expect(prompt.kind == .userPromptSubmit)
+        #expect(prompt.agent == .antigravity)
+        #expect(prompt.sessionID == "c1")
+        #expect(prompt.cwd == "/Users/me/projects/islet")
+        #expect(prompt.prompt == "Fix the build")
+        #expect(try decode("PreInvocation", #","invocationNum":2"#).kind == .other)
+        #expect(try decode("PostInvocation", #","invocationNum":0"#).kind == .other)
+
+        let tool = try decode("PostToolUse", #","error":"","toolCall":{"name":"view_file","args":{"AbsolutePath":"/a.txt","toolSummary":"Read a.txt"}}"#)
+        #expect(tool.kind == .postToolUse)
+        #expect(tool.toolName == "view_file")
+        #expect(tool.activityDescription == "Read a.txt")
+        #expect(try decode("PostToolUse", #","error":"exit status 1","toolCall":{"name":"run_command"}"#).kind == .postToolUseFailure)
+
+        #expect(try decode("Stop", #","error":"","terminationReason":"NO_TOOL_CALL""#).kind == .stop)
+        let failure = try decode("Stop", #","error":"quota exceeded","terminationReason":"error""#)
+        #expect(failure.kind == .stopFailure)
+        #expect(failure.failureDescription == "quota exceeded")
+        #expect(throws: (any Error).self) { try HookEvent.decode(Data(#"{"session_id":"a","hook_event_name":"Stop"}"#.utf8), agent: "antigravity", eventName: "Stop") }
+    }
+
+    @Test func readsTheUserRequestFromAnAntigravityTranscript() throws {
+        let url = FileManager.default.temporaryDirectory.appending(path: "AgentsPluginTests." + UUID().uuidString + ".jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try """
+        {"step_index":0,"type":"USER_INPUT","content":"<USER_REQUEST>\\nFirst task\\n</USER_REQUEST>"}
+        {"step_index":1,"type":"PLANNER_RESPONSE","content":"<USER_REQUEST>ignored</USER_REQUEST>"}
+        {"step_index":2,"type":"USER_INPUT","content":"<USER_REQUEST>\\nSay \\"hi\\"\\nplease\\n</USER_REQUEST>\\n<ADDITIONAL_METADATA>\\ntime\\n</ADDITIONAL_METADATA>"}
+        {"step_index":3,"type":"PLANNER_RESPONSE","content":"ok"}
+
+        """.write(to: url, atomically: true, encoding: .utf8)
+        #expect(TranscriptReader.lastAntigravityPrompt(at: url.path) == "Say \"hi\"\nplease")
+        #expect(TranscriptReader.lastAntigravityPrompt(at: url.path + ".missing") == nil)
+    }
+
     @Test func resolvesTheHostingTerminalFromBundleIdentifierOrProgramName() throws {
         let payload = Data(#"{"session_id":"a","hook_event_name":"Stop"}"#.utf8)
         #expect(try HookEvent.decode(payload, terminal: "com.googlecode.iterm2").terminal == TerminalApp(identifier: "com.googlecode.iterm2"))

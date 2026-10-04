@@ -99,6 +99,7 @@ public final class AgentsPlugin: IsletPlugin {
             token: token,
             claudeDirectory: URL.homeDirectory.appending(path: ".claude", directoryHint: .isDirectory),
             codexDirectory: URL.homeDirectory.appending(path: ".codex", directoryHint: .isDirectory),
+            antigravityDirectory: URL.homeDirectory.appending(path: ".gemini/config", directoryHint: .isDirectory),
             alerts: Self.load(AlertSettings(), Self.alertKeys, from: settings),
             display: display,
             showsUsage: settings.value(forKey: Self.usageKey) ?? false,

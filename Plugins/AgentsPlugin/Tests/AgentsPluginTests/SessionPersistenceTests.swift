@@ -83,7 +83,7 @@ struct SessionPersistenceTests {
     @Test func changesAreWrittenWithinTheDebounceWindow() async throws {
         let directory = makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let controller = AgentsController(token: "t", claudeDirectory: directory, codexDirectory: directory, port: 0, storageDirectory: directory, saveDelay: .milliseconds(50))
+        let controller = AgentsController(token: "t", claudeDirectory: directory, codexDirectory: directory, antigravityDirectory: directory, port: 0, storageDirectory: directory, saveDelay: .milliseconds(50))
         controller.store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s", prompt: "go", pid: 1))
         controller.sessionsDidChange()
         let file = SessionPersistence(directory: directory).fileURL

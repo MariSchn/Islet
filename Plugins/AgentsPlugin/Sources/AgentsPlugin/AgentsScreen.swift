@@ -610,6 +610,10 @@ private struct AgentBadge: View {
                 .help(agent.displayName)
         case .codex:
             Chip(agent.displayName)
+        case .antigravity:
+            GeminiLogo()
+                .frame(width: 14, height: 14)
+                .help(agent.displayName)
         }
     }
 }
