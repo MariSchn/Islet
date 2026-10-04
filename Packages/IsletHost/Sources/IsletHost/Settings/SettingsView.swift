@@ -251,13 +251,24 @@ private struct PluginPage: View {
 struct PluginList: View {
     let registry: PluginRegistry
     let navigation: SettingsNavigation
+    @State private var dropTargetID: String?
 
     var body: some View {
         Section {
             let entries = registry.orderedEntries
             ForEach(entries) { entry in
-                PluginListRow(entry: entry, registry: registry) {
+                PluginListRow(entry: entry, registry: registry, isDropTarget: dropTargetID == entry.id) {
                     navigation.pane = .plugin(entry.id)
+                }
+                .dropDestination(for: String.self) { ids, _ in
+                    guard let id = ids.first else { return false }
+                    return move(id, onto: entry.id)
+                } isTargeted: { isTargeted in
+                    if isTargeted {
+                        dropTargetID = entry.id
+                    } else if dropTargetID == entry.id {
+                        dropTargetID = nil
+                    }
                 }
                 .contextMenu {
                     Button("Move Up") { registry.move(entry.id, by: -1) }
@@ -268,20 +279,41 @@ struct PluginList: View {
                 .accessibilityAction(named: "Move up") { registry.move(entry.id, by: -1) }
                 .accessibilityAction(named: "Move down") { registry.move(entry.id, by: 1) }
             }
-            .onMove { registry.move(fromOffsets: $0, toOffset: $1) }
         } footer: {
-            Text("Drag plugins to change their order in the notch. Turned off plugins stop running.")
+            Text("Drag a plugin by its handle to change its place in the notch. Turned off plugins stop running.")
         }
+    }
+
+    private func move(_ id: String, onto target: String) -> Bool {
+        let ids = registry.orderedEntries.map(\.id)
+        guard let from = ids.firstIndex(of: id), let to = ids.firstIndex(of: target) else { return false }
+        guard from != to else { return true }
+        withAnimation(.snappy) {
+            registry.move(fromOffsets: IndexSet(integer: from), toOffset: to > from ? to + 1 : to)
+        }
+        return true
     }
 }
 
 private struct PluginListRow: View {
     let entry: PluginEntry
     let registry: PluginRegistry
+    let isDropTarget: Bool
     let open: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
+            DragHandle()
+                .draggable(entry.id) {
+                    Label {
+                        Text(entry.manifest.displayName)
+                    } icon: {
+                        SettingsIcon(systemImage: entry.manifest.systemImage, tint: entry.manifest.settingsTint, size: 22)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
             SettingsIcon(systemImage: entry.manifest.systemImage, tint: entry.manifest.settingsTint, size: 28)
             VStack(alignment: .leading, spacing: 1) {
                 Text(entry.manifest.displayName)
@@ -312,6 +344,31 @@ private struct PluginListRow: View {
             .accessibilityLabel("Settings for \(entry.manifest.displayName)")
         }
         .padding(.vertical, 2)
+        .background {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.accentColor.opacity(isDropTarget ? 0.18 : 0))
+                .padding(.horizontal, -6)
+                .padding(.vertical, -3)
+        }
+    }
+}
+
+private struct DragHandle: View {
+    var body: some View {
+        Grid(horizontalSpacing: 3, verticalSpacing: 3) {
+            ForEach(0..<3, id: \.self) { _ in
+                GridRow {
+                    Circle().frame(width: 3, height: 3)
+                    Circle().frame(width: 3, height: 3)
+                }
+            }
+        }
+        .foregroundStyle(.tertiary)
+        .frame(width: 14, height: 28)
+        .contentShape(Rectangle())
+        .pointerStyle(.grabIdle)
+        .help("Drag to reorder")
+        .accessibilityHidden(true)
     }
 }
 
