@@ -7,7 +7,11 @@ struct SettingsFile: Sendable {
     }
 
     let url: URL
-    let description: String
+
+    var description: String {
+        let home = URL.homeDirectory.path
+        return url.path.hasPrefix(home + "/") ? "~" + url.path.dropFirst(home.count) : url.path
+    }
 
     func read() throws -> [String: Any]? {
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }

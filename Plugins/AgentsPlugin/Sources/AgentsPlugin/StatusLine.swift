@@ -7,7 +7,7 @@ struct StatusLineUpdate: Sendable, Equatable {
     var antigravityQuota: AntigravityQuota?
     var details = SessionDetails()
 
-    var isAntigravity: Bool { antigravityQuota != nil }
+    var isAntigravity = false
 
     struct Invalid: Error {}
 
@@ -19,8 +19,9 @@ struct StatusLineUpdate: Sendable, Equatable {
         let usage = (object["rate_limits"] as? [String: Any]).map { limits in
             ClaudeUsage(fiveHour: window(limits["five_hour"]), sevenDay: window(limits["seven_day"]))
         }
-        let quota = object["product"] as? String == "antigravity" ? antigravityQuota(object["quota"]) : nil
-        return StatusLineUpdate(sessionID: sessionID, sessionName: name, usage: usage, antigravityQuota: quota, details: details(from: object))
+        let isAntigravity = object["product"] as? String == "antigravity"
+        let quota = isAntigravity ? antigravityQuota(object["quota"]) : nil
+        return StatusLineUpdate(sessionID: sessionID, sessionName: name, usage: usage, antigravityQuota: quota, details: details(from: object), isAntigravity: isAntigravity)
     }
 
     private static func details(from object: [String: Any]) -> SessionDetails {
@@ -115,8 +116,8 @@ struct StatusLineInstaller: Sendable {
     }
 
     struct InvalidStatusLine: Error, LocalizedError {
-        var settingsDescription: String
-        var errorDescription: String? { "The statusLine setting in \(settingsDescription) is not an object" }
+        var settingsFile: SettingsFile
+        var errorDescription: String? { "The statusLine setting in \(settingsFile.description) is not an object" }
     }
 
     static let scriptName = "islet-statusline.sh"
@@ -134,19 +135,18 @@ struct StatusLineInstaller: Sendable {
         self.token = token
     }
 
+    init?(agent: AgentSession.Agent, home: URL, port: UInt16, token: String) {
+        guard let path = agent.statusLinePath else { return nil }
+        self.init(agent: agent, directory: home.appending(path: path, directoryHint: .isDirectory), port: port, token: token)
+    }
+
     var scriptURL: URL { directory.appending(path: Self.scriptName) }
     var originalURL: URL { directory.appending(path: Self.originalName) }
-    private var settingsDescription: String {
-        switch agent {
-        case .claudeCode, .codex: "~/\(directory.lastPathComponent)/settings.json"
-        case .antigravity: "~/.gemini/\(directory.lastPathComponent)/settings.json"
-        }
-    }
     private var settingsFile: SettingsFile {
-        SettingsFile(url: directory.appending(path: "settings.json"), description: settingsDescription)
+        SettingsFile(url: directory.appending(path: "settings.json"))
     }
     private var command: String {
-        "'" + scriptURL.path.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        scriptURL.path.shellQuoted
     }
 
     var script: String {
@@ -158,7 +158,7 @@ struct StatusLineInstaller: Sendable {
           -H "Content-Type: application/json" \\
           -H "Expect:" \\
           -H "X-Islet-Agent: \(agent.rawValue)" \\
-          --data-binary @- >/dev/null 2>&1 3<<'ISLET_CONFIG' &
+          --data-binary @->/dev/null 2>&1 3<<'ISLET_CONFIG' &
         header = "Authorization: Bearer \(token)"
         ISLET_CONFIG
         if [ -f "$dir/\(Self.originalName)" ]; then
@@ -191,7 +191,7 @@ struct StatusLineInstaller: Sendable {
 
     func install() throws {
         var settings = try settingsFile.read() ?? [:]
-        guard settings["statusLine"] == nil || settings["statusLine"] is [String: Any] else { throw InvalidStatusLine(settingsDescription: settingsDescription) }
+        guard settings["statusLine"] == nil || settings["statusLine"] is [String: Any] else { throw InvalidStatusLine(settingsFile: settingsFile) }
         var statusLine = settings["statusLine"] as? [String: Any] ?? [:]
         switch statusLine["command"] as? String {
         case let existing? where Self.isOwn(existing):
