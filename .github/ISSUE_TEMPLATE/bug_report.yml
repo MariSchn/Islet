@@ -1,0 +1,52 @@
+name: Bug report
+description: Something in Islet doesn't work as expected.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead? Screenshots or a screen recording help a lot.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where?
+      options:
+        - The notch itself
+        - Settings
+        - Agents
+        - Media
+        - Shelf
+        - Calendar
+        - GitHub
+        - Timer
+        - System
+        - Downloads
+        - Scripts
+        - Installing or updating
+        - Something else
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Islet version
+      description: Settings › About Islet
+      placeholder: 0.1.0 (123)
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and Mac
+      placeholder: macOS 26.1, MacBook Pro 14" M4
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Optional. In Terminal, run `log show --last 10m --predicate 'subsystem == "com.marischn.Islet"'` right after the problem and paste the relevant lines. Remove anything private.
+      render: text

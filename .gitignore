@@ -13,3 +13,7 @@ xcuserdata/
 
 # Claude Code worktrees
 .claude/worktrees/
+
+# Release builds
+build/
+dist/
