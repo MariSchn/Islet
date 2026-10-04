@@ -106,7 +106,7 @@ private struct SessionRow: View {
             summary
                 .frame(height: AgentsPlugin.rowHeight)
             if let request = session.pendingRequest {
-                RequestView(request: request) { decide(request.id, $0) }
+                RequestView(request: request, showTerminal: showTerminal) { decide(request.id, $0) }
                     .id(request.id)
                     .frame(height: AgentsPlugin.requestHeight(for: request))
             }
@@ -162,7 +162,7 @@ private struct SessionRow: View {
                     if let percentage = session.details.contextPercentage {
                         ContextMeter(percentage: percentage)
                     }
-                    AgentBadge(agent: session.agent)
+                    AgentBadge(session: session)
                     if isMuted {
                         Image(systemName: "bell.slash")
                             .font(.system(size: 10))
@@ -208,9 +208,9 @@ private struct SessionRow: View {
                         .foregroundStyle(detailStyle)
                         .lineLimit(1)
                         .layoutPriority(-1)
-                    if session.details.worktree != nil || session.details.pullRequest != nil {
+                    if session.details.worktree != nil || session.details.branch != nil || session.details.pullRequest != nil {
                         Spacer(minLength: 4)
-                        if let worktree = session.details.worktree {
+                        if let worktree = session.details.worktree ?? session.details.branch {
                             DetailChip(systemImage: "arrow.triangle.branch", text: worktree, style: AnyShapeStyle(.secondary))
                         }
                         if let pullRequest = session.details.pullRequest {
@@ -331,6 +331,7 @@ private struct SectionHeader: View {
 
 private struct RequestView: View {
     let request: PendingRequest
+    let showTerminal: () -> Void
     let decide: (PermissionDecision) -> Void
 
     var body: some View {
@@ -353,25 +354,28 @@ private struct RequestView: View {
             }
             .padding(.vertical, AgentsPlugin.requestPadding)
         case .question(let questions):
-            QuestionView(questions: questions) { decide(.answers($0)) }
+            QuestionView(questions: questions, answerInTerminal: request.isAnswerable ? nil : showTerminal) { decide(.answers($0)) }
                 .padding(.vertical, AgentsPlugin.requestPadding)
         }
     }
 }
 
 private struct QuestionView: View {
+    let answerInTerminal: (() -> Void)?
     let submit: ([String: String]) -> Void
     @State private var state: QuestionAnswers
     @State private var isTyping = false
     @State private var text = ""
     @FocusState private var fieldFocused: Bool
 
-    init(questions: [PendingRequest.Question], submit: @escaping ([String: String]) -> Void) {
+    init(questions: [PendingRequest.Question], answerInTerminal: (() -> Void)? = nil, submit: @escaping ([String: String]) -> Void) {
+        self.answerInTerminal = answerInTerminal
         self.submit = submit
         _state = State(initialValue: QuestionAnswers(questions: questions))
     }
 
     private var question: PendingRequest.Question { state.question }
+    private var detailHeight: CGFloat { AgentsPlugin.questionDetailHeight(for: state.questions) }
     private var canSubmitText: Bool { !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     private var confirmTitle: String { state.isLast ? "Submit" : "Next" }
 
@@ -403,7 +407,7 @@ private struct QuestionView: View {
                         .lineLimit(2)
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: AgentsPlugin.questionDetailHeight, maxHeight: AgentsPlugin.questionDetailHeight, alignment: .topLeading)
+            .frame(maxWidth: .infinity, minHeight: detailHeight, maxHeight: detailHeight, alignment: .topLeading)
             if isTyping {
                 TextField("Your answer", text: $text)
                     .textFieldStyle(.plain)
@@ -429,9 +433,15 @@ private struct QuestionView: View {
                         tint: .accentColor,
                         fullWidth: true
                     ) { choose(offset) }
+                    .disabled(answerInTerminal != nil)
+                    .opacity(answerInTerminal == nil ? 1 : 0.6)
                 }
-                RequestButton("Other…", systemImage: "pencil", tint: .accentColor, fullWidth: true) {
-                    isTyping = true
+                if let answerInTerminal {
+                    RequestButton("Answer in terminal", systemImage: "terminal", tint: .accentColor, fullWidth: true, action: answerInTerminal)
+                } else {
+                    RequestButton("Other…", systemImage: "pencil", tint: .accentColor, fullWidth: true) {
+                        isTyping = true
+                    }
                 }
                 if question.multiSelect {
                     RequestButton(confirmTitle, systemImage: "checkmark", tint: .green) {
@@ -600,16 +610,19 @@ private struct ContextMeter: View {
 }
 
 private struct AgentBadge: View {
-    let agent: AgentSession.Agent
+    let session: AgentSession
 
     var body: some View {
-        switch agent {
-        case .claudeCode:
-            ClaudeLogo()
-                .frame(width: 14, height: 14)
-                .help(agent.displayName)
-        case .codex:
-            Chip(agent.displayName)
+        AgentLogo(kind)
+            .frame(width: 14, height: 14)
+            .help(session.agent.displayName)
+    }
+
+    private var kind: AgentLogo.Kind {
+        if session.isGeminiModel { return .gemini }
+        switch session.agent {
+        case .claudeCode: return .claude
+        case .codex: return .codex
         }
     }
 }
@@ -661,24 +674,6 @@ private struct PullRequestChip: View {
     }
 }
 
-private struct Chip: View {
-    let text: String
-
-    init(_ text: String) {
-        self.text = text
-    }
-
-    var body: some View {
-        Text(text)
-            .font(.system(size: 10, weight: .medium))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(.white.opacity(0.12)))
-            .lineLimit(1)
-    }
-}
-
 private struct UsageBar: View {
     let usage: ClaudeUsage
     let showsResetTimes: Bool
@@ -686,7 +681,7 @@ private struct UsageBar: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            ClaudeLogo()
+            AgentLogo(.claude)
                 .frame(width: 13, height: 13)
             if let window = usage.fiveHour {
                 UsageWindowView(label: "5h", window: window, showsResetTime: showsResetTimes)

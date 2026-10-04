@@ -1,3 +1,4 @@
+import AppKit
 import IsletCore
 import SwiftUI
 
@@ -55,8 +56,20 @@ public final class AgentsPlugin: IsletPlugin {
             return 2 * requestPadding + requestDetailHeight + requestSpacing + requestButtonHeight
         case .question(let questions):
             let options = questions.map { CGFloat($0.options.count + 1) * requestButtonHeight + CGFloat($0.options.count) * requestSpacing + ($0.multiSelect ? requestSpacing + requestButtonHeight : 0) }
-            return 2 * requestPadding + questionDetailHeight + requestSpacing + (options.max() ?? 0)
+            return 2 * requestPadding + questionDetailHeight(for: questions) + requestSpacing + (options.max() ?? 0)
         }
+    }
+
+    static func questionDetailHeight(for questions: [PendingRequest.Question]) -> CGFloat {
+        guard !questions.contains(where: { $0.header != nil }) else { return questionDetailHeight }
+        let font = NSFont.systemFont(ofSize: 12)
+        let lineHeight = ceil(font.ascender - font.descender + font.leading)
+        let width = contentWidth - 2 * contentPadding - 2 * rowPadding - (questions.count > 1 ? 22 : 0)
+        let isMultiline = questions.contains { question in
+            NSAttributedString(string: question.text, attributes: [.font: font])
+                .boundingRect(with: CGSize(width: width, height: .greatestFiniteMagnitude), options: .usesLineFragmentOrigin).height > lineHeight
+        }
+        return isMultiline ? 2 * lineHeight : lineHeight
     }
 
     private static let tokenKey = "hookToken"

@@ -120,6 +120,13 @@ final class AgentSessionStore {
         if let pid = event.pid { session.pid = pid }
         if let tmux = event.tmux { session.tmux = tmux }
         if let transcriptPath = event.transcriptPath { session.transcriptPath = transcriptPath }
+        if let model = event.model {
+            session.model = model
+            if event.agent == .codex { session.details.model = model }
+        }
+        if event.agent == .codex, let branch = event.branch {
+            session.details.branch = branch
+        }
         if let title = event.title, !session.hasStatusLineTitle { session.title = title }
         session.updatedAt = timestamp
         if event.toolName == "ExitPlanMode", let plan = event.toolInput?["plan"]?.stringValue {
@@ -151,6 +158,11 @@ final class AgentSessionStore {
                 session.state = .working
             }
             Self.record(event, in: &session, at: timestamp)
+            if event.kind == .preToolUse, event.agent == .codex, let toolName = event.toolName, PendingRequest.codexQuestionTools.contains(toolName),
+               let request = PendingRequest(toolName: toolName, toolInput: event.toolInput) {
+                session.pendingRequests.removeAll { !$0.isAnswerable }
+                session.pendingRequests.append(request)
+            }
         case .permissionDenied:
             session.activity = event.activityDescription.map { "Denied: \($0)" } ?? "Denied a tool call"
             Self.record(event, in: &session, at: timestamp)
@@ -160,7 +172,7 @@ final class AgentSessionStore {
                 session.activity = event.activityDescription
                 session.state = .working
             } else if let request {
-                session.pendingRequests.append(request)
+                session.pendingRequests.insert(request, at: session.pendingRequests.firstIndex { !$0.isAnswerable } ?? session.pendingRequests.endIndex)
                 session.state = .needsAttention(Self.attentionReason(for: session.pendingRequests[0]))
             } else {
                 session.state = .needsAttention(event.activityDescription.map { "Wants to \($0)" } ?? "Needs permission")
@@ -191,6 +203,9 @@ final class AgentSessionStore {
             session.activity = nil
         case .sessionEnd, .other:
             return
+        }
+        if let request = session.pendingRequests.first, !request.isAnswerable, !session.state.isFailed {
+            session.state = .needsAttention(Self.attentionReason(for: request))
         }
 
         if session.agent == .claudeCode, let pid = session.pid {
@@ -407,19 +422,21 @@ final class AgentSessionStore {
 
     private static func withdrawnRequests(_ requests: [PendingRequest], on event: HookEvent) -> [PendingRequest] {
         switch event.kind {
-        case .stop, .stopFailure, .sessionStart, .sessionEnd:
+        case .sessionStart, .sessionEnd:
             return requests
+        case .stop, .stopFailure:
+            return requests.filter(\.isAnswerable)
         case .userPromptSubmit:
             return event.isTaskNotification ? [] : requests
         case .postToolUse, .postToolUseFailure:
-            let sameTool = requests.filter { $0.toolName == event.toolName }
+            let sameTool = requests.filter { ($0.isAnswerable || $0.toolName == "request_user_input") && $0.toolName == event.toolName }
             let match = sameTool.first { $0.toolInput == event.toolInput }
                 ?? sameTool.first { input($0.toolInput, isContainedIn: event.toolInput) }
                 ?? sameTool.first { $0.isQuestion && $0.agentType == event.agentType }
             return match.map { [$0] } ?? []
         case .preToolUse:
             guard event.agentType == nil, let toolName = event.toolName, toolName != "AskUserQuestion" else { return [] }
-            return requests.filter { $0.isQuestion && $0.agentType == nil }
+            return requests.filter { $0.isQuestion && $0.isAnswerable && $0.agentType == nil }
         case .permissionRequest, .permissionDenied, .notification, .other:
             return []
         }

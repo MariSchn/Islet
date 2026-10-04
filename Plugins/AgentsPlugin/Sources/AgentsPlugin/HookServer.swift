@@ -84,7 +84,7 @@ actor HookServer {
         guard request.method == "POST", request.path == Self.hookPath else {
             return .json(404, #"{"error":"not found"}"#)
         }
-        guard let event = try? HookEvent.decode(request.body, agent: request.headers["x-islet-agent"], host: request.headers["x-islet-host"], terminal: request.headers["x-islet-terminal"], tty: request.headers["x-islet-tty"], pid: request.headers["x-islet-pid"], tmux: request.headers["x-islet-tmux"], tmuxPane: request.headers["x-islet-tmux-pane"], title: request.headers["x-islet-title"]) else {
+        guard let event = try? HookEvent.decode(request.body, agent: request.headers["x-islet-agent"], host: request.headers["x-islet-host"], terminal: request.headers["x-islet-terminal"], tty: request.headers["x-islet-tty"], pid: request.headers["x-islet-pid"], tmux: request.headers["x-islet-tmux"], tmuxPane: request.headers["x-islet-tmux-pane"], title: request.headers["x-islet-title"], branch: request.headers["x-islet-branch"]) else {
             return .json(400, #"{"error":"invalid hook payload"}"#)
         }
         let reply = await handler(event)
