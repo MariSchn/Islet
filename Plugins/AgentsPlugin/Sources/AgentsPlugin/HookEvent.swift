@@ -24,6 +24,7 @@ struct HookEvent: Sendable, Equatable, Decodable {
     var sessionID: String
     var cwd: String?
     var transcriptPath: String?
+    var model: String?
     var toolName: String?
     var toolInput: JSONValue?
     var prompt: String?
@@ -43,7 +44,6 @@ struct HookEvent: Sendable, Equatable, Decodable {
     var pid: Int32?
     var tmux: TmuxLocation?
     var title: String?
-    var model: String?
     var effort: String?
     var branch: String?
 
@@ -52,6 +52,7 @@ struct HookEvent: Sendable, Equatable, Decodable {
         case sessionID = "session_id"
         case cwd
         case transcriptPath = "transcript_path"
+        case model
         case toolName = "tool_name"
         case toolInput = "tool_input"
         case prompt
@@ -99,6 +100,7 @@ struct HookEvent: Sendable, Equatable, Decodable {
         sessionID = try container.decode(String.self, forKey: .sessionID)
         cwd = try container.decodeIfPresent(String.self, forKey: .cwd)
         transcriptPath = try container.decodeIfPresent(String.self, forKey: .transcriptPath)
+        model = try? container.decodeIfPresent(String.self, forKey: .model)
         toolName = try container.decodeIfPresent(String.self, forKey: .toolName)
         toolInput = try container.decodeIfPresent(JSONValue.self, forKey: .toolInput)
         prompt = try container.decodeIfPresent(String.self, forKey: .prompt)

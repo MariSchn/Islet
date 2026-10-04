@@ -43,8 +43,8 @@ struct PendingRequest: Sendable, Equatable, Identifiable {
         self.toolInput = toolInput
         self.agentType = agentType
         switch toolName {
-        case "AskUserQuestion":
-            guard let questions = Self.questions(from: toolInput), !questions.isEmpty else { return nil }
+        case "AskUserQuestion", _ where Self.codexQuestionTools.contains(toolName):
+            guard let questions = Self.questions(from: toolInput, requiresOptions: toolName == "AskUserQuestion"), !questions.isEmpty else { return nil }
             kind = .question(questions)
             alwaysAllowRule = nil
         case "ExitPlanMode":
@@ -89,6 +89,12 @@ struct PendingRequest: Sendable, Equatable, Identifiable {
         }
     }
 
+    static let codexQuestionTools: Set = ["request_user_input", "request_user_input_async"]
+
+    var isAnswerable: Bool {
+        !Self.codexQuestionTools.contains(toolName)
+    }
+
     var isQuestion: Bool {
         if case .question = kind { return true }
         return false
@@ -105,13 +111,13 @@ struct PendingRequest: Sendable, Equatable, Identifiable {
         }
     }
 
-    private static func questions(from input: JSONValue?) -> [Question]? {
+    private static func questions(from input: JSONValue?, requiresOptions: Bool) -> [Question]? {
         input?["questions"]?.arrayValue?.compactMap { item in
-            guard let text = item["question"]?.stringValue else { return nil }
+            guard let text = item["question"]?.stringValue ?? item["title"]?.stringValue else { return nil }
             let options = item["options"]?.arrayValue?.compactMap { option in
-                option["label"]?.stringValue.map { Question.Option(label: $0, description: option["description"]?.stringValue) }
+                (option["label"]?.stringValue ?? option.stringValue).map { Question.Option(label: $0, description: option["description"]?.stringValue) }
             } ?? []
-            guard !options.isEmpty else { return nil }
+            guard !options.isEmpty || !requiresOptions else { return nil }
             return Question(text: text, header: item["header"]?.stringValue, options: options, multiSelect: item["multiSelect"]?.boolValue ?? false)
         }
     }

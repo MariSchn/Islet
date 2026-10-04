@@ -86,8 +86,17 @@ struct AgentsPluginSizingTests {
     private func questionRequest(options: Int, multiSelect: Bool = false) -> PendingRequest {
         let labels = (0..<options).map { JSONValue.object(["label": .string("O\($0)")]) }
         return PendingRequest(toolName: "AskUserQuestion", toolInput: .object([
-            "questions": .array([.object(["question": .string("Q?"), "multiSelect": .bool(multiSelect), "options": .array(labels)])]),
+            "questions": .array([.object(["question": .string("Q?"), "header": .string("H"), "multiSelect": .bool(multiSelect), "options": .array(labels)])]),
         ]))!
+    }
+
+    @Test func questionsWithoutHeaderOnlyReserveTheLinesTheyNeed() {
+        let short = PendingRequest.Question(text: "Script language?", options: [])
+        let long = PendingRequest.Question(text: String(repeating: "Should the script return the indices or the values? ", count: 3), options: [])
+        let oneLine = AgentsPlugin.questionDetailHeight(for: [short])
+        #expect(oneLine < AgentsPlugin.questionDetailHeight)
+        #expect(AgentsPlugin.questionDetailHeight(for: [long]) == 2 * oneLine)
+        #expect(AgentsPlugin.questionDetailHeight(for: [PendingRequest.Question(text: "Q?", header: "H", options: [])]) == AgentsPlugin.questionDetailHeight)
     }
 
     @Test func questionHeightIncludesTheOtherRow() {

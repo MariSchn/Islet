@@ -23,6 +23,11 @@ struct AgentSession: Identifiable, Sendable, Equatable, Codable {
         case interrupted
         case failed(String)
 
+        var isFailed: Bool {
+            if case .failed = self { return true }
+            return false
+        }
+
         var requiresAttention: Bool {
             switch self {
             case .needsAttention, .failed: true
@@ -41,6 +46,7 @@ struct AgentSession: Identifiable, Sendable, Equatable, Codable {
     var pid: Int32?
     var tmux: TmuxLocation?
     var transcriptPath: String?
+    var model: String?
     var cwd: String?
     var title: String?
     var hasStatusLineTitle = false
@@ -57,7 +63,7 @@ struct AgentSession: Identifiable, Sendable, Equatable, Codable {
     var updatedAt: Date
 
     enum CodingKeys: String, CodingKey {
-        case id, agent, host, isRemote, isUnreachable, terminal, tty, pid, tmux, transcriptPath, cwd, title, hasStatusLineTitle
+        case id, agent, host, isRemote, isUnreachable, terminal, tty, pid, tmux, transcriptPath, model, cwd, title, hasStatusLineTitle
         case task, activity, state, activities, plan, details, startedAt, turnStartedAt, updatedAt
     }
 
@@ -65,6 +71,10 @@ struct AgentSession: Identifiable, Sendable, Equatable, Codable {
 
     var displayName: String {
         title ?? projectName
+    }
+
+    var isGeminiModel: Bool {
+        (details.model ?? model)?.localizedCaseInsensitiveContains("gemini") == true
     }
 
     var projectName: String {

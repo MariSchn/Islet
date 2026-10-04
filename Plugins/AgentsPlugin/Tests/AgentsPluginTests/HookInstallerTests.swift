@@ -100,7 +100,7 @@ struct HookInstallerTests {
             let call = try String(contentsOf: capture, encoding: .utf8).components(separatedBy: "\n")
             #expect(call.contains("X-Islet-Branch: \(branch)"))
         }
-        #expect(!(try makeInstaller().script.contains("X-Islet-Branch")))
+        #expect(!(try makeInstaller().script.contains("git -C")))
     }
 
     @Test func scriptForwardsThePayloadWithTheSessionTitleFromItsTranscript() throws {
@@ -209,6 +209,42 @@ struct HookInstallerTests {
         let call = try String(contentsOf: capture, encoding: .utf8).components(separatedBy: "\n")
         #expect(call.contains(#"X-Islet-Title: fix "hook" titles \ now"#))
         #expect(call.contains("X-Islet-PID: \(process.processIdentifier)"))
+    }
+
+    @Test func scriptReportsTheCodexThreadNameAndGitBranch() throws {
+        let installer = try makeInstaller(agent: .codex)
+        try installer.install()
+        let transcript = installer.directory.appending(path: "rollout.jsonl")
+        try """
+        {"type":"session_meta","payload":{"id":"a","git":{"commit_hash":"be3e","branch":"feature/x","repository_url":"git@example.com:r.git"}}}
+        {"type":"event_msg","payload":{"type":"task_started"}}
+
+        """.write(to: transcript, atomically: true, encoding: .utf8)
+        try """
+        {"id":"a","thread_name":"old name","updated_at":"2026-10-04T09:40:56Z"}
+        {"id":"b","thread_name":"other","updated_at":"2026-10-04T09:41:00Z"}
+        {"id":"a","thread_name":"Fix \\"two\\" sum","updated_at":"2026-10-04T09:42:00Z"}
+
+        """.write(to: installer.directory.appending(path: "session_index.jsonl"), atomically: true, encoding: .utf8)
+        let capture = installer.directory.appending(path: "curl-call")
+        let fakeCurl = installer.directory.appending(path: "curl")
+        try "#!/bin/sh\nprintf '%s\\n' \"$@\" > '\(capture.path)'\n".write(to: fakeCurl, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeCurl.path)
+        let payload = #"{"session_id":"a","hook_event_name":"Stop","transcript_path":"\#(transcript.path)"}"#
+
+        let process = Process()
+        process.executableURL = URL(filePath: "/bin/sh")
+        process.arguments = [installer.scriptURL.path]
+        process.environment = ["PATH": installer.directory.path + ":/usr/bin:/bin"]
+        let input = Pipe()
+        process.standardInput = input
+        try process.run()
+        input.fileHandleForWriting.write(Data(payload.utf8))
+        try input.fileHandleForWriting.close()
+        process.waitUntilExit()
+        let call = try String(contentsOf: capture, encoding: .utf8).components(separatedBy: "\n")
+        #expect(call.contains(#"X-Islet-Title: Fix "two" sum"#))
+        #expect(call.contains("X-Islet-Branch: feature/x"))
     }
 
     @Test func killingTheScriptAbortsTheRequestAndCleansUp() throws {

@@ -68,6 +68,14 @@ struct HookInstaller: Sendable {
           [ -n "$title" ] || title=$(printf '%s\\n' "$titles" | grep '^"aiTitle"' | tail -n 1)
           title=$(printf '%s' "$title" | sed 's/^"[A-Za-z]*":"//; s/"$//; s/\\\\"/"/g; s/\\\\\\\\/\\\\/g')
         fi
+        if [ -n "$transcript" ] && [ -z "$title" ] && [ -f "${0%/*}/session_index.jsonl" ]; then
+          session=$(printf '%s' "$payload" | sed -n 's/.*"session_id":"\\([^"]*\\)".*/\\1/p')
+          title=$(grep -F "\\"id\\":\\"$session\\"" "${0%/*}/session_index.jsonl" 2>/dev/null | tail -n 1 | sed -nE 's/.*"thread_name":"(([^"\\\\]|\\\\.)*)".*/\\1/p' | sed 's/\\\\"/"/g; s/\\\\\\\\/\\\\/g')
+        fi
+        branch=""
+        if [ -n "$transcript" ] && [ -f "$transcript" ]; then
+          branch=$(head -n 1 "$transcript" | sed -nE 's/.*"git":\\{[^}]*"branch":"([^"]*)".*/\\1/p')
+        fi
         \(agent == .antigravity ? Self.antigravityBranchLines : "")terminal="${__CFBundleIdentifier:-$TERM_PROGRAM}"
         tty=""
         agent_pid=""
@@ -104,7 +112,8 @@ struct HookInstaller: Sendable {
           -H "X-Islet-Tmux: $TMUX" \\
           -H "X-Islet-Tmux-Pane: $TMUX_PANE" \\
           -H "X-Islet-Title: $title" \\
-          \(agent == .antigravity ? "-H \"X-Islet-Branch: $branch\" \\\n  " : "")--data-binary "@$body" \(agent == .antigravity ? ">/dev/null " : "")2>/dev/null <<'ISLET_CONFIG' &
+          -H "X-Islet-Branch: $branch" \\
+          --data-binary "@$body" \(agent == .antigravity ? ">/dev/null " : "")2>/dev/null <<'ISLET_CONFIG' &
         header = "Authorization: Bearer \(token)"
         ISLET_CONFIG
         request=$!
