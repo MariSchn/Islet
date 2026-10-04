@@ -53,6 +53,17 @@ struct SessionPersistenceTests {
         #expect(restored.sessions.map(\.id) == ["new"])
     }
 
+    @Test func restoreDropsLocalSessionsFromBeforeTheLastBoot() {
+        let clock = Date(timeIntervalSince1970: 1_000_000)
+        let store = AgentSessionStore(now: { clock }, localHost: { "mac" })
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "old", prompt: "hi", pid: 42))
+        let restored = AgentSessionStore(now: { clock }, localHost: { "mac" })
+        restored.restore(store.snapshot(), bootTime: clock.addingTimeInterval(60), isRunning: { _ in true })
+        #expect(restored.sessions.isEmpty)
+        #expect(ProcessMonitor.bootTime < Date())
+        #expect(ProcessMonitor.bootTime > .distantPast)
+    }
+
     @Test func restoreDropsSessionsWithoutPid() {
         let store = AgentSessionStore(localHost: { "mac" })
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "nopid", prompt: "hi"))

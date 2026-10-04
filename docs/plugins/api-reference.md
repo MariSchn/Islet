@@ -32,7 +32,7 @@ public protocol IsletPlugin: AnyObject {
 | `acceptedDropTypes` | Whenever the user drags content over the notch. | The types you accept make the notch react to matching drags and switch to this plugin during one (see [Drops](resources-and-concurrency.md#file-drops)). |
 | `makeSettingsView()` | Once, the first time the plugin's settings page is shown while it is enabled. Cached like the screen. | Return the `Section`s of the plugin's settings page, or `nil` if there is nothing to configure. |
 
-`init(context:)` is called when the host registers the plugin with `PluginRegistry.register(_:)`. It runs even for plugins the user has disabled, so keep it cheap and start work in `activate()`. Setting up `derive` and `observe` in the initializer is fine: they only read your model.
+`init(context:)` is called when the host registers the plugin with `PluginRegistry.register(_:)`. It runs even for plugins the user has disabled, so keep it cheap and start work in `activate()`. At launch the host registers and activates the plugins one after another, so return from `activate()` quickly and move slow work, such as network requests or waiting for a permission, into a `Task`. Setting up `derive` and `observe` in the initializer is fine: they only read your model.
 
 ### Lifecycle
 

@@ -382,7 +382,7 @@ final class AgentSessionStore {
         SessionSnapshot(sessions: sessions, hiddenSessions: Array(hiddenSessions.values), dismissed: dismissed)
     }
 
-    func restore(_ snapshot: SessionSnapshot, isRunning: (Int32) -> Bool) {
+    func restore(_ snapshot: SessionSnapshot, bootTime: Date = .distantPast, isRunning: (Int32) -> Bool) {
         let cutoff = now().addingTimeInterval(-Self.remoteExpiry)
         func isAlive(pid: Int32?, isRemote: Bool) -> Bool {
             guard !isRemote else { return true }
@@ -390,7 +390,7 @@ final class AgentSessionStore {
             return isRunning(pid)
         }
         func isAlive(_ session: AgentSession) -> Bool {
-            guard !session.isRemote || session.updatedAt > cutoff else { return false }
+            guard session.updatedAt > (session.isRemote ? cutoff : bootTime) else { return false }
             return isAlive(pid: session.pid, isRemote: session.isRemote)
         }
         func revived(_ session: AgentSession) -> AgentSession {

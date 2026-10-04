@@ -175,7 +175,7 @@ final class AgentsController {
         if !hasRestored {
             hasRestored = true
             if let snapshot = persistence?.load() {
-                store.restore(snapshot, isRunning: ProcessMonitor.isRunning)
+                store.restore(snapshot, bootTime: ProcessMonitor.bootTime, isRunning: ProcessMonitor.isRunning)
                 if let costs = snapshot.costs { usage.restore(costs) }
                 _ = announcements(for: store.sessions)
             }
