@@ -381,8 +381,14 @@ final class AgentSessionStore {
         func revived(_ session: AgentSession) -> AgentSession {
             var session = session
             session.pendingRequests = []
-            if case .needsAttention = session.state {
+            switch session.state {
+            case .needsAttention:
                 session.state = .needsAttention("Waiting for your answer in the terminal")
+            case .working:
+                session.state = .interrupted
+                session.activity = nil
+            case .starting, .done, .interrupted, .failed:
+                break
             }
             return session
         }
