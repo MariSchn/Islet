@@ -59,7 +59,8 @@ struct HookInstaller: Sendable {
         payload=$(cat)
         \(agent == .antigravity ? "printf '{}\\n'\n" : "")title=""
         transcript=""
-        case "$(printf '%s' "$payload" | sed -n 's/.*"hook_event_name":"\\([A-Za-z]*\\)".*/\\1/p')" in
+        name="${event:-$(printf '%s' "$payload" | sed -n 's/.*"hook_event_name":"\\([A-Za-z]*\\)".*/\\1/p')}"
+        case "$name" in
           SessionStart|UserPromptSubmit|Stop|StopFailure) transcript=$(printf '%s' "$payload" | sed -n 's/.*"transcript_path":"\\([^"]*\\)".*/\\1/p') ;;
         esac
         if [ -n "$transcript" ] && [ -f "$transcript" ]; then
@@ -80,21 +81,26 @@ struct HookInstaller: Sendable {
         tty=""
         agent_pid=""
         pid=$$
-        set -f
-        while [ "$pid" -gt 1 ]; do
-          set -- $(ps -o ppid=,tty=,comm= -p "$pid" 2>/dev/null)
-          [ -n "$1" ] || break
-          case "$2" in ""|"?"|"??") ;; *) tty="/dev/$2" ;; esac
-          if [ -z "$agent_pid" ]; then
-            case "${3##*/}" in claude|claude-*|node|bun|codex|codex-*|agy|[0-9]*.[0-9]*.[0-9]*) agent_pid=$pid ;; esac
-          fi
-          if [ -z "$terminal" ] && [ "$(uname)" = Darwin ]; then
-            vars=$(ps -E -o command= -p "$pid" 2>/dev/null | tr ' ' '\n')
-            terminal=$(printf '%s\n' "$vars" | sed -n 's/^__CFBundleIdentifier=//p' | head -n 1)
-            [ -n "$terminal" ] || terminal=$(printf '%s\n' "$vars" | sed -n 's/^TERM_PROGRAM=//p' | head -n 1)
-          fi
-          pid=$1
-        done
+        case "$name" in
+          PreToolUse|PostToolUse|PostToolUseFailure|PermissionDenied|SessionEnd) ;;
+          *)
+            set -f
+            while [ "$pid" -gt 1 ]; do
+              set -- $(ps -o ppid=,tty=,comm= -p "$pid" 2>/dev/null)
+              [ -n "$1" ] || break
+              case "$2" in ""|"?"|"??") ;; *) tty="/dev/$2" ;; esac
+              if [ -z "$agent_pid" ]; then
+                case "${3##*/}" in claude|claude-*|node|bun|codex|codex-*|agy|[0-9]*.[0-9]*.[0-9]*) agent_pid=$pid ;; esac
+              fi
+              if [ -z "$terminal" ] && [ "$(uname)" = Darwin ]; then
+                vars=$(ps -E -o command= -p "$pid" 2>/dev/null | tr ' ' '\n')
+                terminal=$(printf '%s\n' "$vars" | sed -n 's/^__CFBundleIdentifier=//p' | head -n 1)
+                [ -n "$terminal" ] || terminal=$(printf '%s\n' "$vars" | sed -n 's/^TERM_PROGRAM=//p' | head -n 1)
+              fi
+              pid=$1
+            done
+            ;;
+        esac
         case "$terminal" in vscode) case "$VSCODE_GIT_ASKPASS_MAIN" in *[Cc]ursor*) terminal=cursor ;; esac ;; esac
         body=$(mktemp) || exit 0
         request=""
