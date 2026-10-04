@@ -44,6 +44,7 @@ struct HookEvent: Sendable, Equatable, Decodable {
     var pid: Int32?
     var tmux: TmuxLocation?
     var title: String?
+    var effort: String?
     var branch: String?
 
     private enum CodingKeys: String, CodingKey {
@@ -115,9 +116,13 @@ struct HookEvent: Sendable, Equatable, Decodable {
         title = (try? container.decodeIfPresent(String.self, forKey: .title)).flatMap { $0.isEmpty ? nil : $0 }
     }
 
-    static func decode(_ data: Data, agent: String? = nil, host: String? = nil, terminal: String? = nil, tty: String? = nil, pid: String? = nil, tmux: String? = nil, tmuxPane: String? = nil, title: String? = nil, branch: String? = nil) throws -> HookEvent {
-        var event = try JSONDecoder().decode(HookEvent.self, from: data)
-        event.agent = agent.flatMap(AgentSession.Agent.init(rawValue:)) ?? .claudeCode
+    static func decode(_ data: Data, agent: String? = nil, eventName: String? = nil, host: String? = nil, terminal: String? = nil, tty: String? = nil, pid: String? = nil, tmux: String? = nil, tmuxPane: String? = nil, title: String? = nil, branch: String? = nil, lastPrompt: (String) -> String? = TranscriptReader.lastAntigravityPrompt(at:), parent: (String) -> String? = TranscriptReader.antigravityParent(at:)) throws -> HookEvent {
+        let agent = agent.flatMap(AgentSession.Agent.init(rawValue:)) ?? .claudeCode
+        var event = switch agent {
+        case .antigravity: try JSONDecoder().decode(AntigravityPayload.self, from: data).event(named: eventName ?? "", lastPrompt: lastPrompt, parent: parent)
+        case .claudeCode, .codex: try JSONDecoder().decode(HookEvent.self, from: data)
+        }
+        event.agent = agent
         event.host = host
         event.terminal = terminal.flatMap { Self.isSafeIdentifier($0) ? TerminalApp(identifier: $0) : nil }
         event.tty = tty.flatMap { $0.hasPrefix("/dev/") && Self.isSafeIdentifier($0) ? $0 : nil }
@@ -177,7 +182,7 @@ struct HookEvent: Sendable, Equatable, Decodable {
         case "WebFetch": return input?["url"]?.stringValue.map { "Fetch \($0)" } ?? "Fetch"
         case "WebSearch": return input?["query"]?.stringValue.map { "Search web: \($0)" } ?? "Search web"
         case "Task", "Agent": return input?["description"]?.stringValue.map { "Agent: \($0)" } ?? "Run agent"
-        default: return toolName
+        default: return input?["toolSummary"]?.stringValue ?? toolName
         }
     }
 
@@ -185,5 +190,57 @@ struct HookEvent: Sendable, Equatable, Decodable {
         guard let value = input?["command"] else { return nil }
         if let string = value.stringValue { return string }
         return value.arrayValue?.compactMap(\.stringValue).joined(separator: " ")
+    }
+}
+
+struct AntigravityPayload: Decodable {
+    struct ToolCall: Decodable {
+        var name: String?
+        var args: JSONValue?
+    }
+
+    var conversationId: String
+    var workspacePaths: [String]?
+    var transcriptPath: String?
+    var toolCall: ToolCall?
+    var error: String?
+    var invocationNum: Int?
+    var modelName: String?
+
+    func event(named name: String, lastPrompt: (String) -> String?, parent: (String) -> String?) -> HookEvent {
+        let failure = error.flatMap { $0.isEmpty ? nil : $0 }
+        if let parent = transcriptPath.flatMap(parent) {
+            return HookEvent(
+                kind: name == "PostToolUse" ? (failure == nil ? .postToolUse : .postToolUseFailure) : .other,
+                sessionID: parent,
+                cwd: workspacePaths?.first,
+                toolName: toolCall?.name,
+                toolInput: toolCall?.args,
+                agentType: "Subagent",
+                agent: .antigravity
+            )
+        }
+        let kind: HookEvent.Kind = switch name {
+        case "PreInvocation": invocationNum ?? 0 == 0 ? .userPromptSubmit : .other
+        case "PostToolUse": failure == nil ? .postToolUse : .postToolUseFailure
+        case "Stop": failure == nil ? .stop : .stopFailure
+        default: .other
+        }
+        var event = HookEvent(
+            kind: kind,
+            sessionID: conversationId,
+            cwd: workspacePaths?.first,
+            transcriptPath: transcriptPath,
+            toolName: toolCall?.name,
+            toolInput: toolCall?.args,
+            prompt: kind == .userPromptSubmit ? transcriptPath.flatMap(lastPrompt) : nil,
+            lastAssistantMessage: kind == .stopFailure ? failure : nil,
+            agent: .antigravity
+        )
+        if let model = modelName.flatMap(SessionDetails.antigravityModel(id:)) {
+            event.model = model.model
+            event.effort = model.effort
+        }
+        return event
     }
 }

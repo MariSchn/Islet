@@ -43,11 +43,30 @@ struct ClaudeUsage: Sendable, Equatable {
 
 }
 
+struct AntigravityQuota: Sendable, Equatable {
+    struct Bucket: Sendable, Equatable {
+        var name: String
+        var window: UsageWindow
+
+        var label: String {
+            let base = name.hasSuffix("-weekly") ? String(name.dropLast(7)) : name
+            return base.count <= 2 ? base.uppercased() : base.prefix(1).uppercased() + base.dropFirst()
+        }
+    }
+
+    var buckets: [Bucket]
+
+    func current(at date: Date) -> AntigravityQuota {
+        AntigravityQuota(buckets: buckets.map { Bucket(name: $0.name, window: $0.window.current(at: date)) })
+    }
+}
+
 @MainActor
 @Observable
 final class UsageMonitor {
     var isEnabled: Bool
     private var latest: ClaudeUsage?
+    private var latestAntigravity: AntigravityQuota?
     private var expiries = 0
     @ObservationIgnored private var costs = CostTracker()
     private var costTick = 0
@@ -67,6 +86,18 @@ final class UsageMonitor {
         _ = expiries
         guard let current = latest?.current(at: now()), !current.isEmpty else { return nil }
         return current
+    }
+
+    var antigravityQuota: AntigravityQuota? {
+        _ = expiries
+        guard let current = latestAntigravity?.current(at: now()), !current.buckets.isEmpty else { return nil }
+        return current
+    }
+
+    func receive(_ quota: AntigravityQuota) {
+        guard !quota.buckets.isEmpty, quota != latestAntigravity else { return }
+        latestAntigravity = quota
+        scheduleExpiry()
     }
 
     var dailyCost: Double {
@@ -100,7 +131,8 @@ final class UsageMonitor {
     private func scheduleExpiry() {
         expiryTask?.cancel()
         let date = now()
-        guard let next = [latest?.fiveHour?.resetsAt, latest?.sevenDay?.resetsAt].compactMap({ $0 }).filter({ $0 > date }).min() else { return }
+        let resets = [latest?.fiveHour?.resetsAt, latest?.sevenDay?.resetsAt] + (latestAntigravity?.buckets ?? []).map(\.window.resetsAt)
+        guard let next = resets.compactMap({ $0 }).filter({ $0 > date }).min() else { return }
         expiryTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(next.timeIntervalSince(date) + 1))
             guard !Task.isCancelled, let self else { return }

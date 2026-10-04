@@ -123,8 +123,12 @@ final class AgentSessionStore {
         if let model = event.model {
             session.model = model
             if event.agent == .codex { session.details.model = model }
+            if event.agent == .antigravity, !session.hasStatusLineModel {
+                session.details.model = model
+                session.details.effort = event.effort
+            }
         }
-        if event.agent == .codex, let branch = event.branch {
+        if event.agent == .codex || event.agent == .antigravity, let branch = event.branch {
             session.details.branch = branch
         }
         if let title = event.title, !session.hasStatusLineTitle { session.title = title }
@@ -208,10 +212,10 @@ final class AgentSessionStore {
             session.state = .needsAttention(Self.attentionReason(for: request))
         }
 
-        if session.agent == .claudeCode, let pid = session.pid {
-            let replacesAll = event.kind == .sessionStart
+        if session.agent == .claudeCode || session.agent == .antigravity, let pid = session.pid {
+            let replacesAll = event.kind == .sessionStart || (session.agent == .antigravity && event.kind == .userPromptSubmit)
             let isReplaced = { (other: AgentSession) in
-                other.id != session.id && other.agent == .claudeCode && other.pid == pid && other.host == session.host
+                other.id != session.id && other.agent == session.agent && other.pid == pid && other.host == session.host
                     && (replacesAll || (other.task == nil && other.state == .starting))
             }
             let replaced = sessions.filter(isReplaced)
@@ -260,12 +264,14 @@ final class AgentSessionStore {
                 sessions[index].hasStatusLineTitle = true
             }
             sessions[index].details = sessions[index].details.merging(update.details)
+            if update.details.model != nil { sessions[index].hasStatusLineModel = true }
         } else if var session = hiddenSessions[update.sessionID] {
             if let name = update.sessionName {
                 session.title = name
                 session.hasStatusLineTitle = true
             }
             session.details = session.details.merging(update.details)
+            if update.details.model != nil { session.hasStatusLineModel = true }
             hiddenSessions[update.sessionID] = session
         }
     }

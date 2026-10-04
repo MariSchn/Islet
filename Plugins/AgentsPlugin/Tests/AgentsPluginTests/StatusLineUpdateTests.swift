@@ -25,6 +25,45 @@ struct StatusLineUpdateTests {
         #expect(update.usage?.sevenDay?.utilization == 41.2)
     }
 
+    @Test func decodesTheAntigravityStatusLine() throws {
+        let update = try StatusLineUpdate.decode(Data(Self.antigravityExample.utf8))
+        #expect(update.sessionID == "74d3aef1")
+        #expect(update.sessionName == "Fix the build")
+        #expect(update.isAntigravity)
+        #expect(update.usage == nil)
+        #expect(update.details.badgeText == "Gemini 3.8 Flash · high")
+        #expect(update.details.contextPercentage == 1.5)
+        #expect(update.details.costUSD == 0.42)
+        let buckets = try #require(update.antigravityQuota?.buckets)
+        #expect(buckets.map(\.label) == ["3P", "Gemini"])
+        #expect(buckets[1].window.utilization == 25)
+        #expect(buckets[1].window.resetsAt == Date(timeIntervalSince1970: 1_791_712_573))
+        #expect(!(try StatusLineUpdate.decode(Data(Self.documentedExample.utf8))).isAntigravity)
+
+        let beforeFirstPrompt = try StatusLineUpdate.decode(Data(#"{"session_id":"","product":"antigravity","quota":{"gemini-weekly":{"remaining_fraction":0.5}}}"#.utf8))
+        #expect(beforeFirstPrompt.antigravityQuota?.buckets.first?.window.utilization == 50)
+        #expect(throws: StatusLineUpdate.Invalid.self) { try StatusLineUpdate.decode(Data(#"{"session_id":""}"#.utf8)) }
+    }
+
+    @Test func derivesTheModelAndEffortFromAntigravityModelIDs() {
+        #expect(SessionDetails.antigravityModel(id: "gemini-3.8-flash-high")! == ("Gemini 3.8 Flash", "high"))
+        #expect(SessionDetails.antigravityModel(id: "gemini-3.8-pro")! == ("Gemini 3.8 Pro", nil))
+        #expect(SessionDetails.antigravityModel(id: "auto") == nil)
+        #expect(SessionDetails.modelName("Gemini 3.8 Flash (High)", without: "high") == "Gemini 3.8 Flash")
+        #expect(SessionDetails.modelName("Opus (1M context)", without: "high") == "Opus (1M context)")
+    }
+
+    static let antigravityExample = """
+    {"cwd":"/Users/me/projects/islet","session_id":"74d3aef1","conversation_id":"74d3aef1","conversation_title":"Fix the build","cost":0.42,
+     "model":{"id":"Gemini 3.8 Flash (High)","display_name":"Gemini 3.8 Flash (High)","effort":"high"},
+     "workspace":{"current_dir":"/Users/me/projects/islet","project_dir":"/Users/me/projects/islet"},
+     "context_window":{"total_input_tokens":20882,"context_window_size":1048576,"used_percentage":1.5,"remaining_percentage":98.5,"current_usage":null},
+     "product":"antigravity",
+     "quota":{"3p-weekly":{"remaining_fraction":1,"reset_time":"2026-10-11T10:12:07Z","reset_in_seconds":604757},
+              "gemini-weekly":{"remaining_fraction":0.75,"reset_time":"2026-10-11T09:56:13Z","reset_in_seconds":602603}},
+     "agent_state":"idle","vcs":{"type":"git"}}
+    """
+
     @Test func nullContextAndMissingEffortLeaveThoseFieldsUnset() throws {
         let nullPercentage = try StatusLineUpdate.decode(Data(#"{"session_id":"s","context_window":{"used_percentage":null},"model":{"display_name":"Opus"},"effort":{"level":"high"},"fast_mode":false}"#.utf8))
         #expect(nullPercentage.details.contextPercentage == nil)

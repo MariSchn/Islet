@@ -4,6 +4,31 @@ enum TranscriptReader {
     static let tailSize: UInt64 = 512 << 10
 
     static func lastPrompt(at path: String) -> String? {
+        lastMatch(at: path, prompt(in:))
+    }
+
+    static func lastAntigravityPrompt(at path: String) -> String? {
+        lastMatch(at: path, antigravityPrompt(in:))
+    }
+
+    static func antigravityParent(at path: String) -> String? {
+        guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
+        defer { try? handle.close() }
+        guard let data = try? handle.read(upToCount: 64 << 10),
+              let line = data.split(separator: UInt8(ascii: "\n"), maxSplits: 1, omittingEmptySubsequences: false).first
+        else { return nil }
+        return antigravityParent(in: Data(line))
+    }
+
+    static func antigravityParent(in line: Data) -> String? {
+        guard let text = String(data: line, encoding: .utf8),
+              text.contains(#""type":"SYSTEM_MESSAGE""#),
+              let match = text.firstMatch(of: /sender=([0-9A-Za-z-]+)/)
+        else { return nil }
+        return String(match.1)
+    }
+
+    private static func lastMatch(at path: String, _ match: (Data) -> String?) -> String? {
         guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
         defer { try? handle.close() }
         guard let end = try? handle.seekToEnd(),
@@ -11,9 +36,20 @@ enum TranscriptReader {
               let data = try? handle.readToEnd()
         else { return nil }
         for line in data.split(separator: UInt8(ascii: "\n")).reversed() {
-            if let prompt = prompt(in: Data(line)) { return prompt }
+            if let prompt = match(Data(line)) { return prompt }
         }
         return nil
+    }
+
+    static func antigravityPrompt(in line: Data) -> String? {
+        guard let entry = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
+              entry["type"] as? String == "USER_INPUT",
+              let content = entry["content"] as? String,
+              let start = content.range(of: "<USER_REQUEST>"),
+              let end = content.range(of: "</USER_REQUEST>", range: start.upperBound..<content.endIndex)
+        else { return nil }
+        let trimmed = content[start.upperBound..<end.lowerBound].trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     static func prompt(in line: Data) -> String? {

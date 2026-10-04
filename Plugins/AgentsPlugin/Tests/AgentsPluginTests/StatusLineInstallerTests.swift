@@ -13,6 +13,20 @@ struct StatusLineInstallerTests {
         return StatusLineInstaller(directory: directory, port: 7365, token: "deadbeef")
     }
 
+    @Test func antigravityStatusLineReportsAsAntigravity() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: "StatusLineInstallerTests." + UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try #"{"statusLine":"broken"}"#.write(to: directory.appending(path: "settings.json"), atomically: true, encoding: .utf8)
+        let installer = StatusLineInstaller(agent: .antigravity, directory: directory, port: 7365, token: "deadbeef")
+        #expect(installer.script.contains("-H \"X-Islet-Agent: antigravity\""))
+        let error = #expect(throws: StatusLineInstaller.InvalidStatusLine.self) { try installer.install() }
+        #expect(error?.localizedDescription.contains("~/.gemini/\(directory.lastPathComponent)/settings.json") == true)
+        try #"{"model":"Gemini"}"#.write(to: directory.appending(path: "settings.json"), atomically: true, encoding: .utf8)
+        try installer.install()
+        #expect(installer.state == .installed)
+        #expect(try settings(of: installer)["model"] as? String == "Gemini")
+    }
+
     func settings(of installer: StatusLineInstaller) throws -> [String: Any] {
         try JSONSerialization.jsonObject(with: Data(contentsOf: installer.directory.appending(path: "settings.json"))) as? [String: Any] ?? [:]
     }

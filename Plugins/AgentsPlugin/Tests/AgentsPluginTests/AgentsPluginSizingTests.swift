@@ -17,6 +17,9 @@ struct AgentsPluginSizingTests {
         #expect(AgentsPlugin.contentSize(for: [], expanded: [], showsUsage: true, historyLength: 8).height == 130 + usage)
         #expect(AgentsPlugin.contentSize(for: sessions(1), expanded: [], showsUsage: true, historyLength: 8).height == 92 + usage)
         #expect(AgentsPlugin.contentSize(for: sessions(9), expanded: [], showsUsage: true, historyLength: 8).height == AgentsPlugin.maxContentHeight + usage)
+        #expect(AgentsPlugin.contentSize(for: sessions(1), expanded: [], showsUsage: false, showsAntigravityQuota: true, historyLength: 8).height == 92 + usage)
+        #expect(AgentsPlugin.contentSize(for: sessions(1), expanded: [], showsUsage: true, showsAntigravityQuota: true, historyLength: 8).height == 92 + 2 * usage)
+        #expect(AgentsPlugin.contentSize(for: sessions(9), expanded: [], showsUsage: true, showsAntigravityQuota: true, historyLength: 8).height == AgentsPlugin.maxContentHeight + 2 * usage)
     }
 
     @Test func expandedRowsShowAtMostTheConfiguredNumberOfActions() {

@@ -23,6 +23,86 @@ struct HookInstallerTests {
         #expect(!installer.isInstalled)
     }
 
+    @Test func installsAntigravityHooksAsANamedHookNextToOtherHooks() throws {
+        let installer = try makeInstaller(agent: .antigravity)
+        try #"{"lint":{"PostToolUse":[{"matcher":"run_command","hooks":[{"command":"./lint.sh"}]}]}}"#.write(to: installer.settingsURL, atomically: true, encoding: .utf8)
+        #expect(!installer.needsUpgrade)
+        try installer.install()
+        #expect(installer.isInstalled)
+        var settings = try JSONSerialization.jsonObject(with: Data(contentsOf: installer.settingsURL)) as? [String: Any]
+        #expect(settings?["lint"] != nil)
+        let hook = settings?["islet"] as? [String: Any]
+        #expect(Set(hook?.keys.map { $0 } ?? []) == ["PreInvocation", "PostToolUse", "Stop"])
+        let stop = (hook?["Stop"] as? [[String: Any]])?.first?["command"] as? String
+        #expect(stop == "'\(installer.scriptURL.path)' 2 Stop")
+        let postToolUse = (hook?["PostToolUse"] as? [[String: Any]])?.first
+        #expect(postToolUse?["matcher"] as? String == "*")
+
+        try installer.uninstall()
+        #expect(!installer.isInstalled)
+        settings = try JSONSerialization.jsonObject(with: Data(contentsOf: installer.settingsURL)) as? [String: Any]
+        #expect(settings?["islet"] == nil)
+        #expect(settings?["lint"] != nil)
+    }
+
+    @Test func antigravityScriptAlwaysRepliesWithAnEmptyObjectAndForwardsTheEvent() throws {
+        let installer = try makeInstaller(agent: .antigravity)
+        try installer.install()
+        let capture = installer.directory.appending(path: "curl-call")
+        let fakeCurl = installer.directory.appending(path: "curl")
+        try "#!/bin/sh\nprintf '%s\\n' \"$@\" > '\(capture.path)'\necho '{\"decision\":\"deny\"}'\n".write(to: fakeCurl, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeCurl.path)
+        let process = Process()
+        process.executableURL = URL(filePath: "/bin/sh")
+        process.arguments = [installer.scriptURL.path, "2", "PostToolUse"]
+        process.environment = ["PATH": installer.directory.path + ":/usr/bin:/bin"]
+        let input = Pipe()
+        let output = Pipe()
+        process.standardInput = input
+        process.standardOutput = output
+        try process.run()
+        input.fileHandleForWriting.write(Data(#"{"conversationId":"a"}"#.utf8))
+        try input.fileHandleForWriting.close()
+        process.waitUntilExit()
+        #expect(String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self) == "{}\n")
+        let call = try String(contentsOf: capture, encoding: .utf8).components(separatedBy: "\n")
+        #expect(call.contains("X-Islet-Agent: antigravity"))
+        #expect(call.contains("X-Islet-Event: PostToolUse"))
+        #expect(call.contains("X-Islet-Branch: "))
+    }
+
+    @Test func antigravityScriptReportsTheWorkspaceBranchAtTurnBoundaries() throws {
+        let installer = try makeInstaller(agent: .antigravity)
+        try installer.install()
+        let workspace = installer.directory.appending(path: "work space")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        let git = Process()
+        git.executableURL = URL(filePath: "/usr/bin/git")
+        git.arguments = ["-C", workspace.path, "init", "-q", "-b", "feature/notch"]
+        try git.run()
+        git.waitUntilExit()
+        let capture = installer.directory.appending(path: "curl-call")
+        let fakeCurl = installer.directory.appending(path: "curl")
+        try "#!/bin/sh\nprintf '%s\\n' \"$@\" > '\(capture.path)'\n".write(to: fakeCurl, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeCurl.path)
+        for (event, branch) in [("PreInvocation", "feature/notch"), ("PostToolUse", "")] {
+            let process = Process()
+            process.executableURL = URL(filePath: "/bin/sh")
+            process.arguments = [installer.scriptURL.path, "2", event]
+            process.environment = ["PATH": installer.directory.path + ":/usr/bin:/bin"]
+            let input = Pipe()
+            process.standardInput = input
+            process.standardOutput = Pipe()
+            try process.run()
+            input.fileHandleForWriting.write(Data(#"{"conversationId":"a","workspacePaths":["\#(workspace.path)"]}"#.utf8))
+            try input.fileHandleForWriting.close()
+            process.waitUntilExit()
+            let call = try String(contentsOf: capture, encoding: .utf8).components(separatedBy: "\n")
+            #expect(call.contains("X-Islet-Branch: \(branch)"))
+        }
+        #expect(!(try makeInstaller().script.contains("git -C")))
+    }
+
     @Test func scriptForwardsThePayloadWithTheSessionTitleFromItsTranscript() throws {
         let installer = try makeInstaller()
         try installer.install()

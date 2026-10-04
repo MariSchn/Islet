@@ -4,11 +4,13 @@ struct AgentSession: Identifiable, Sendable, Equatable, Codable {
     enum Agent: String, Sendable, CaseIterable, Codable {
         case claudeCode = "claude-code"
         case codex
+        case antigravity
 
         var displayName: String {
             switch self {
             case .claudeCode: "Claude Code"
             case .codex: "Codex"
+            case .antigravity: "Antigravity"
             }
         }
     }
@@ -48,6 +50,7 @@ struct AgentSession: Identifiable, Sendable, Equatable, Codable {
     var cwd: String?
     var title: String?
     var hasStatusLineTitle = false
+    var hasStatusLineModel = false
     var task: String?
     var activity: String?
     var state: State
@@ -156,6 +159,21 @@ struct SessionDetails: Sendable, Equatable, Codable {
             linesRemoved: update.linesRemoved ?? linesRemoved,
             duration: update.duration ?? duration
         )
+    }
+
+    static let effortLevels: Set<String> = ["minimal", "low", "medium", "high", "xhigh", "max"]
+
+    static func modelName(_ name: String, without effort: String?) -> String {
+        guard let effort, name.lowercased().hasSuffix(" (\(effort.lowercased()))") else { return name }
+        return String(name.dropLast(effort.count + 3))
+    }
+
+    static func antigravityModel(id: String) -> (model: String, effort: String?)? {
+        var parts = id.split(separator: "-").map(String.init)
+        guard parts.count > 1 else { return nil }
+        let effort = Self.effortLevels.contains(parts[parts.count - 1].lowercased()) ? parts.removeLast() : nil
+        let model = parts.map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined(separator: " ")
+        return (model, effort)
     }
 
     static func percentText(_ value: Double) -> String {
