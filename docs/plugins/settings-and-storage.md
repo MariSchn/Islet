@@ -58,7 +58,7 @@ Like the screen, the settings view is built once and cached, so it has to read l
 
 Two patterns from the built-in plugins:
 
-- Bind directly to `PluginSettings`, as above and as `HelloPlugin` does.
+- Bind directly to `PluginSettings`, as above.
 - Keep the setting as a property of your `@Observable` model and persist it with `context.observe`. `MediaPlugin` reads `showsPill` from settings in `init`, passes it to `MediaController`, and saves changes with `context.observe({ controller.showsPill }) { settings.set($0, forKey: Self.showsPillKey) }`. Its settings view binds to the model with `@Bindable`, and the model reacts to changes immediately. `AgentsPlugin` keeps its alert and display settings in structs and lists each field's key once, in key path tables used for both loading and saving.
 
 ## Storage directory

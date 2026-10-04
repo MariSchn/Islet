@@ -37,7 +37,7 @@ Tests use [Swift Testing](https://developer.apple.com/documentation/testing). CI
 - `Plugins/<Name>Plugin`: one Swift package per plugin, with its tests.
 - `App`: the app delegate that registers the built-in plugins.
 
-The [plugin developer guide](docs/plugins/README.md) explains the API, and `Plugins/HelloPlugin` is the smallest complete example.
+The [plugin developer guide](docs/plugins/README.md) explains the API, and its [getting started guide](docs/plugins/getting-started.md) walks through a complete small plugin.
 
 ## Pull requests
 

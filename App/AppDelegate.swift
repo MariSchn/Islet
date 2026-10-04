@@ -3,7 +3,6 @@ import AppKit
 import CalendarPlugin
 import DownloadsPlugin
 import GitHubPlugin
-import HelloPlugin
 import IsletCore
 import IsletHost
 import MediaPlugin
@@ -25,12 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         SystemMonitorPlugin.self,
         DownloadsPlugin.self,
         ScriptsPlugin.self,
-    ] + examplePlugins
-    #if DEBUG
-    private static let examplePlugins: [any IsletPlugin.Type] = [HelloPlugin.self]
-    #else
-    private static let examplePlugins: [any IsletPlugin.Type] = []
-    #endif
+    ]
     private static let terminationTimeout: Duration = .seconds(2)
     private static let sourceURL = URL(string: "https://github.com/MariSchn/Islet")!
     private static let hasLaunchedKey = "islet.hasLaunched"

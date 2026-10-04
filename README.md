@@ -176,7 +176,7 @@ A plugin can also:
 | **`context.derive`**, **`context.observe`**, **`context.isScreenVisible`** | Keep size and pill in sync with its model, and pause work while hidden. |
 | **`context.storageDirectory`**, **`context.logger`** | Store data in its own folder and log through its own `os.Logger`. |
 
-To start one, run the `/new-plugin` skill in Claude Code, copy `Plugins/HelloPlugin`, or follow the [getting started guide](docs/plugins/getting-started.md). The [plugin developer guide](docs/plugins/README.md) covers the full API. Plugins are compiled into the app, so add yours in a fork and [build from source](#build-from-source).
+To start one, run the `/new-plugin` skill in Claude Code or follow the [getting started guide](docs/plugins/getting-started.md). The [plugin developer guide](docs/plugins/README.md) covers the full API. Plugins are compiled into the app, so add yours in a fork and [build from source](#build-from-source).
 
 <br>
 

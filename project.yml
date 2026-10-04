@@ -12,8 +12,6 @@ packages:
     path: Packages/IsletCore
   IsletHost:
     path: Packages/IsletHost
-  HelloPlugin:
-    path: Plugins/HelloPlugin
   ShelfPlugin:
     path: Plugins/ShelfPlugin
   MediaPlugin:
@@ -42,7 +40,6 @@ targets:
       - package: Sparkle
       - package: IsletCore
       - package: IsletHost
-      - package: HelloPlugin
       - package: ShelfPlugin
       - package: MediaPlugin
       - package: AgentsPlugin
@@ -92,7 +89,6 @@ schemes:
       targets:
         - package: IsletCore/IsletCoreTests
         - package: IsletHost/IsletHostTests
-        - package: HelloPlugin/HelloPluginTests
         - package: ShelfPlugin/ShelfPluginTests
         - package: MediaPlugin/MediaPluginTests
         - package: AgentsPlugin/AgentsPluginTests
