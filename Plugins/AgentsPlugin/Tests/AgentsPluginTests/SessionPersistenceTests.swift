@@ -50,7 +50,7 @@ struct SessionPersistenceTests {
         #expect(restored.sessions.isEmpty)
     }
 
-    @Test func restoreClearsPendingRequestsAndKeepsOtherStates() async throws {
+    @Test func restoreClearsPendingRequestsAndStopsUnfinishedTurns() async throws {
         let store = AgentSessionStore(localHost: { "mac" })
         let handled = Task { await store.handle(HookEvent(kind: .permissionRequest, sessionID: "s", toolName: "Bash", toolInput: .object(["command": .string("ls")]), pid: 1)) }
         for _ in 0..<200 where store.sessions.first?.pendingRequests.isEmpty != false {
@@ -66,6 +66,8 @@ struct SessionPersistenceTests {
         let attention = try #require(restored.sessions.first { $0.id == "s" })
         #expect(attention.pendingRequests.isEmpty)
         #expect(attention.state == .needsAttention("Waiting for your answer in the terminal"))
+        #expect(restored.sessions.first { $0.id == "w" }?.state == .interrupted)
+        restored.apply(HookEvent(kind: .preToolUse, sessionID: "w", toolName: "Read", pid: 2))
         #expect(restored.sessions.first { $0.id == "w" }?.state == .working)
     }
 
@@ -92,6 +94,34 @@ struct SessionPersistenceTests {
         }
         let snapshot = try #require(SessionPersistence(directory: directory).load())
         #expect(snapshot.sessions.map(\.id) == ["s"])
+    }
+
+    @Test func loadsSessionsSavedBeforeDigestsAndDismissals() throws {
+        let directory = makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = populatedStore()
+        var json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(store.snapshot())) as? [String: Any])
+        json["dismissed"] = nil
+        json["sessions"] = try #require(json["sessions"] as? [[String: Any]]).map { session in
+            var session = session
+            session["hasStatusLineModel"] = nil
+            session["activities"] = (session["activities"] as? [[String: Any]] ?? []).map { activity in
+                var activity = activity
+                activity["inputDigest"] = nil
+                activity["toolInput"] = ["file_path": "/a/b.swift"]
+                return activity
+            }
+            return session
+        }
+        let persistence = SessionPersistence(directory: directory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try JSONSerialization.data(withJSONObject: json).write(to: persistence.fileURL)
+
+        let restored = AgentSessionStore(localHost: { "mac" })
+        restored.restore(try #require(persistence.load()), isRunning: { _ in true })
+        #expect(restored.sessions.count == 2)
+        restored.apply(HookEvent(kind: .postToolUse, sessionID: "local", toolName: "Read", toolInput: .object(["file_path": .string("/a/b.swift")]), pid: 100))
+        #expect(restored.sessions.first { $0.id == "local" }?.activities.map(\.isComplete) == [true])
     }
 
     @Test func dismissedSessionsStayDismissedWhileTheirProcessRuns() {

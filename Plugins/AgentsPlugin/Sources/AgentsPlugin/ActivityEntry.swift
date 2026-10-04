@@ -82,3 +82,22 @@ struct ActivityEntry: Identifiable, Sendable, Equatable, Codable {
         text.isEmpty ? 0 : text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).count
     }
 }
+
+extension ActivityEntry {
+    private enum LegacyKeys: String, CodingKey {
+        case toolInput
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        toolName = try container.decode(String.self, forKey: .toolName)
+        inputDigest = try container.decodeIfPresent(String.self, forKey: .inputDigest)
+            ?? Self.digest(of: try decoder.container(keyedBy: LegacyKeys.self).decodeIfPresent(JSONValue.self, forKey: .toolInput))
+        title = try container.decode(String.self, forKey: .title)
+        detail = try container.decodeIfPresent(String.self, forKey: .detail)
+        startedAt = try container.decode(Date.self, forKey: .startedAt)
+        isComplete = try container.decode(Bool.self, forKey: .isComplete)
+        didFail = try container.decode(Bool.self, forKey: .didFail)
+    }
+}
