@@ -7,16 +7,9 @@ import os
 @Observable
 final class AgentsController {
     let store: AgentSessionStore
-    let installer: HookInstaller
-    let codexInstaller: HookInstaller
-    let antigravityInstaller: HookInstaller
-    let statusLineInstaller: StatusLineInstaller
-    let antigravityStatusLineInstaller: StatusLineInstaller
-    private(set) var isHookInstalled: Bool
-    private(set) var isCodexHookInstalled: Bool
-    private(set) var isAntigravityHookInstalled: Bool
-    private(set) var statusLineState: StatusLineInstaller.State
-    private(set) var antigravityStatusLineState: StatusLineInstaller.State
+    let port: UInt16
+    private(set) var installedHooks: Set<AgentSession.Agent> = []
+    private(set) var statusLineStates: [AgentSession.Agent: StatusLineInstaller.State] = [:]
     private(set) var serverError: String?
     private(set) var expandedSessionIDs: Set<String> = []
     private(set) var mutedSessionIDs: Set<String> = []
@@ -62,6 +55,8 @@ final class AgentsController {
 
     let interruptions: InterruptionMonitor
     private let processes: ProcessMonitor
+    private let home: URL
+    private let token: String
     private let server: HookServer
     private let alerter: SessionAlerter
     private let persistence: SessionPersistence?
@@ -72,24 +67,18 @@ final class AgentsController {
     @ObservationIgnored private var contextAlert = ContextAlert()
     @ObservationIgnored private var reviewAlert = ReviewAlert()
 
-    init(token: String, claudeDirectory: URL, codexDirectory: URL, antigravityDirectory: URL, port: UInt16 = HookServer.defaultPort, alerts: AlertSettings = AlertSettings(), display: DisplaySettings = DisplaySettings(), showsUsage: Bool = false, usage: UsageMonitor? = nil, storageDirectory: URL? = nil, saveDelay: Duration = .seconds(1), logger: Logger = Logger()) {
+    init(token: String, home: URL, port: UInt16 = HookServer.defaultPort, alerts: AlertSettings = AlertSettings(), display: DisplaySettings = DisplaySettings(), showsUsage: Bool = false, usage: UsageMonitor? = nil, storageDirectory: URL? = nil, saveDelay: Duration = .seconds(1), logger: Logger = Logger()) {
         persistence = storageDirectory.map { SessionPersistence(directory: $0, logger: logger) }
         self.saveDelay = saveDelay
         let store = AgentSessionStore()
         self.store = store
         self.usage = usage ?? UsageMonitor(isEnabled: showsUsage)
-        installer = HookInstaller(agent: .claudeCode, directory: claudeDirectory, port: port, token: token)
-        codexInstaller = HookInstaller(agent: .codex, directory: codexDirectory, port: port, token: token)
-        antigravityInstaller = HookInstaller(agent: .antigravity, directory: antigravityDirectory, port: port, token: token)
-        statusLineInstaller = StatusLineInstaller(directory: claudeDirectory, port: port, token: token)
-        antigravityStatusLineInstaller = StatusLineInstaller(agent: .antigravity, directory: antigravityDirectory.deletingLastPathComponent().appending(path: "antigravity-cli", directoryHint: .isDirectory), port: port, token: token)
-        isHookInstalled = installer.isInstalled
-        isCodexHookInstalled = codexInstaller.isInstalled
-        isAntigravityHookInstalled = antigravityInstaller.isInstalled
-        statusLineState = statusLineInstaller.state
-        antigravityStatusLineState = antigravityStatusLineInstaller.state
+        self.home = home
+        self.port = port
+        self.token = token
         let usage = self.usage
-        server = HookServer(port: port, token: token, installScript: HookInstaller.remoteInstallScript(for: [installer, codexInstaller])) { update in
+        let remoteInstallers = [AgentSession.Agent.claudeCode, .codex].map { HookInstaller(agent: $0, home: home, port: port, token: token) }
+        server = HookServer(port: port, token: token, installScript: HookInstaller.remoteInstallScript(for: remoteInstallers)) { update in
             logger.debug("Status line update for \(update.sessionID, privacy: .public): 5h \(update.usage?.fiveHour.map { "\($0.utilization)%" } ?? "absent", privacy: .public), 7d \(update.usage?.sevenDay.map { "\($0.utilization)%" } ?? "absent", privacy: .public)")
             await store.applyStatusLine(update)
             if let limits = update.usage {
@@ -115,10 +104,23 @@ final class AgentsController {
             guard self?.shouldAlert(alert) ?? true else { return }
             alerter.handle(alert)
         }
+        readInstallState()
+    }
+
+    func hookInstaller(for agent: AgentSession.Agent) -> HookInstaller {
+        HookInstaller(agent: agent, home: home, port: port, token: token)
+    }
+
+    func statusLineInstaller(for agent: AgentSession.Agent) -> StatusLineInstaller? {
+        StatusLineInstaller(agent: agent, home: home, port: port, token: token)
+    }
+
+    var sshConfigSnippet: String {
+        hookInstaller(for: .claudeCode).sshConfigSnippet
     }
 
     func makeRemoteInstallCommand() async -> String {
-        installer.remoteInstallCommand(code: await server.issueInstallCode())
+        hookInstaller(for: .claudeCode).remoteInstallCommand(code: await server.issueInstallCode())
     }
 
     func terminal(for session: AgentSession) -> InstalledTerminal? {
@@ -165,23 +167,23 @@ final class AgentsController {
         } catch {
             serverError = "Could not listen on 127.0.0.1:\(server.port). Is another app using the port?"
         }
-        for installer in [installer, codexInstaller, antigravityInstaller] where installer.needsUpgrade {
-            try? installer.install()
-        }
-        for installer in [statusLineInstaller, antigravityStatusLineInstaller] where installer.state == .outdated {
-            try? installer.install()
+        for agent in AgentSession.Agent.allCases {
+            let hooks = hookInstaller(for: agent)
+            if hooks.needsUpgrade { try? hooks.install() }
+            if let statusLine = statusLineInstaller(for: agent), statusLine.state == .outdated { try? statusLine.install() }
         }
         refreshInstallState()
         interruptions.start()
         processes.start()
     }
 
-    var isCodexAvailable: Bool {
-        isCodexHookInstalled || FileManager.default.fileExists(atPath: codexInstaller.directory.path)
+    func isAvailable(_ agent: AgentSession.Agent) -> Bool {
+        guard let path = agent.installationPath else { return true }
+        return installedHooks.contains(agent) || FileManager.default.fileExists(atPath: home.appending(path: path).path)
     }
 
-    var isAntigravityAvailable: Bool {
-        isAntigravityHookInstalled || FileManager.default.fileExists(atPath: antigravityInstaller.directory.deletingLastPathComponent().appending(path: "antigravity-cli").path)
+    var availableAgents: [AgentSession.Agent] {
+        AgentSession.Agent.allCases.filter(isAvailable)
     }
 
     @discardableResult
@@ -231,11 +233,7 @@ final class AgentsController {
     }
 
     func refreshInstallState() {
-        isHookInstalled = installer.isInstalled
-        isCodexHookInstalled = codexInstaller.isInstalled
-        isAntigravityHookInstalled = antigravityInstaller.isInstalled
-        statusLineState = statusLineInstaller.state
-        antigravityStatusLineState = antigravityStatusLineInstaller.state
+        readInstallState()
         Task { [server] in
             if await !server.isListening, serverError == nil {
                 serverError = "The hook server stopped listening on 127.0.0.1:\(server.port). Restart Islet."
@@ -243,48 +241,31 @@ final class AgentsController {
         }
     }
 
-    var isAnyHookInstalled: Bool {
-        isHookInstalled || isCodexHookInstalled || isAntigravityHookInstalled
-    }
-
-    func installHooks(for agent: AgentSession.Agent = .claudeCode) throws {
-        try installer(for: agent).install()
-        refreshInstallState()
-    }
-
-    func uninstallHooks(for agent: AgentSession.Agent = .claudeCode) throws {
-        try installer(for: agent).uninstall()
-        refreshInstallState()
-    }
-
-    func installStatusLine(for agent: AgentSession.Agent = .claudeCode) throws {
-        try statusLineInstaller(for: agent).install()
-        refreshInstallState()
-    }
-
-    func uninstallStatusLine(for agent: AgentSession.Agent = .claudeCode) throws {
-        try statusLineInstaller(for: agent).uninstall()
-        refreshInstallState()
-    }
-
-    private func statusLineInstaller(for agent: AgentSession.Agent) -> StatusLineInstaller {
-        agent == .antigravity ? antigravityStatusLineInstaller : statusLineInstaller
-    }
-
-    func isHookInstalled(for agent: AgentSession.Agent) -> Bool {
-        switch agent {
-        case .claudeCode: isHookInstalled
-        case .codex: isCodexHookInstalled
-        case .antigravity: isAntigravityHookInstalled
+    private func readInstallState() {
+        installedHooks = Set(AgentSession.Agent.allCases.filter { hookInstaller(for: $0).isInstalled })
+        statusLineStates = AgentSession.Agent.allCases.reduce(into: [:]) { states, agent in
+            states[agent] = statusLineInstaller(for: agent)?.state
         }
     }
 
-    private func installer(for agent: AgentSession.Agent) -> HookInstaller {
-        switch agent {
-        case .claudeCode: installer
-        case .codex: codexInstaller
-        case .antigravity: antigravityInstaller
+    func installHooks(for agent: AgentSession.Agent) throws {
+        try hookInstaller(for: agent).install()
+        refreshInstallState()
+    }
+
+    func toggleHooks(for agent: AgentSession.Agent) throws {
+        let installer = hookInstaller(for: agent)
+        try installedHooks.contains(agent) ? installer.uninstall() : installer.install()
+        refreshInstallState()
+    }
+
+    func toggleStatusLine(for agent: AgentSession.Agent) throws {
+        guard let installer = statusLineInstaller(for: agent) else { return }
+        switch statusLineStates[agent] {
+        case .installed, .outdated: try installer.uninstall()
+        case .notInstalled, .replaced, nil: try installer.install()
         }
+        refreshInstallState()
     }
 
     func decide(_ requestID: UUID, _ decision: PermissionDecision) {

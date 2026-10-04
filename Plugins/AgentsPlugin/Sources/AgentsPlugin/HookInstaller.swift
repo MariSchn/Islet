@@ -17,6 +17,10 @@ struct HookInstaller: Sendable {
         self.token = token
     }
 
+    init(agent: AgentSession.Agent, home: URL, port: UInt16, token: String) {
+        self.init(agent: agent, directory: home.appending(path: agent.hookPath, directoryHint: .isDirectory), port: port, token: token)
+    }
+
     var events: [String] {
         switch agent {
         case .claudeCode: ["SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest", "PermissionDenied", "Notification", "Stop", "StopFailure"]
@@ -32,13 +36,6 @@ struct HookInstaller: Sendable {
         }
     }
 
-    var settingsDescription: String {
-        switch agent {
-        case .claudeCode, .codex: "~/\(directory.lastPathComponent)/\(settingsFileName)"
-        case .antigravity: "~/.gemini/\(directory.lastPathComponent)/\(settingsFileName)"
-        }
-    }
-
     private var remoteDirectoryExpression: String {
         switch agent {
         case .claudeCode: "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
@@ -49,7 +46,7 @@ struct HookInstaller: Sendable {
 
     var scriptURL: URL { directory.appending(path: Self.scriptName) }
     var settingsURL: URL { directory.appending(path: settingsFileName) }
-    private var settingsFile: SettingsFile { SettingsFile(url: settingsURL, description: settingsDescription) }
+    private var settingsFile: SettingsFile { SettingsFile(url: settingsURL) }
 
     var script: String {
         """
@@ -59,7 +56,8 @@ struct HookInstaller: Sendable {
         payload=$(cat)
         \(agent == .antigravity ? "printf '{}\\n'\n" : "")title=""
         transcript=""
-        case "$(printf '%s' "$payload" | sed -n 's/.*"hook_event_name":"\\([A-Za-z]*\\)".*/\\1/p')" in
+        name="${event:-$(printf '%s' "$payload" | sed -n 's/.*"hook_event_name":"\\([A-Za-z]*\\)".*/\\1/p')}"
+        case "$name" in
           SessionStart|UserPromptSubmit|Stop|StopFailure) transcript=$(printf '%s' "$payload" | sed -n 's/.*"transcript_path":"\\([^"]*\\)".*/\\1/p') ;;
         esac
         if [ -n "$transcript" ] && [ -f "$transcript" ]; then
@@ -80,21 +78,26 @@ struct HookInstaller: Sendable {
         tty=""
         agent_pid=""
         pid=$$
-        set -f
-        while [ "$pid" -gt 1 ]; do
-          set -- $(ps -o ppid=,tty=,comm= -p "$pid" 2>/dev/null)
-          [ -n "$1" ] || break
-          case "$2" in ""|"?"|"??") ;; *) tty="/dev/$2" ;; esac
-          if [ -z "$agent_pid" ]; then
-            case "${3##*/}" in claude|claude-*|node|bun|codex|codex-*|agy|[0-9]*.[0-9]*.[0-9]*) agent_pid=$pid ;; esac
-          fi
-          if [ -z "$terminal" ] && [ "$(uname)" = Darwin ]; then
-            vars=$(ps -E -o command= -p "$pid" 2>/dev/null | tr ' ' '\n')
-            terminal=$(printf '%s\n' "$vars" | sed -n 's/^__CFBundleIdentifier=//p' | head -n 1)
-            [ -n "$terminal" ] || terminal=$(printf '%s\n' "$vars" | sed -n 's/^TERM_PROGRAM=//p' | head -n 1)
-          fi
-          pid=$1
-        done
+        case "$name" in
+          PreToolUse|PostToolUse|PostToolUseFailure|PermissionDenied|SessionEnd) ;;
+          *)
+            set -f
+            while [ "$pid" -gt 1 ]; do
+              set -- $(ps -o ppid=,tty=,comm= -p "$pid" 2>/dev/null)
+              [ -n "$1" ] || break
+              case "$2" in ""|"?"|"??") ;; *) tty="/dev/$2" ;; esac
+              if [ -z "$agent_pid" ]; then
+                case "${3##*/}" in claude|claude-*|node|bun|codex|codex-*|agy|[0-9]*.[0-9]*.[0-9]*) agent_pid=$pid ;; esac
+              fi
+              if [ -z "$terminal" ] && [ "$(uname)" = Darwin ]; then
+                vars=$(ps -E -o command= -p "$pid" 2>/dev/null | tr ' ' '\n')
+                terminal=$(printf '%s\n' "$vars" | sed -n 's/^__CFBundleIdentifier=//p' | head -n 1)
+                [ -n "$terminal" ] || terminal=$(printf '%s\n' "$vars" | sed -n 's/^TERM_PROGRAM=//p' | head -n 1)
+              fi
+              pid=$1
+            done
+            ;;
+        esac
         case "$terminal" in vscode) case "$VSCODE_GIT_ASKPASS_MAIN" in *[Cc]ursor*) terminal=cursor ;; esac ;; esac
         body=$(mktemp) || exit 0
         request=""
@@ -180,22 +183,12 @@ struct HookInstaller: Sendable {
         for installer in installers {
             let entries = installer.events.reduce(into: [String: Any]()) { $0[$1] = hookEntry(for: $1, script: scriptPlaceholder) }
             let data = try! JSONSerialization.data(withJSONObject: entries, options: [.sortedKeys, .withoutEscapingSlashes])
-            let arguments = "\"\(installer.remoteDirectoryExpression)\" \(installer.settingsFileName) \(shellQuoted(installer.script.trimmingCharacters(in: .newlines))) \(shellQuoted(String(decoding: data, as: UTF8.self)))"
-            switch installer.agent {
-            case .claudeCode:
-                script += "install_hooks \(arguments)\n"
-            case .codex:
-                script += "[ -d \"\(installer.remoteDirectoryExpression)\" ] && install_hooks \(arguments)\n"
-            case .antigravity:
-                continue
-            }
+            let arguments = "\"\(installer.remoteDirectoryExpression)\" \(installer.settingsFileName) \(installer.script.trimmingCharacters(in: .newlines).shellQuoted) \(String(decoding: data, as: UTF8.self).shellQuoted)"
+            let condition = installer.agent == .claudeCode ? "" : "[ -d \"\(installer.remoteDirectoryExpression)\" ] && "
+            script += "\(condition)install_hooks \(arguments)\n"
         }
         script += "echo \"Restart agent sessions on this machine to report them to Islet.\"\n"
         return script
-    }
-
-    private static func shellQuoted(_ value: String) -> String {
-        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
     var isInstalled: Bool {
@@ -269,7 +262,7 @@ struct HookInstaller: Sendable {
     }
 
     static func hookEntry(for event: String, script: String) -> [String: Any] {
-        let quoted = "'" + script.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        let quoted = script.shellQuoted
         switch event {
         case "PermissionRequest":
             let seconds = Int(HookServer.replyTimeout.components.seconds)
@@ -282,7 +275,7 @@ struct HookInstaller: Sendable {
     }
 
     var antigravityHook: [String: Any] {
-        let quoted = "'" + scriptURL.path.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        let quoted = scriptURL.path.shellQuoted
         return events.reduce(into: [String: Any]()) { hook, event in
             let entry: [String: Any] = ["type": "command", "command": "\(quoted) 2 \(event)", "timeout": 5]
             hook[event] = event == "PostToolUse" ? [["matcher": "*", "hooks": [entry]]] : [entry]
@@ -300,5 +293,11 @@ struct HookInstaller: Sendable {
             let commands = (group["hooks"] as? [[String: Any]] ?? []).compactMap { $0["command"] as? String }
             return !commands.contains { $0.contains(scriptName) }
         }
+    }
+}
+
+extension String {
+    var shellQuoted: String {
+        "'" + replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 }

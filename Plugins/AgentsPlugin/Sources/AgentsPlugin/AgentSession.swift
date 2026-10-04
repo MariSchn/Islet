@@ -13,6 +13,30 @@ struct AgentSession: Identifiable, Sendable, Equatable, Codable {
             case .antigravity: "Antigravity"
             }
         }
+
+        var hookPath: String {
+            switch self {
+            case .claudeCode: ".claude"
+            case .codex: ".codex"
+            case .antigravity: ".gemini/config"
+            }
+        }
+
+        var statusLinePath: String? {
+            switch self {
+            case .claudeCode: ".claude"
+            case .codex: nil
+            case .antigravity: ".gemini/antigravity-cli"
+            }
+        }
+
+        var installationPath: String? {
+            switch self {
+            case .claudeCode: nil
+            case .codex: ".codex"
+            case .antigravity: ".gemini/antigravity-cli"
+            }
+        }
     }
 
     enum State: Sendable, Equatable, Codable {

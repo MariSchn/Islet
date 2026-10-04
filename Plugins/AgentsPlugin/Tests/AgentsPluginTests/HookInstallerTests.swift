@@ -211,6 +211,31 @@ struct HookInstallerTests {
         #expect(call.contains("X-Islet-PID: \(process.processIdentifier)"))
     }
 
+    @Test func scriptSkipsTheProcessLookupForToolEvents() throws {
+        let installer = try makeInstaller()
+        try installer.install()
+        let capture = installer.directory.appending(path: "curl-call")
+        let fakeCurl = installer.directory.appending(path: "curl")
+        try "#!/bin/sh\nprintf '%s\\n' \"$@\" > '\(capture.path)'\n".write(to: fakeCurl, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeCurl.path)
+        let agent = installer.directory.appending(path: "claude")
+        try FileManager.default.createSymbolicLink(at: agent, withDestinationURL: URL(filePath: "/bin/bash"))
+        for (event, reportsProcess) in [("PreToolUse", false), ("PostToolUse", false), ("PermissionRequest", true)] {
+            let process = Process()
+            process.executableURL = agent
+            process.arguments = ["-c", "/usr/bin/time sh \"$0\" 2>/dev/null; true", installer.scriptURL.path]
+            process.environment = ["PATH": installer.directory.path + ":/usr/bin:/bin"]
+            let input = Pipe()
+            process.standardInput = input
+            try process.run()
+            input.fileHandleForWriting.write(Data(#"{"session_id":"a","hook_event_name":"\#(event)"}"#.utf8))
+            try input.fileHandleForWriting.close()
+            process.waitUntilExit()
+            let call = try String(contentsOf: capture, encoding: .utf8).components(separatedBy: "\n")
+            #expect(call.contains("X-Islet-PID: \(reportsProcess ? String(process.processIdentifier) : "")"), "\(event)")
+        }
+    }
+
     @Test func scriptReportsTheCodexThreadNameAndGitBranch() throws {
         let installer = try makeInstaller(agent: .codex)
         try installer.install()
