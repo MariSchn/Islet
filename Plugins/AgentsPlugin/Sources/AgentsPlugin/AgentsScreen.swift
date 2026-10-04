@@ -167,7 +167,7 @@ private struct SessionRow: View {
                         ContextMeter(percentage: percentage)
                     }
                     AgentBadge(session: session)
-                    if isMuted {
+                    if isMuted, !isHovering {
                         Image(systemName: "bell.slash")
                             .font(.system(size: 10))
                             .foregroundStyle(.tertiary)

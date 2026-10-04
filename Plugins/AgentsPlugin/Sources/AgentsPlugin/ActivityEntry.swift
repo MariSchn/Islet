@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 struct ActivityEntry: Identifiable, Sendable, Equatable, Codable {
@@ -5,7 +6,7 @@ struct ActivityEntry: Identifiable, Sendable, Equatable, Codable {
 
     let id: UUID
     let toolName: String
-    let toolInput: JSONValue?
+    let inputDigest: String
     let title: String
     let detail: String?
     let startedAt: Date
@@ -15,7 +16,7 @@ struct ActivityEntry: Identifiable, Sendable, Equatable, Codable {
     init(event: HookEvent, at timestamp: Date, isComplete: Bool, didFail: Bool = false) {
         id = UUID()
         toolName = event.toolName ?? "Tool"
-        toolInput = event.toolInput
+        inputDigest = Self.digest(of: event.toolInput)
         title = event.activityDescription ?? toolName
         detail = Self.detail(for: event.toolName ?? "", input: event.toolInput)
         startedAt = timestamp
@@ -23,8 +24,11 @@ struct ActivityEntry: Identifiable, Sendable, Equatable, Codable {
         self.didFail = didFail
     }
 
-    func matches(_ event: HookEvent) -> Bool {
-        event.toolName == toolName && event.toolInput == toolInput
+    static func digest(of input: JSONValue?) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        let data = (try? encoder.encode(input)) ?? Data()
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
     var systemImage: String {

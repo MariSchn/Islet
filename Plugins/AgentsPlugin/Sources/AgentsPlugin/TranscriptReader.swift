@@ -12,12 +12,14 @@ enum TranscriptReader {
     }
 
     static func antigravityParent(at path: String) -> String? {
+        firstLine(at: path).flatMap(antigravityParent(in:))
+    }
+
+    static func firstLine(at path: String) -> Data? {
         guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
         defer { try? handle.close() }
-        guard let data = try? handle.read(upToCount: 64 << 10),
-              let line = data.split(separator: UInt8(ascii: "\n"), maxSplits: 1, omittingEmptySubsequences: false).first
-        else { return nil }
-        return antigravityParent(in: Data(line))
+        guard let data = try? handle.read(upToCount: 64 << 10), let newline = data.firstIndex(of: UInt8(ascii: "\n")) else { return nil }
+        return Data(data[data.startIndex..<newline])
     }
 
     static func antigravityParent(in line: Data) -> String? {

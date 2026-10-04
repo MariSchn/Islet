@@ -93,4 +93,58 @@ struct SessionPersistenceTests {
         let snapshot = try #require(SessionPersistence(directory: directory).load())
         #expect(snapshot.sessions.map(\.id) == ["s"])
     }
+
+    @Test func dismissedSessionsStayDismissedWhileTheirProcessRuns() {
+        let store = populatedStore()
+        store.dismiss("local")
+
+        let restored = AgentSessionStore(localHost: { "mac" })
+        restored.restore(store.snapshot(), isRunning: { _ in true })
+        restored.apply(HookEvent(kind: .preToolUse, sessionID: "local", toolName: "Read", pid: 100))
+        #expect(!restored.sessions.contains { $0.id == "local" })
+
+        let exited = AgentSessionStore(localHost: { "mac" })
+        exited.restore(store.snapshot(), isRunning: { $0 != 100 })
+        #expect(exited.snapshot().dismissed?.isEmpty == true)
+    }
+
+    @Test func statusLineModelSurvivesARestore() throws {
+        let directory = makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = AgentSessionStore(localHost: { "mac" })
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s", prompt: "go", agent: .antigravity, pid: 1))
+        store.applyStatusLine(StatusLineUpdate(sessionID: "s", details: SessionDetails(model: "Gemini 3 Pro")))
+        let persistence = SessionPersistence(directory: directory)
+        persistence.save(store.snapshot())
+
+        let restored = AgentSessionStore(localHost: { "mac" })
+        restored.restore(try #require(persistence.load()), isRunning: { _ in true })
+        var event = HookEvent(kind: .postToolUse, sessionID: "s", toolName: "Read", agent: .antigravity, pid: 1)
+        event.model = "Gemini Flash"
+        restored.apply(event)
+        #expect(restored.sessions.first?.details.model == "Gemini 3 Pro")
+    }
+
+    @Test func restoredSessionsAndCostsAreNotAnnouncedOrCountedAgain() async throws {
+        let directory = makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let pid = getpid()
+        let store = AgentSessionStore(localHost: { "mac" })
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s", prompt: "go", pid: pid))
+        store.apply(HookEvent(kind: .stop, sessionID: "s", pid: pid))
+        var snapshot = store.snapshot()
+        var costs = CostTracker()
+        costs.record(sessionID: "s", cost: 12, at: .now)
+        snapshot.costs = costs
+        SessionPersistence(directory: directory).save(snapshot)
+
+        let controller = AgentsController(token: "t", claudeDirectory: directory, codexDirectory: directory, antigravityDirectory: directory, port: 0, storageDirectory: directory)
+        await controller.start()
+        defer { Task { await controller.stop() } }
+        #expect(controller.store.sessions.map(\.id) == ["s"])
+        #expect(controller.sessionsDidChange().isEmpty)
+        #expect(controller.dailyCost == 12)
+        controller.usage.record(sessionID: "s", cost: 12.5)
+        #expect(controller.dailyCost == 12.5)
+    }
 }

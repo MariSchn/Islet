@@ -105,6 +105,17 @@ final class UsageMonitor {
         return costs.total(at: now())
     }
 
+    func costs(keeping sessionIDs: Set<String>) -> CostTracker {
+        costs.keeping(sessionIDs: sessionIDs)
+    }
+
+    func restore(_ costs: CostTracker) {
+        self.costs = costs
+        self.costs.calendar = calendar
+        costTick += 1
+        scheduleCostReset()
+    }
+
     func record(sessionID: String, cost: Double) {
         costs.record(sessionID: sessionID, cost: cost, at: now())
         costTick += 1

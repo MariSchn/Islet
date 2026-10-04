@@ -68,6 +68,9 @@ final class AgentsController {
     private let saveDelay: Duration
     private var saveTask: Task<Void, Never>?
     private var hasRestored = false
+    @ObservationIgnored private var announcer = StatusAnnouncer()
+    @ObservationIgnored private var contextAlert = ContextAlert()
+    @ObservationIgnored private var reviewAlert = ReviewAlert()
 
     init(token: String, claudeDirectory: URL, codexDirectory: URL, antigravityDirectory: URL, port: UInt16 = HookServer.defaultPort, alerts: AlertSettings = AlertSettings(), display: DisplaySettings = DisplaySettings(), showsUsage: Bool = false, usage: UsageMonitor? = nil, storageDirectory: URL? = nil, saveDelay: Duration = .seconds(1), logger: Logger = Logger()) {
         persistence = storageDirectory.map { SessionPersistence(directory: $0, logger: logger) }
@@ -152,6 +155,8 @@ final class AgentsController {
             hasRestored = true
             if let snapshot = persistence?.load() {
                 store.restore(snapshot, isRunning: ProcessMonitor.isRunning)
+                if let costs = snapshot.costs { usage.restore(costs) }
+                _ = announcements(for: store.sessions)
             }
         }
         do {
@@ -179,20 +184,47 @@ final class AgentsController {
         isAntigravityHookInstalled || FileManager.default.fileExists(atPath: antigravityInstaller.directory.deletingLastPathComponent().appending(path: "antigravity-cli").path)
     }
 
-    func sessionsDidChange() {
+    @discardableResult
+    func sessionsDidChange() -> [PillAnnouncement] {
+        pruneMutedSessions()
+        let announcements = announcements(for: store.sessions)
+        interruptions.track(store.sessions)
+        scheduleSave()
+        return announcements
+    }
+
+    private func announcements(for sessions: [AgentSession]) -> [PillAnnouncement] {
+        var announcements: [PillAnnouncement] = []
+        if let announcement = announcer.announcement(for: sessions, muted: mutedSessionIDs), shouldAnnounce(announcement) {
+            announcements.append(announcement)
+        }
+        let details = contextAlert.announcements(for: sessions, muted: mutedSessionIDs) + reviewAlert.announcements(for: sessions, muted: mutedSessionIDs)
+        if alerts.announcesInNotch {
+            announcements += details
+        }
+        return announcements
+    }
+
+    private func scheduleSave() {
         guard persistence != nil, saveTask == nil else { return }
         saveTask = Task { [weak self] in
             try? await Task.sleep(for: self?.saveDelay ?? .zero)
             guard !Task.isCancelled, let self else { return }
             saveTask = nil
-            persistence?.save(store.snapshot())
+            persistence?.save(snapshot())
         }
+    }
+
+    private func snapshot() -> SessionSnapshot {
+        var snapshot = store.snapshot()
+        snapshot.costs = usage.costs(keeping: snapshot.sessionIDs)
+        return snapshot
     }
 
     func stop() async {
         saveTask?.cancel()
         saveTask = nil
-        persistence?.save(store.snapshot())
+        persistence?.save(snapshot())
         await server.stop()
         interruptions.stop()
         processes.stop()

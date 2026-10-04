@@ -4,6 +4,7 @@ struct ContextAlert {
     private var fired: Set<String> = []
 
     mutating func announcements(for sessions: [AgentSession], muted: Set<String> = []) -> [PillAnnouncement] {
+        fired.formIntersection(sessions.map(\.id))
         var announcements: [PillAnnouncement] = []
         for session in sessions {
             if let announcement = announcement(for: session), !muted.contains(session.id) {

@@ -63,7 +63,7 @@ struct AgentSession: Identifiable, Sendable, Equatable, Codable {
     var updatedAt: Date
 
     enum CodingKeys: String, CodingKey {
-        case id, agent, host, isRemote, isUnreachable, terminal, tty, pid, tmux, transcriptPath, model, cwd, title, hasStatusLineTitle
+        case id, agent, host, isRemote, isUnreachable, terminal, tty, pid, tmux, transcriptPath, model, cwd, title, hasStatusLineTitle, hasStatusLineModel
         case task, activity, state, activities, plan, details, startedAt, turnStartedAt, updatedAt
     }
 

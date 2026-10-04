@@ -19,6 +19,7 @@ actor HookServer {
     let installScript: String?
     private let installCodeLifetime: Duration
     private var installCodes: [String: ContinuousClock.Instant] = [:]
+    private var antigravityParents: [String: String?] = [:]
     private let handler: Handler
     private let statusLineHandler: StatusLineHandler?
     private let server: LocalHTTPServer
@@ -67,6 +68,14 @@ actor HookServer {
         return expiry > .now
     }
 
+    private func antigravityParent(at path: String) -> String? {
+        if let parent = antigravityParents[path] { return parent }
+        guard let line = TranscriptReader.firstLine(at: path) else { return nil }
+        let parent = TranscriptReader.antigravityParent(in: line)
+        antigravityParents[path] = .some(parent)
+        return parent
+    }
+
     private func respond(to request: HTTPRequest) async -> HTTPResponse {
         if !isAuthorized(request) {
             return .json(401, #"{"error":"unauthorized"}"#)
@@ -84,7 +93,7 @@ actor HookServer {
         guard request.method == "POST", request.path == Self.hookPath else {
             return .json(404, #"{"error":"not found"}"#)
         }
-        guard let event = try? HookEvent.decode(request.body, agent: request.headers["x-islet-agent"], eventName: request.headers["x-islet-event"], host: request.headers["x-islet-host"], terminal: request.headers["x-islet-terminal"], tty: request.headers["x-islet-tty"], pid: request.headers["x-islet-pid"], tmux: request.headers["x-islet-tmux"], tmuxPane: request.headers["x-islet-tmux-pane"], title: request.headers["x-islet-title"], branch: request.headers["x-islet-branch"]) else {
+        guard let event = try? HookEvent.decode(request.body, agent: request.headers["x-islet-agent"], eventName: request.headers["x-islet-event"], host: request.headers["x-islet-host"], terminal: request.headers["x-islet-terminal"], tty: request.headers["x-islet-tty"], pid: request.headers["x-islet-pid"], tmux: request.headers["x-islet-tmux"], tmuxPane: request.headers["x-islet-tmux-pane"], title: request.headers["x-islet-title"], branch: request.headers["x-islet-branch"], parent: antigravityParent(at:)) else {
             return .json(400, #"{"error":"invalid hook payload"}"#)
         }
         let reply = await handler(event)

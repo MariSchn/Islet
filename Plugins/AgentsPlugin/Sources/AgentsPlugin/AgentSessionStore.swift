@@ -20,13 +20,18 @@ final class AgentSessionStore {
         }
     }
 
+    struct Dismissal: Sendable, Equatable, Codable {
+        var pid: Int32?
+        var isRemote: Bool
+    }
+
     private(set) var sessions: [AgentSession] = []
     var onAlert: ((Alert) -> Void)?
 
     private let now: () -> Date
     private let localHost: () -> String
     private let lastPrompt: @Sendable (String) -> String?
-    private var dismissedIDs: Set<String> = []
+    @ObservationIgnored private var dismissed: [String: Dismissal] = [:]
     private var finishedExpiries = 0
     @ObservationIgnored private var hiddenSessions: [String: AgentSession] = [:]
     @ObservationIgnored private var expiryTask: Task<Void, Never>?
@@ -79,7 +84,7 @@ final class AgentSessionStore {
             return
         }
         if event.kind == .sessionEnd {
-            dismissedIDs.remove(event.sessionID)
+            dismissed[event.sessionID] = nil
             hiddenSessions[event.sessionID] = nil
             withdrawPendingRequest(for: event.sessionID)
             sessions.removeAll { $0.id == event.sessionID }
@@ -88,9 +93,9 @@ final class AgentSessionStore {
         if event.kind == .sessionStart, event.source == "compact" {
             return
         }
-        if dismissedIDs.contains(event.sessionID) {
+        if dismissed[event.sessionID] != nil {
             guard event.kind == .userPromptSubmit, !event.isTaskNotification else { return }
-            dismissedIDs.remove(event.sessionID)
+            dismissed[event.sessionID] = nil
         }
 
         let previous = sessions.first { $0.id == event.sessionID }
@@ -277,8 +282,8 @@ final class AgentSessionStore {
     }
 
     func dismiss(_ id: String) {
-        guard sessions.contains(where: { $0.id == id }) else { return }
-        dismissedIDs.insert(id)
+        guard let session = sessions.first(where: { $0.id == id }) else { return }
+        dismissed[id] = Dismissal(pid: session.pid, isRemote: session.isRemote)
         withdrawPendingRequest(for: id)
         sessions.removeAll { $0.id == id }
     }
@@ -361,14 +366,17 @@ final class AgentSessionStore {
     }
 
     func snapshot() -> SessionSnapshot {
-        SessionSnapshot(sessions: sessions, hiddenSessions: Array(hiddenSessions.values))
+        SessionSnapshot(sessions: sessions, hiddenSessions: Array(hiddenSessions.values), dismissed: dismissed)
     }
 
     func restore(_ snapshot: SessionSnapshot, isRunning: (Int32) -> Bool) {
-        func isAlive(_ session: AgentSession) -> Bool {
-            guard !session.isRemote else { return true }
-            guard let pid = session.pid else { return false }
+        func isAlive(pid: Int32?, isRemote: Bool) -> Bool {
+            guard !isRemote else { return true }
+            guard let pid else { return false }
             return isRunning(pid)
+        }
+        func isAlive(_ session: AgentSession) -> Bool {
+            isAlive(pid: session.pid, isRemote: session.isRemote)
         }
         func revived(_ session: AgentSession) -> AgentSession {
             var session = session
@@ -380,6 +388,7 @@ final class AgentSessionStore {
         }
         sessions = snapshot.sessions.filter(isAlive).map(revived)
         hiddenSessions = Dictionary(snapshot.hiddenSessions.filter(isAlive).map { ($0.id, revived($0)) }, uniquingKeysWith: { first, _ in first })
+        dismissed = (snapshot.dismissed ?? [:]).filter { isAlive(pid: $0.value.pid, isRemote: $0.value.isRemote) }
         scheduleFinishedExpiry()
         scheduleUnreachableCheck()
     }
@@ -387,6 +396,10 @@ final class AgentSessionStore {
     func removeExitedSessions(isRunning: (Int32) -> Bool) {
         hiddenSessions = hiddenSessions.filter { _, session in
             guard !session.isRemote, let pid = session.pid else { return true }
+            return isRunning(pid)
+        }
+        dismissed = dismissed.filter { _, dismissal in
+            guard !dismissal.isRemote, let pid = dismissal.pid else { return true }
             return isRunning(pid)
         }
         let exited = sessions.filter { session in
@@ -415,7 +428,8 @@ final class AgentSessionStore {
 
     private static func record(_ event: HookEvent, in session: inout AgentSession, at timestamp: Date) {
         let didFail = event.kind == .postToolUseFailure || event.kind == .permissionDenied
-        if event.kind != .preToolUse, let index = session.activities.lastIndex(where: { !$0.isComplete && $0.matches(event) }) {
+        let digest = ActivityEntry.digest(of: event.toolInput)
+        if event.kind != .preToolUse, let index = session.activities.lastIndex(where: { !$0.isComplete && $0.toolName == event.toolName && $0.inputDigest == digest }) {
             session.activities[index].isComplete = true
             session.activities[index].didFail = didFail
             return
