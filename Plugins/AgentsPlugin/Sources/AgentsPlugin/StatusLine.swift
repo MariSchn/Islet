@@ -13,7 +13,7 @@ struct StatusLineUpdate: Sendable, Equatable {
 
     static func decode(_ data: Data) throws -> StatusLineUpdate {
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let sessionID = object["session_id"] as? String, !sessionID.isEmpty
+              let sessionID = object["session_id"] as? String, !sessionID.isEmpty || object["product"] as? String == "antigravity"
         else { throw Invalid() }
         let name = string(object["session_name"]) ?? string(object["conversation_title"])
         let usage = (object["rate_limits"] as? [String: Any]).map { limits in

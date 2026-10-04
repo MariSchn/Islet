@@ -46,6 +46,10 @@ struct AgentsSettings: View {
                         case .notInstalled, .replaced: try controller.installStatusLine(for: .antigravity)
                         }
                     }
+                    if controller.antigravityStatusLineState == .replaced {
+                        Text("The Antigravity status line was changed outside Islet, so conversation titles, model details and the quota no longer reach Islet. Reinstalling keeps showing your new status line.")
+                            .foregroundStyle(.orange)
+                    }
                 }
                 if controller.statusLineState == .replaced {
                     Text("The status line was changed outside Islet, so usage limits and session names no longer reach Islet. Reinstalling keeps showing your new status line.")

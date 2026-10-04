@@ -44,6 +44,7 @@ struct AgentSession: Identifiable, Sendable, Equatable, Codable {
     var cwd: String?
     var title: String?
     var hasStatusLineTitle = false
+    var hasStatusLineModel = false
     var task: String?
     var activity: String?
     var state: State

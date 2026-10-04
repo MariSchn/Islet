@@ -11,6 +11,23 @@ enum TranscriptReader {
         lastMatch(at: path, antigravityPrompt(in:))
     }
 
+    static func antigravityParent(at path: String) -> String? {
+        guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
+        defer { try? handle.close() }
+        guard let data = try? handle.read(upToCount: 64 << 10),
+              let line = data.split(separator: UInt8(ascii: "\n"), maxSplits: 1, omittingEmptySubsequences: false).first
+        else { return nil }
+        return antigravityParent(in: Data(line))
+    }
+
+    static func antigravityParent(in line: Data) -> String? {
+        guard let text = String(data: line, encoding: .utf8),
+              text.contains(#""type":"SYSTEM_MESSAGE""#),
+              let match = text.firstMatch(of: /sender=([0-9A-Za-z-]+)/)
+        else { return nil }
+        return String(match.1)
+    }
+
     private static func lastMatch(at path: String, _ match: (Data) -> String?) -> String? {
         guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
         defer { try? handle.close() }

@@ -85,4 +85,21 @@ struct UsageTests {
         monitor.receive(ClaudeUsage(fiveHour: fresh, sevenDay: nil))
         #expect(monitor.usage == ClaudeUsage(fiveHour: fresh, sevenDay: unused))
     }
+
+    @MainActor
+    @Test func theMonitorKeepsTheLatestAntigravityQuotaAndResetsExpiredBuckets() {
+        var clock = Date(timeIntervalSince1970: 1_000_000)
+        let monitor = UsageMonitor(isEnabled: true, now: { clock })
+        monitor.receive(AntigravityQuota(buckets: []))
+        #expect(monitor.antigravityQuota == nil)
+
+        let gemini = AntigravityQuota.Bucket(name: "gemini-weekly", window: UsageWindow(utilization: 40, resetsAt: clock.addingTimeInterval(60)))
+        let thirdParty = AntigravityQuota.Bucket(name: "3p-weekly", window: UsageWindow(utilization: 0, resetsAt: clock.addingTimeInterval(3600)))
+        monitor.receive(AntigravityQuota(buckets: [thirdParty, gemini]))
+        #expect(monitor.antigravityQuota?.buckets.map(\.label) == ["3P", "Gemini"])
+        #expect(monitor.usage == nil)
+
+        clock = clock.addingTimeInterval(120)
+        #expect(monitor.antigravityQuota?.buckets.map(\.window) == [thirdParty.window, .unused])
+    }
 }

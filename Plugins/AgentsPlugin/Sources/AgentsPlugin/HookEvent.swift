@@ -114,10 +114,10 @@ struct HookEvent: Sendable, Equatable, Decodable {
         title = (try? container.decodeIfPresent(String.self, forKey: .title)).flatMap { $0.isEmpty ? nil : $0 }
     }
 
-    static func decode(_ data: Data, agent: String? = nil, eventName: String? = nil, host: String? = nil, terminal: String? = nil, tty: String? = nil, pid: String? = nil, tmux: String? = nil, tmuxPane: String? = nil, title: String? = nil, branch: String? = nil, lastPrompt: (String) -> String? = TranscriptReader.lastAntigravityPrompt(at:)) throws -> HookEvent {
+    static func decode(_ data: Data, agent: String? = nil, eventName: String? = nil, host: String? = nil, terminal: String? = nil, tty: String? = nil, pid: String? = nil, tmux: String? = nil, tmuxPane: String? = nil, title: String? = nil, branch: String? = nil, lastPrompt: (String) -> String? = TranscriptReader.lastAntigravityPrompt(at:), parent: (String) -> String? = TranscriptReader.antigravityParent(at:)) throws -> HookEvent {
         let agent = agent.flatMap(AgentSession.Agent.init(rawValue:)) ?? .claudeCode
         var event = switch agent {
-        case .antigravity: try JSONDecoder().decode(AntigravityPayload.self, from: data).event(named: eventName ?? "", lastPrompt: lastPrompt)
+        case .antigravity: try JSONDecoder().decode(AntigravityPayload.self, from: data).event(named: eventName ?? "", lastPrompt: lastPrompt, parent: parent)
         case .claudeCode, .codex: try JSONDecoder().decode(HookEvent.self, from: data)
         }
         event.agent = agent
@@ -205,8 +205,19 @@ struct AntigravityPayload: Decodable {
     var invocationNum: Int?
     var modelName: String?
 
-    func event(named name: String, lastPrompt: (String) -> String?) -> HookEvent {
+    func event(named name: String, lastPrompt: (String) -> String?, parent: (String) -> String?) -> HookEvent {
         let failure = error.flatMap { $0.isEmpty ? nil : $0 }
+        if let parent = transcriptPath.flatMap(parent) {
+            return HookEvent(
+                kind: name == "PostToolUse" ? (failure == nil ? .postToolUse : .postToolUseFailure) : .other,
+                sessionID: parent,
+                cwd: workspacePaths?.first,
+                toolName: toolCall?.name,
+                toolInput: toolCall?.args,
+                agentType: "Subagent",
+                agent: .antigravity
+            )
+        }
         let kind: HookEvent.Kind = switch name {
         case "PreInvocation": invocationNum ?? 0 == 0 ? .userPromptSubmit : .other
         case "PostToolUse": failure == nil ? .postToolUse : .postToolUseFailure

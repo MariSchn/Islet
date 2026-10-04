@@ -34,7 +34,7 @@ struct HookEventTests {
     @Test func mapsAntigravityHooksOntoSessionEvents() throws {
         let common = #""conversationId":"c1","workspacePaths":["/Users/me/projects/islet"],"transcriptPath":"/tmp/t.jsonl","modelName":"gemini-3.8-flash-high""#
         func decode(_ name: String, _ fields: String = "") throws -> HookEvent {
-            try HookEvent.decode(Data("{\(common)\(fields)}".utf8), agent: "antigravity", eventName: name) { $0 == "/tmp/t.jsonl" ? "Fix the build" : nil }
+            try HookEvent.decode(Data("{\(common)\(fields)}".utf8), agent: "antigravity", eventName: name, lastPrompt: { $0 == "/tmp/t.jsonl" ? "Fix the build" : nil }, parent: { _ in nil })
         }
 
         let prompt = try decode("PreInvocation", #","invocationNum":0,"initialNumSteps":1"#)
@@ -57,6 +57,23 @@ struct HookEventTests {
         #expect(failure.kind == .stopFailure)
         #expect(failure.failureDescription == "quota exceeded")
         #expect(throws: (any Error).self) { try HookEvent.decode(Data(#"{"session_id":"a","hook_event_name":"Stop"}"#.utf8), agent: "antigravity", eventName: "Stop") }
+    }
+
+    @Test func antigravitySubagentToolCallsShowOnTheParentAndNothingElse() throws {
+        let fields = #""conversationId":"sub1","transcriptPath":"/tmp/sub.jsonl","error":"","invocationNum":0,"toolCall":{"name":"view_file","args":{"toolSummary":"Read a.txt"}}"#
+        func decode(_ name: String) throws -> HookEvent {
+            try HookEvent.decode(Data("{\(fields)}".utf8), agent: "antigravity", eventName: name, lastPrompt: { _ in "delegated task" }, parent: { $0 == "/tmp/sub.jsonl" ? "c1" : nil })
+        }
+        let tool = try decode("PostToolUse")
+        #expect(tool.kind == .postToolUse)
+        #expect(tool.sessionID == "c1")
+        #expect(tool.activityDescription == "Subagent: Read a.txt")
+        #expect(try decode("PreInvocation").kind == .other)
+        #expect(try decode("Stop").kind == .other)
+
+        let subagent = #"{"step_index":0,"source":"SYSTEM","type":"SYSTEM_MESSAGE","content":"<SYSTEM_MESSAGE>\n[Message] timestamp=2026-10-04T10:24:42Z sender=1d3e15ab-9d79-4fa7-9489-e3fd35aca1d8 priority=MESSAGE_PRIORITY_HIGH content=Read a.txt"}"#
+        #expect(TranscriptReader.antigravityParent(in: Data(subagent.utf8)) == "1d3e15ab-9d79-4fa7-9489-e3fd35aca1d8")
+        #expect(TranscriptReader.antigravityParent(in: Data(#"{"type":"USER_INPUT","source":"USER_EXPLICIT","content":"sender=x"}"#.utf8)) == nil)
     }
 
     @Test func readsTheUserRequestFromAnAntigravityTranscript() throws {

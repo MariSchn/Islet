@@ -121,7 +121,7 @@ final class AgentSessionStore {
         if let tmux = event.tmux { session.tmux = tmux }
         if let transcriptPath = event.transcriptPath { session.transcriptPath = transcriptPath }
         if let title = event.title, !session.hasStatusLineTitle { session.title = title }
-        if let model = event.model {
+        if let model = event.model, !session.hasStatusLineModel {
             session.details.model = model
             session.details.effort = event.effort
         }
@@ -198,10 +198,10 @@ final class AgentSessionStore {
             return
         }
 
-        if session.agent == .claudeCode, let pid = session.pid {
-            let replacesAll = event.kind == .sessionStart
+        if session.agent == .claudeCode || session.agent == .antigravity, let pid = session.pid {
+            let replacesAll = event.kind == .sessionStart || (session.agent == .antigravity && event.kind == .userPromptSubmit)
             let isReplaced = { (other: AgentSession) in
-                other.id != session.id && other.agent == .claudeCode && other.pid == pid && other.host == session.host
+                other.id != session.id && other.agent == session.agent && other.pid == pid && other.host == session.host
                     && (replacesAll || (other.task == nil && other.state == .starting))
             }
             let replaced = sessions.filter(isReplaced)
@@ -250,12 +250,14 @@ final class AgentSessionStore {
                 sessions[index].hasStatusLineTitle = true
             }
             sessions[index].details = sessions[index].details.merging(update.details)
+            if update.details.model != nil { sessions[index].hasStatusLineModel = true }
         } else if var session = hiddenSessions[update.sessionID] {
             if let name = update.sessionName {
                 session.title = name
                 session.hasStatusLineTitle = true
             }
             session.details = session.details.merging(update.details)
+            if update.details.model != nil { session.hasStatusLineModel = true }
             hiddenSessions[update.sessionID] = session
         }
     }

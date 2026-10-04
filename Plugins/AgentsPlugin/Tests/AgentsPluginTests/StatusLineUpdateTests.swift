@@ -39,6 +39,10 @@ struct StatusLineUpdateTests {
         #expect(buckets[1].window.utilization == 25)
         #expect(buckets[1].window.resetsAt == Date(timeIntervalSince1970: 1_791_712_573))
         #expect(!(try StatusLineUpdate.decode(Data(Self.documentedExample.utf8))).isAntigravity)
+
+        let beforeFirstPrompt = try StatusLineUpdate.decode(Data(#"{"session_id":"","product":"antigravity","quota":{"gemini-weekly":{"remaining_fraction":0.5}}}"#.utf8))
+        #expect(beforeFirstPrompt.antigravityQuota?.buckets.first?.window.utilization == 50)
+        #expect(throws: StatusLineUpdate.Invalid.self) { try StatusLineUpdate.decode(Data(#"{"session_id":""}"#.utf8)) }
     }
 
     @Test func derivesTheModelAndEffortFromAntigravityModelIDs() {

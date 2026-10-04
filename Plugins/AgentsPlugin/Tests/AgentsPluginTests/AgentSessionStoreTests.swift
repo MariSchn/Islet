@@ -36,6 +36,27 @@ struct AgentSessionStoreTests {
         #expect(store.sessions[0].details.badgeText == "Gemini 3.8 Flash · high")
     }
 
+    @Test func aNewAntigravityConversationReplacesTheOldOneOfTheSameProcess() {
+        let store = AgentSessionStore()
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "c1", prompt: "first", agent: .antigravity, host: "mac", pid: 4242))
+        store.apply(HookEvent(kind: .stop, sessionID: "c1", agent: .antigravity, host: "mac", pid: 4242))
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "other", prompt: "elsewhere", agent: .antigravity, host: "mac", pid: 99))
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "c1", toolName: "view_file", agentType: "Subagent", agent: .antigravity, host: "mac", pid: 4242))
+        #expect(Set(store.sessions.map(\.id)) == ["c1", "other"])
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "c2", prompt: "second", agent: .antigravity, host: "mac", pid: 4242))
+        #expect(Set(store.sessions.map(\.id)) == ["c2", "other"])
+    }
+
+    @Test func theAntigravityStatusLineModelWinsOverTheHookModel() throws {
+        let store = AgentSessionStore()
+        var prompt = HookEvent(kind: .userPromptSubmit, sessionID: "c1", prompt: "go", agent: .antigravity)
+        prompt.model = "Claude Sonnet 4 5"
+        store.apply(prompt)
+        store.applyStatusLine(try StatusLineUpdate.decode(Data(#"{"session_id":"c1","product":"antigravity","model":{"display_name":"Claude Sonnet 4.5 (Thinking)","effort":"high"}}"#.utf8)))
+        store.apply(prompt)
+        #expect(store.sessions[0].details.badgeText == "Claude Sonnet 4.5 (Thinking) · high")
+    }
+
     @Test func recordsRecentToolCallsAndPlans() {
         let store = AgentSessionStore()
         let read = JSONValue.object(["file_path": .string("/a/b.swift")])
