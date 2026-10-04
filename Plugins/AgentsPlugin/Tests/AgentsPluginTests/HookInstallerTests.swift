@@ -117,7 +117,7 @@ struct HookInstallerTests {
         """.write(to: transcript, atomically: true, encoding: .utf8)
         let capture = installer.directory.appending(path: "curl-call")
         let fakeCurl = installer.directory.appending(path: "curl")
-        try "#!/bin/sh\nprintf '%s\\n' \"$@\" > '\(capture.path)'\ncat >> '\(capture.path)'\nfor a in \"$@\"; do case \"$a\" in @*) cat \"${a#@}\" >> '\(capture.path)';; esac; done\n".write(to: fakeCurl, atomically: true, encoding: .utf8)
+        try "#!/bin/sh\nprintf '%s\\n' \"$@\" > '\(capture.path)'\ncat /dev/fd/3 >> '\(capture.path)'\ncat >> '\(capture.path)'\n".write(to: fakeCurl, atomically: true, encoding: .utf8)
         let cwd = installer.directory.appending(path: "project")
         try FileManager.default.createDirectory(at: cwd.appending(path: "db"), withIntermediateDirectories: true)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeCurl.path)
@@ -272,12 +272,12 @@ struct HookInstallerTests {
         #expect(call.contains("X-Islet-Branch: feature/x"))
     }
 
-    @Test func killingTheScriptAbortsTheRequestAndCleansUp() throws {
+    @Test func killingTheScriptAbortsTheRequest() throws {
         let installer = try makeInstaller()
         try installer.install()
         let capture = installer.directory.appending(path: "curl-call")
         let fakeCurl = installer.directory.appending(path: "curl")
-        try "#!/bin/sh\nfor a in \"$@\"; do case \"$a\" in @*) body=\"${a#@}\";; esac; done\nprintf '%s\\n%s\\n' \"$$\" \"$body\" > '\(capture.path)'\nexec sleep 30\n".write(to: fakeCurl, atomically: true, encoding: .utf8)
+        try "#!/bin/sh\nprintf '%s\\n' \"$$\" > '\(capture.path)'\nexec sleep 30\n".write(to: fakeCurl, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeCurl.path)
 
         let process = Process()
@@ -292,12 +292,11 @@ struct HookInstallerTests {
 
         let deadline = Date().addingTimeInterval(10)
         var call: [String] = []
-        while call.count < 2, Date() < deadline {
+        while call.isEmpty, Date() < deadline {
             Thread.sleep(forTimeInterval: 0.05)
             call = ((try? String(contentsOf: capture, encoding: .utf8)) ?? "").split(separator: "\n").map(String.init)
         }
         let request = try #require(Int32(call.first ?? ""))
-        #expect(FileManager.default.fileExists(atPath: call[1]))
 
         kill(process.processIdentifier, SIGTERM)
         process.waitUntilExit()
@@ -306,7 +305,6 @@ struct HookInstallerTests {
             Thread.sleep(forTimeInterval: 0.05)
         }
         #expect(kill(request, 0) != 0)
-        #expect(!FileManager.default.fileExists(atPath: call[1]))
     }
 
     @Test func installsScriptAndMergesHooksWithoutTouchingOtherSettings() throws {
@@ -432,10 +430,58 @@ struct HookInstallerTests {
         #expect(stop?.count == 2)
         let command = ((stop?.last?["hooks"] as? [[String: Any]])?.first?["command"] as? String) ?? ""
         #expect(command == "'\(remoteInstaller.scriptURL.path)'")
-        #expect(installer.remoteInstallCommand(code: "c0de").contains("Bearer c0de"))
-        #expect(!installer.remoteInstallCommand(code: "c0de").contains("deadbeef"))
-        #expect(installer.remoteInstallCommand(code: "c0de").contains("127.0.0.1:7365/install"))
         #expect(installer.sshConfigSnippet == "RemoteForward 7365 127.0.0.1:7365")
+    }
+
+    @Test func remoteInstallCommandOnlyRunsTheExpectedScript() throws {
+        let installer = try makeInstaller()
+        let script = "#!/bin/sh\necho installed\n"
+        let command = installer.remoteInstallCommand(code: "c0de", scriptHash: HookServer.hash(script))
+        #expect(command.contains("Bearer c0de"))
+        #expect(!command.contains("deadbeef"))
+        #expect(command.contains("127.0.0.1:7365/install"))
+
+        let verifier = try #require(command.components(separatedBy: " | ").last)
+        func run(_ input: String) throws -> (status: Int32, output: String) {
+            let process = Process()
+            process.executableURL = URL(filePath: "/bin/sh")
+            process.arguments = ["-c", verifier]
+            let stdin = Pipe(), stdout = Pipe()
+            process.standardInput = stdin
+            process.standardOutput = stdout
+            process.standardError = Pipe()
+            try process.run()
+            stdin.fileHandleForWriting.write(Data(input.utf8))
+            try stdin.fileHandleForWriting.close()
+            process.waitUntilExit()
+            return (process.terminationStatus, String(decoding: stdout.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self))
+        }
+        #expect(try run(script) == (0, "installed\n"))
+        #expect(try run("#!/bin/sh\necho evil\n").status != 0)
+        #expect(try run("#!/bin/sh\necho evil\n").output.isEmpty)
+        #expect(try run("").status != 0)
+    }
+
+    @Test func installAndUninstallKeepUserHooksThatShareAGroup() throws {
+        let installer = try makeInstaller()
+        try installer.install()
+        var settings = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: installer.settingsURL)) as? [String: Any])
+        var hooks = try #require(settings["hooks"] as? [String: Any])
+        var stop = try #require(hooks["Stop"] as? [[String: Any]])
+        var group = stop[stop.count - 1]
+        group["hooks"] = (group["hooks"] as? [Any] ?? []) + [["type": "command", "command": "say done"]]
+        stop[stop.count - 1] = group
+        hooks["Stop"] = stop + ["not a group"] as [Any]
+        settings["hooks"] = hooks
+        try JSONSerialization.data(withJSONObject: settings).write(to: installer.settingsURL)
+
+        try installer.install()
+        try installer.uninstall()
+        let after = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: installer.settingsURL)) as? [String: Any])
+        let remaining = try #require((after["hooks"] as? [String: Any])?["Stop"] as? [Any])
+        let commands = remaining.compactMap { ($0 as? [String: Any])?["hooks"] as? [[String: Any]] }.flatMap { $0 }.compactMap { $0["command"] as? String }
+        #expect(commands == ["say done"])
+        #expect(remaining.contains { $0 as? String == "not a group" })
     }
 
     @Test func outdatedScriptCountsAsNotInstalled() throws {

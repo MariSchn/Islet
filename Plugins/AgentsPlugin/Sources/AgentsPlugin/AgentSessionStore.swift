@@ -117,7 +117,7 @@ final class AgentSessionStore {
         if let cwd = event.cwd { session.cwd = cwd }
         if let host = event.host {
             session.host = host
-            session.isRemote = host.caseInsensitiveCompare(localHost()) != .orderedSame
+            session.isRemote = event.isFromRemoteHost || host.caseInsensitiveCompare(localHost()) != .orderedSame
         }
         session.isUnreachable = false
         if let terminal = event.terminal { session.terminal = terminal }

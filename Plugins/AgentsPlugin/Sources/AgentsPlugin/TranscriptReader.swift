@@ -16,7 +16,7 @@ enum TranscriptReader {
     }
 
     static func firstLine(at path: String) -> Data? {
-        guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
+        guard let handle = openRegularFile(at: path) else { return nil }
         defer { try? handle.close() }
         guard let data = try? handle.read(upToCount: 64 << 10), let newline = data.firstIndex(of: UInt8(ascii: "\n")) else { return nil }
         return Data(data[data.startIndex..<newline])
@@ -30,12 +30,18 @@ enum TranscriptReader {
         return String(match.1)
     }
 
+    static func openRegularFile(at path: String) -> FileHandle? {
+        var info = stat()
+        guard stat(path, &info) == 0, info.st_mode & S_IFMT == S_IFREG else { return nil }
+        return FileHandle(forReadingAtPath: path)
+    }
+
     private static func lastMatch(at path: String, _ match: (Data) -> String?) -> String? {
-        guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
+        guard let handle = openRegularFile(at: path) else { return nil }
         defer { try? handle.close() }
         guard let end = try? handle.seekToEnd(),
               (try? handle.seek(toOffset: end > tailSize ? end - tailSize : 0)) != nil,
-              let data = try? handle.readToEnd()
+              let data = try? handle.read(upToCount: Int(tailSize))
         else { return nil }
         for line in data.split(separator: UInt8(ascii: "\n")).reversed() {
             if let prompt = match(Data(line)) { return prompt }

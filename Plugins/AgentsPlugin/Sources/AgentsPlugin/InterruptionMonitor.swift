@@ -72,12 +72,12 @@ final class InterruptionMonitor {
     }
 
     private static func readCompleteLines(of watch: Watch) -> (Data, UInt64)? {
-        guard let handle = FileHandle(forReadingAtPath: watch.path) else { return nil }
+        guard let handle = TranscriptReader.openRegularFile(at: watch.path) else { return nil }
         defer { try? handle.close() }
         guard let end = try? handle.seekToEnd(), end != watch.offset else { return nil }
         guard end > watch.offset else { return (Data(), end) }
         guard (try? handle.seek(toOffset: watch.offset)) != nil,
-              let data = try? handle.read(upToCount: Int(end - watch.offset)),
+              let data = try? handle.read(upToCount: Int(min(end - watch.offset, TranscriptReader.tailSize))),
               let lastNewline = data.lastIndex(of: UInt8(ascii: "\n"))
         else { return nil }
         let complete = data[data.startIndex...lastNewline]

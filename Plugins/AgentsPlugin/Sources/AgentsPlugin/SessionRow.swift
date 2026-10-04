@@ -324,7 +324,7 @@ private struct PullRequestChip: View {
 
     var body: some View {
         Button {
-            if let url = pullRequest.url.flatMap(URL.init(string:)) {
+            if let url = pullRequest.url.flatMap(URL.init(string:)), ["http", "https"].contains(url.scheme?.lowercased()) {
                 NSWorkspace.shared.open(url)
             }
         } label: {

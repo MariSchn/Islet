@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import IsletCore
 
@@ -16,7 +17,8 @@ actor HookServer {
 
     let port: UInt16
     let token: String
-    let installScript: String?
+    private(set) var remoteToken: String?
+    private(set) var installScript: String?
     private let installCodeLifetime: Duration
     private var installCodes: [String: ContinuousClock.Instant] = [:]
     private var antigravityParents: [String: String?] = [:]
@@ -24,9 +26,10 @@ actor HookServer {
     private let statusLineHandler: StatusLineHandler?
     private let server: LocalHTTPServer
 
-    init(port: UInt16 = HookServer.defaultPort, token: String, installScript: String? = nil, installCodeLifetime: Duration = HookServer.installCodeLifetime, statusLineHandler: StatusLineHandler? = nil, handler: @escaping Handler) {
+    init(port: UInt16 = HookServer.defaultPort, token: String, remoteToken: String? = nil, installScript: String? = nil, installCodeLifetime: Duration = HookServer.installCodeLifetime, statusLineHandler: StatusLineHandler? = nil, handler: @escaping Handler) {
         self.port = port
         self.token = token
+        self.remoteToken = remoteToken
         self.installScript = installScript
         self.installCodeLifetime = installCodeLifetime
         self.statusLineHandler = statusLineHandler
@@ -36,6 +39,8 @@ actor HookServer {
 
     func start() async throws {
         try await server.start { [weak self] request in
+            await self?.isAuthorized(request) ?? false
+        } handler: { [weak self] request in
             guard let self else { return .json(404, #"{"error":"not found"}"#) }
             return await self.respond(to: request)
         }
@@ -54,17 +59,28 @@ actor HookServer {
     }
 
     func issueInstallCode() -> String {
-        let now = ContinuousClock.now
-        installCodes = installCodes.filter { $0.value > now }
         let code = Self.makeToken()
-        installCodes[code] = now + installCodeLifetime
+        installCodes = [code: .now + installCodeLifetime]
         return code
     }
 
+    func setRemoteAccess(token: String, installScript: String) {
+        remoteToken = token
+        self.installScript = installScript
+        installCodes = [:]
+    }
+
+    var installScriptHash: String? {
+        installScript.map(Self.hash)
+    }
+
+    static func hash(_ script: String) -> String {
+        SHA256.hash(data: Data(script.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
     private func isAuthorized(_ request: HTTPRequest) -> Bool {
-        guard let presented = request.bearerToken else { return false }
-        if presented == token { return true }
-        guard request.method == "GET", request.path == Self.installPath, let expiry = installCodes.removeValue(forKey: presented) else { return false }
+        if request.hasBearerToken(token) || remoteToken.map(request.hasBearerToken) == true { return true }
+        guard request.method == "GET", request.path == Self.installPath, let presented = request.bearerToken, let expiry = installCodes.removeValue(forKey: presented) else { return false }
         return expiry > .now
     }
 
@@ -77,10 +93,9 @@ actor HookServer {
     }
 
     private func respond(to request: HTTPRequest) async -> HTTPResponse {
-        if !isAuthorized(request) {
-            return .json(401, #"{"error":"unauthorized"}"#)
-        }
-        if request.method == "GET", request.path == Self.installPath, let installScript {
+        let isRemote = remoteToken.map(request.hasBearerToken) == true
+        if request.method == "GET", request.path == Self.installPath {
+            guard !isRemote, !request.hasBearerToken(token), let installScript else { return .json(404, #"{"error":"not found"}"#) }
             return .text(installScript)
         }
         if request.method == "POST", request.path == Self.statusLinePath, let statusLineHandler {
@@ -93,7 +108,7 @@ actor HookServer {
         guard request.method == "POST", request.path == Self.hookPath else {
             return .json(404, #"{"error":"not found"}"#)
         }
-        guard let event = try? HookEvent.decode(request.body, agent: request.headers["x-islet-agent"], eventName: request.headers["x-islet-event"], host: request.headers["x-islet-host"], terminal: request.headers["x-islet-terminal"], tty: request.headers["x-islet-tty"], pid: request.headers["x-islet-pid"], tmux: request.headers["x-islet-tmux"], tmuxPane: request.headers["x-islet-tmux-pane"], title: request.headers["x-islet-title"], branch: request.headers["x-islet-branch"], parent: antigravityParent(at:)) else {
+        guard let event = try? HookEvent.decode(request.body, agent: request.headers["x-islet-agent"], eventName: request.headers["x-islet-event"], host: request.headers["x-islet-host"], isRemote: isRemote, terminal: request.headers["x-islet-terminal"], tty: request.headers["x-islet-tty"], pid: request.headers["x-islet-pid"], tmux: request.headers["x-islet-tmux"], tmuxPane: request.headers["x-islet-tmux-pane"], title: request.headers["x-islet-title"], branch: request.headers["x-islet-branch"], parent: antigravityParent(at:)) else {
             return .json(400, #"{"error":"invalid hook payload"}"#)
         }
         let reply = await handler(event)

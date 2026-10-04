@@ -11,6 +11,7 @@ final class AgentsController {
     private(set) var installedHooks: Set<AgentSession.Agent> = []
     private(set) var statusLineStates: [AgentSession.Agent: StatusLineInstaller.State] = [:]
     private(set) var serverError: String?
+    private(set) var remoteToken: String
     private(set) var expandedSessionIDs: Set<String> = []
     private(set) var mutedSessionIDs: Set<String> = []
     let usage: UsageMonitor
@@ -67,7 +68,7 @@ final class AgentsController {
     @ObservationIgnored private var contextAlert = ContextAlert()
     @ObservationIgnored private var reviewAlert = ReviewAlert()
 
-    init(token: String, home: URL, port: UInt16 = HookServer.defaultPort, alerts: AlertSettings = AlertSettings(), display: DisplaySettings = DisplaySettings(), showsUsage: Bool = false, usage: UsageMonitor? = nil, storageDirectory: URL? = nil, saveDelay: Duration = .seconds(1), logger: Logger = Logger()) {
+    init(token: String, remoteToken: String = HookServer.makeToken(), home: URL, port: UInt16 = HookServer.defaultPort, alerts: AlertSettings = AlertSettings(), display: DisplaySettings = DisplaySettings(), showsUsage: Bool = false, usage: UsageMonitor? = nil, storageDirectory: URL? = nil, saveDelay: Duration = .seconds(1), logger: Logger = Logger()) {
         persistence = storageDirectory.map { SessionPersistence(directory: $0, logger: logger) }
         self.saveDelay = saveDelay
         let store = AgentSessionStore()
@@ -76,9 +77,9 @@ final class AgentsController {
         self.home = home
         self.port = port
         self.token = token
+        self.remoteToken = remoteToken
         let usage = self.usage
-        let remoteInstallers = [AgentSession.Agent.claudeCode, .codex].map { HookInstaller(agent: $0, home: home, port: port, token: token) }
-        server = HookServer(port: port, token: token, installScript: HookInstaller.remoteInstallScript(for: remoteInstallers)) { update in
+        server = HookServer(port: port, token: token, remoteToken: remoteToken, installScript: Self.remoteInstallScript(port: port, token: remoteToken)) { update in
             logger.debug("Status line update for \(update.sessionID, privacy: .public): 5h \(update.usage?.fiveHour.map { "\($0.utilization)%" } ?? "absent", privacy: .public), 7d \(update.usage?.sevenDay.map { "\($0.utilization)%" } ?? "absent", privacy: .public)")
             await store.applyStatusLine(update)
             if let limits = update.usage {
@@ -119,8 +120,23 @@ final class AgentsController {
         hookInstaller(for: .claudeCode).sshConfigSnippet
     }
 
+    static func remoteInstallScript(port: UInt16, token: String) -> String {
+        HookInstaller.remoteInstallScript(for: [.claudeCode, .codex].map { HookInstaller(agent: $0, home: URL(filePath: "/"), port: port, token: token) })
+    }
+
+    var remoteInstallCommandPreview: String {
+        hookInstaller(for: .claudeCode).remoteInstallCommand(code: "<one-time code>", scriptHash: "<hash>")
+    }
+
     func makeRemoteInstallCommand() async -> String {
-        hookInstaller(for: .claudeCode).remoteInstallCommand(code: await server.issueInstallCode())
+        let code = await server.issueInstallCode()
+        return hookInstaller(for: .claudeCode).remoteInstallCommand(code: code, scriptHash: await server.installScriptHash ?? "")
+    }
+
+    func resetRemoteAccess() async {
+        let token = HookServer.makeToken()
+        remoteToken = token
+        await server.setRemoteAccess(token: token, installScript: Self.remoteInstallScript(port: port, token: token))
     }
 
     func terminal(for session: AgentSession) -> InstalledTerminal? {

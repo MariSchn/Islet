@@ -13,20 +13,21 @@ public struct HTTPRequest: Sendable, Equatable {
         self.body = body
     }
 
-    public enum ParseResult: Sendable, Equatable {
+    enum HeadParseResult: Sendable, Equatable {
         case incomplete
         case invalid
-        case tooLarge(remainingBody: Int)
-        case complete(HTTPRequest)
+        case complete(HTTPRequest, contentLength: Int, bodyStart: Int)
     }
 
-    public static let maxHeaderSize = 16 << 10
+    static let maxHeaderSize = 16 << 10
 
-    public static func parse(_ data: Data, maxBodySize: Int) -> ParseResult {
+    static func parseHead(_ data: Data) -> HeadParseResult {
         guard let headerEnd = data.range(of: Data("\r\n\r\n".utf8)) else {
             return data.count > maxHeaderSize ? .invalid : .incomplete
         }
-        guard let head = String(data: data[data.startIndex..<headerEnd.lowerBound], encoding: .utf8) else { return .invalid }
+        guard headerEnd.lowerBound - data.startIndex <= maxHeaderSize,
+              let head = String(data: data[data.startIndex..<headerEnd.lowerBound], encoding: .utf8)
+        else { return .invalid }
         var lines = head.components(separatedBy: "\r\n")
         let requestLine = lines.removeFirst().split(separator: " ")
         guard requestLine.count == 3 else { return .invalid }
@@ -42,16 +43,18 @@ public struct HTTPRequest: Sendable, Equatable {
         } else {
             length = 0
         }
-        let bodyStart = headerEnd.upperBound
-        guard length <= maxBodySize else { return .tooLarge(remainingBody: length - (data.endIndex - bodyStart)) }
-        guard data.endIndex - bodyStart >= length else { return .incomplete }
-        let body = data[bodyStart..<(bodyStart + length)]
-        return .complete(HTTPRequest(method: String(requestLine[0]), path: String(requestLine[1]), headers: headers, body: Data(body)))
+        let request = HTTPRequest(method: String(requestLine[0]), path: String(requestLine[1]), headers: headers)
+        return .complete(request, contentLength: length, bodyStart: headerEnd.upperBound - data.startIndex)
     }
 
     public var bearerToken: String? {
         guard let value = headers["authorization"], value.hasPrefix("Bearer ") else { return nil }
         return String(value.dropFirst("Bearer ".count))
+    }
+
+    public func hasBearerToken(_ token: String) -> Bool {
+        guard let presented = bearerToken?.utf8, presented.count == token.utf8.count else { return false }
+        return zip(presented, token.utf8).reduce(UInt8(0)) { $0 | ($1.0 ^ $1.1) } == 0
     }
 }
 

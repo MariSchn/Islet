@@ -3,6 +3,7 @@ import Network
 
 public actor LocalHTTPServer {
     public typealias Handler = @Sendable (HTTPRequest) async -> HTTPResponse
+    public typealias Authorizer = @Sendable (HTTPRequest) async -> Bool
 
     private struct Client {
         let connection: NWConnection
@@ -14,16 +15,19 @@ public actor LocalHTTPServer {
     private let maxBodySize: Int
     private let requestTimeout: Duration
     private let replyTimeout: Duration
+    private let maxConnections: Int
     private var handler: Handler?
+    private var authorizer: Authorizer?
     private var listener: NWListener?
     private var clients: [ObjectIdentifier: Client] = [:]
     private let queue: DispatchQueue
 
-    public init(port: UInt16, maxBodySize: Int = 16 << 20, requestTimeout: Duration = .seconds(10), replyTimeout: Duration = .seconds(60)) {
+    public init(port: UInt16, maxBodySize: Int = 1 << 20, requestTimeout: Duration = .seconds(10), replyTimeout: Duration = .seconds(60), maxConnections: Int = 64) {
         self.port = port
         self.maxBodySize = maxBodySize
         self.requestTimeout = requestTimeout
         self.replyTimeout = replyTimeout
+        self.maxConnections = maxConnections
         self.queue = DispatchQueue(label: "islet.local-http-server.\(port)")
     }
 
@@ -31,7 +35,7 @@ public actor LocalHTTPServer {
         listener != nil
     }
 
-    public func start(handler: @escaping Handler) async throws {
+    public func start(authorize: Authorizer? = nil, handler: @escaping Handler) async throws {
         guard listener == nil else { return }
         guard let endpointPort = NWEndpoint.Port(rawValue: port) else { throw URLError(.badURL) }
         let parameters = NWParameters.tcp
@@ -44,6 +48,7 @@ public actor LocalHTTPServer {
             Task { await self.accept(connection) }
         }
         self.handler = handler
+        self.authorizer = authorize
         self.listener = listener
 
         do {
@@ -51,6 +56,7 @@ public actor LocalHTTPServer {
         } catch {
             self.listener = nil
             self.handler = nil
+            self.authorizer = nil
             throw error
         }
     }
@@ -62,6 +68,7 @@ public actor LocalHTTPServer {
         guard let listener else { return }
         self.listener = nil
         handler = nil
+        authorizer = nil
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             let resumed = Resumed()
             listener.stateUpdateHandler = { state in
@@ -98,10 +105,14 @@ public actor LocalHTTPServer {
     }
 
     private func accept(_ connection: NWConnection) {
+        guard clients.count < maxConnections else {
+            connection.cancel()
+            return
+        }
         let id = ObjectIdentifier(connection)
         clients[id] = Client(connection: connection, timeout: closeTask(for: id, after: requestTimeout))
         connection.start(queue: queue)
-        receive(on: connection, buffer: Data())
+        receiveHead(on: connection, buffer: Data())
     }
 
     private func closeTask(for id: ObjectIdentifier, after delay: Duration) -> Task<Void, Never> {
@@ -147,37 +158,72 @@ public actor LocalHTTPServer {
         }
     }
 
-    private nonisolated func receive(on connection: NWConnection, buffer: Data) {
+    private nonisolated func receiveHead(on connection: NWConnection, buffer: Data) {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 1 << 16) { [self] data, _, isComplete, error in
             var buffer = buffer
             if let data { buffer.append(data) }
-            switch HTTPRequest.parse(buffer, maxBodySize: maxBodySize) {
-            case .complete(let request):
-                Task { await self.handle(request, on: connection) }
+            switch HTTPRequest.parseHead(buffer) {
+            case .complete(let request, let length, let bodyStart):
+                let received = buffer.dropFirst(bodyStart).prefix(length)
+                Task { await self.authorize(request, contentLength: length, received: Data(received), on: connection) }
             case .invalid:
                 Task { await self.send(.json(400, #"{"error":"bad request"}"#), on: connection) }
-            case .tooLarge(let remaining):
-                self.drain(on: connection, remaining: remaining)
             case .incomplete:
                 if error != nil || isComplete {
                     Task { await self.close(connection) }
                 } else {
-                    self.receive(on: connection, buffer: buffer)
+                    self.receiveHead(on: connection, buffer: buffer)
                 }
             }
         }
     }
 
-    private nonisolated func drain(on connection: NWConnection, remaining: Int) {
+    private func authorize(_ request: HTTPRequest, contentLength: Int, received: Data, on connection: NWConnection) async {
+        if let authorizer, !(await authorizer(request)) {
+            reject(.json(401, #"{"error":"unauthorized"}"#), on: connection, remaining: contentLength - received.count)
+            return
+        }
+        guard clients[ObjectIdentifier(connection)] != nil else { return }
+        guard contentLength <= maxBodySize else {
+            reject(.json(413, #"{"error":"payload too large"}"#), on: connection, remaining: contentLength - received.count)
+            return
+        }
+        let body = BodyBuffer(capacity: contentLength)
+        body.data.append(received)
+        if body.data.count >= contentLength {
+            var request = request
+            request.body = body.data
+            handle(request, on: connection)
+        } else {
+            receiveBody(on: connection, request: request, body: body, length: contentLength)
+        }
+    }
+
+    private nonisolated func receiveBody(on connection: NWConnection, request: HTTPRequest, body: BodyBuffer, length: Int) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 1 << 16) { [self] data, _, isComplete, error in
+            if let data { body.data.append(data.prefix(length - body.data.count)) }
+            if body.data.count >= length {
+                var request = request
+                request.body = body.data
+                Task { await self.handle(request, on: connection) }
+            } else if error != nil || isComplete {
+                Task { await self.close(connection) }
+            } else {
+                self.receiveBody(on: connection, request: request, body: body, length: length)
+            }
+        }
+    }
+
+    private nonisolated func reject(_ response: HTTPResponse, on connection: NWConnection, remaining: Int) {
         guard remaining > 0 else {
-            Task { await self.send(.json(413, #"{"error":"payload too large"}"#), on: connection) }
+            Task { await self.send(response, on: connection) }
             return
         }
         connection.receive(minimumIncompleteLength: 1, maximumLength: 1 << 16) { [self] data, _, isComplete, error in
             if error != nil || isComplete {
                 Task { await self.close(connection) }
             } else {
-                self.drain(on: connection, remaining: remaining - (data?.count ?? 0))
+                self.reject(response, on: connection, remaining: remaining - (data?.count ?? 0))
             }
         }
     }
@@ -187,6 +233,14 @@ public actor LocalHTTPServer {
             guard let self else { return }
             Task { await self.close(connection) }
         })
+    }
+}
+
+private final class BodyBuffer: @unchecked Sendable {
+    var data = Data()
+
+    init(capacity: Int) {
+        data.reserveCapacity(capacity)
     }
 }
 

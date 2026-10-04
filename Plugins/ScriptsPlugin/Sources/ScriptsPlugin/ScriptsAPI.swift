@@ -17,11 +17,15 @@ final class ScriptsAPI {
         self.announce = announce
     }
 
+    func isAuthorized(_ request: HTTPRequest) -> Bool {
+        request.hasBearerToken(token)
+    }
+
     func respond(to request: HTTPRequest) -> HTTPResponse {
         guard isAccepting else {
             return Self.error(503, "not active")
         }
-        guard request.bearerToken == token else {
+        guard isAuthorized(request) else {
             return Self.error(401, "unauthorized")
         }
         let path = request.path.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? request.path
