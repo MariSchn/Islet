@@ -39,12 +39,43 @@ enum ProcessTree {
     }
 
     static func parent(of pid: Int32) -> Int32? {
+        guard let parent = info(of: pid)?.kp_eproc.e_ppid else { return nil }
+        return parent > 0 ? parent : nil
+    }
+
+    static func terminalDevice(of pid: Int32) -> dev_t? {
+        guard let device = info(of: pid)?.kp_eproc.e_tdev, device != -1 else { return nil }
+        return device
+    }
+
+    static func terminalShell(of pid: Int32) -> Int32? {
+        guard let device = terminalDevice(of: pid) else { return nil }
+        var shell = pid
+        for ancestor in ancestors(of: pid) {
+            guard terminalDevice(of: ancestor) == device else { break }
+            shell = ancestor
+        }
+        return shell
+    }
+
+    static func workingDirectory(of pid: Int32) -> String? {
+        var info = proc_vnodepathinfo()
+        let size = Int32(MemoryLayout<proc_vnodepathinfo>.size)
+        guard proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, 0, &info, size) == size else { return nil }
+        let path = withUnsafeBytes(of: info.pvi_cdir.vip_path) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+        return path.isEmpty ? nil : path
+    }
+
+    static func terminalDirectory(of pid: Int32) -> String? {
+        terminalShell(of: pid).flatMap(workingDirectory)
+    }
+
+    private static func info(of pid: Int32) -> kinfo_proc? {
         var info = kinfo_proc()
         var size = MemoryLayout<kinfo_proc>.stride
         var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
         guard sysctl(&mib, UInt32(mib.count), &info, &size, nil, 0) == 0, size > 0 else { return nil }
-        let parent = info.kp_eproc.e_ppid
-        return parent > 0 ? parent : nil
+        return info
     }
 
     static func ancestors(of pid: Int32, limit: Int = 64) -> [Int32] {
