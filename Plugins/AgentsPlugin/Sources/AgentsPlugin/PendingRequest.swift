@@ -104,13 +104,6 @@ struct PendingRequest: Sendable, Equatable, Identifiable {
         HookEvent(kind: .permissionRequest, sessionID: "", toolName: toolName, toolInput: toolInput).activityDescription
     }
 
-    var title: String {
-        switch kind {
-        case .permission(let tool, _): "Allow \(tool)?"
-        case .question(let questions): questions.count == 1 ? "Question" : "\(questions.count) questions"
-        }
-    }
-
     private static func questions(from input: JSONValue?, requiresOptions: Bool) -> [Question]? {
         input?["questions"]?.arrayValue?.compactMap { item in
             guard let text = item["question"]?.stringValue ?? item["title"]?.stringValue else { return nil }

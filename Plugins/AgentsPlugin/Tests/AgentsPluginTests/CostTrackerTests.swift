@@ -22,4 +22,16 @@ struct CostTrackerTests {
         tracker.record(sessionID: "c", cost: 4, at: nextMorning)
         #expect(tracker.total(at: nextMorning) == 4.5)
     }
+
+    @Test func sessionsFromBeforeTodayOnlyCountWhatTheySpendToday() {
+        let calendar = Calendar(identifier: .gregorian)
+        var tracker = CostTracker(calendar: calendar)
+        let morning = calendar.date(from: DateComponents(year: 2026, month: 10, day: 3, hour: 9, minute: 0))!
+        tracker.record(sessionID: "old", cost: 42, at: morning, sessionDuration: .seconds(12 * 3600))
+        #expect(tracker.total(at: morning) == 0)
+        tracker.record(sessionID: "old", cost: 43, at: morning, sessionDuration: .seconds(12 * 3600 + 60))
+        #expect(tracker.total(at: morning) == 1)
+        tracker.record(sessionID: "today", cost: 5, at: morning, sessionDuration: .seconds(3600))
+        #expect(tracker.total(at: morning) == 6)
+    }
 }

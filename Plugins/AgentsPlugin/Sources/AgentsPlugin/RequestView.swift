@@ -9,11 +9,15 @@ struct RequestView: View {
         switch request.kind {
         case .permission(_, let detail):
             VStack(alignment: .leading, spacing: AgentsPlugin.requestSpacing) {
-                Text(detail ?? request.toolName)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .frame(maxWidth: .infinity, minHeight: AgentsPlugin.requestDetailHeight, maxHeight: AgentsPlugin.requestDetailHeight, alignment: .topLeading)
+                ScrollView {
+                    Text(detail ?? request.toolName)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+                .frame(height: AgentsPlugin.requestDetailHeight)
+                .help(detail ?? request.toolName)
                 HStack(spacing: AgentsPlugin.requestSpacing) {
                     RequestButton("Allow", systemImage: "checkmark", tint: .green) { decide(.allow) }
                     if request.alwaysAllowRule != nil {
@@ -76,6 +80,7 @@ private struct QuestionView: View {
                     Text(question.text)
                         .font(.system(size: 12))
                         .lineLimit(2)
+                        .help(question.text)
                 }
             }
             .frame(maxWidth: .infinity, minHeight: detailHeight, maxHeight: detailHeight, alignment: .topLeading)
@@ -188,5 +193,6 @@ private struct RequestButton: View {
                 .foregroundStyle(tint)
         }
         .buttonStyle(.plain)
+        .help(subtitle ?? "")
     }
 }

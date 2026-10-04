@@ -42,6 +42,17 @@ struct SessionPersistenceTests {
         #expect(restored.sessions.map(\.id) == ["remote"])
     }
 
+    @Test func restoreDropsRemoteSessionsWithoutRecentUpdates() {
+        var clock = Date(timeIntervalSince1970: 1_000_000)
+        let store = AgentSessionStore(now: { clock }, localHost: { "mac" })
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "old", prompt: "hi", host: "devbox"))
+        clock = clock.addingTimeInterval(AgentSessionStore.remoteExpiry)
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "new", prompt: "hi", host: "devbox"))
+        let restored = AgentSessionStore(now: { clock }, localHost: { "mac" })
+        restored.restore(store.snapshot(), isRunning: { _ in false })
+        #expect(restored.sessions.map(\.id) == ["new"])
+    }
+
     @Test func restoreDropsSessionsWithoutPid() {
         let store = AgentSessionStore(localHost: { "mac" })
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "nopid", prompt: "hi"))

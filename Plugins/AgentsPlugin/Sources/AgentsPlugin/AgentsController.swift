@@ -47,6 +47,9 @@ final class AgentsController {
         if !mutedSessionIDs.isSubset(of: ids) {
             mutedSessionIDs.formIntersection(ids)
         }
+        if !expandedSessionIDs.isSubset(of: ids) {
+            expandedSessionIDs.formIntersection(ids)
+        }
     }
 
     var display: DisplaySettings
@@ -89,7 +92,7 @@ final class AgentsController {
                 await usage.receive(quota)
             }
             if !update.isAntigravity, let cost = update.details.costUSD {
-                await usage.record(sessionID: update.sessionID, cost: cost)
+                await usage.record(sessionID: update.sessionID, cost: cost, sessionDuration: update.details.duration)
             }
         } handler: { event in
             await store.handle(event)
@@ -205,6 +208,7 @@ final class AgentsController {
     @discardableResult
     func sessionsDidChange() -> [PillAnnouncement] {
         pruneMutedSessions()
+        alerter.withdrawResolvedNotifications(for: store.sessions)
         let announcements = announcements(for: store.sessions)
         interruptions.track(store.sessions)
         scheduleSave()

@@ -179,6 +179,57 @@ struct AgentSessionStoreTests {
         #expect(store.sessions[0].pendingRequest == nil)
     }
 
+    @Test func aPendingPermissionStillNeedsAttentionWhileSubagentsWork() async throws {
+        let store = AgentSessionStore()
+        let reply = Task { await store.handle(HookEvent(kind: .permissionRequest, sessionID: "s1", toolName: "Bash", toolInput: .object(["command": .string("make")]))) }
+        try await waitUntil { store.sessions.first?.pendingRequest != nil }
+        var subagent = HookEvent(kind: .preToolUse, sessionID: "s1", toolName: "Read", toolInput: .object(["file_path": .string("/a")]))
+        subagent.agentType = "Explore"
+        store.apply(subagent)
+        subagent.kind = .postToolUse
+        store.apply(subagent)
+        #expect(store.sessions[0].state == .needsAttention("Wants to $ make"))
+        #expect(store.attentionSessions.count == 1)
+        store.decide(try #require(store.sessions[0].pendingRequest?.id), .allow)
+        _ = await reply.value
+        #expect(store.sessions[0].state == .working)
+    }
+
+    @Test func openToolCallsCompleteWhenDeniedAnsweredOrStopped() async throws {
+        let store = AgentSessionStore()
+        let command = JSONValue.object(["command": .string("make")])
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "s1", toolName: "Bash", toolInput: command))
+        let reply = Task { await store.handle(HookEvent(kind: .permissionRequest, sessionID: "s1", toolName: "Bash", toolInput: command)) }
+        try await waitUntil { store.sessions.first?.pendingRequest != nil }
+        store.decide(try #require(store.sessions[0].pendingRequest?.id), .deny)
+        _ = await reply.value
+        #expect(store.sessions[0].activities.map(\.didFail) == [true])
+        #expect(store.sessions[0].activities.allSatisfy { $0.isComplete })
+
+        let question = JSONValue.object(["questions": .array([.object(["question": .string("Which?")])])])
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "s1", toolName: "AskUserQuestion", toolInput: question))
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "s1", toolName: "AskUserQuestion", toolInput: .object(["questions": question["questions"]!, "answers": .object(["Which?": .string("A")])])))
+        #expect(store.sessions[0].activities.count == 2)
+        #expect(store.sessions[0].activities.allSatisfy { $0.isComplete })
+
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "s1", toolName: "Read", toolInput: .object(["file_path": .string(String(repeating: "x", count: 1000))])))
+        store.apply(HookEvent(kind: .stop, sessionID: "s1"))
+        #expect(store.sessions[0].activities.count == 3)
+        #expect(store.sessions[0].activities.allSatisfy { $0.isComplete })
+    }
+
+    @Test func remoteSessionsWithoutUpdatesAreEventuallyForgotten() {
+        var clock = Date(timeIntervalSince1970: 1_000_000)
+        let store = AgentSessionStore(now: { clock }, localHost: { "mac" })
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "remote", prompt: "x", host: "devbox"))
+        store.apply(HookEvent(kind: .stop, sessionID: "remote"))
+        store.removeExitedSessions { _ in true }
+        #expect(store.sessions.count == 1)
+        clock = clock.addingTimeInterval(AgentSessionStore.remoteExpiry + 1)
+        store.removeExitedSessions { _ in true }
+        #expect(store.sessions.isEmpty)
+    }
+
     @Test func unknownEventsAreIgnored() async {
         let store = AgentSessionStore()
         #expect(await store.handle(HookEvent(kind: .other, sessionID: "s1")) == .empty)

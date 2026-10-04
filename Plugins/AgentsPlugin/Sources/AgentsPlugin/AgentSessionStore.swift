@@ -7,6 +7,7 @@ import Observation
 final class AgentSessionStore {
     static let finishedPillDuration: TimeInterval = 10 * 60
     static let unreachableTimeout: TimeInterval = 5 * 60
+    static let remoteExpiry: TimeInterval = 12 * 60 * 60
     static let replyTimeout = TimeInterval(HookServer.replyTimeout.components.seconds) - 10
 
     enum Alert: Sendable, Equatable {
@@ -207,13 +208,15 @@ final class AgentSessionStore {
         case .stop:
             session.state = .done
             session.activity = nil
+            session.completeOpenActivities()
         case .stopFailure:
             session.state = .failed(event.failureDescription)
             session.activity = nil
+            session.completeOpenActivities()
         case .sessionEnd, .other:
             return
         }
-        if let request = session.pendingRequests.first, !request.isAnswerable, !session.state.isFailed {
+        if let request = session.pendingRequests.first, !session.state.isFailed {
             session.state = .needsAttention(Self.attentionReason(for: request))
         }
 
@@ -300,8 +303,14 @@ final class AgentSessionStore {
             break
         case .deny:
             sessions[index].activity = "Denied \(request.toolName)"
+            let digest = ActivityEntry.digest(of: request.toolInput)
+            if let activity = sessions[index].activities.lastIndex(where: { !$0.isComplete && $0.toolName == request.toolName && $0.inputDigest == digest }) {
+                sessions[index].activities[activity].isComplete = true
+                sessions[index].activities[activity].didFail = true
+            }
         }
         settleState(at: index)
+        scheduleUnreachableCheck()
     }
 
     private func settleState(at index: Int) {
@@ -335,7 +344,9 @@ final class AgentSessionStore {
         } else {
             sessions[index].state = .interrupted
             sessions[index].activity = nil
+            sessions[index].completeOpenActivities()
         }
+        scheduleUnreachableCheck()
     }
 
     func markInterrupted(_ sessionID: String) {
@@ -348,7 +359,9 @@ final class AgentSessionStore {
         sessions[index].pendingRequests = []
         sessions[index].state = .interrupted
         sessions[index].activity = nil
+        sessions[index].completeOpenActivities()
         sessions[index].updatedAt = now()
+        scheduleUnreachableCheck()
     }
 
     private func loadLastPrompt(from path: String, for sessionID: String) {
@@ -370,13 +383,15 @@ final class AgentSessionStore {
     }
 
     func restore(_ snapshot: SessionSnapshot, isRunning: (Int32) -> Bool) {
+        let cutoff = now().addingTimeInterval(-Self.remoteExpiry)
         func isAlive(pid: Int32?, isRemote: Bool) -> Bool {
             guard !isRemote else { return true }
             guard let pid else { return false }
             return isRunning(pid)
         }
         func isAlive(_ session: AgentSession) -> Bool {
-            isAlive(pid: session.pid, isRemote: session.isRemote)
+            guard !session.isRemote || session.updatedAt > cutoff else { return false }
+            return isAlive(pid: session.pid, isRemote: session.isRemote)
         }
         func revived(_ session: AgentSession) -> AgentSession {
             var session = session
@@ -400,8 +415,9 @@ final class AgentSessionStore {
     }
 
     func removeExitedSessions(isRunning: (Int32) -> Bool) {
+        let cutoff = now().addingTimeInterval(-Self.remoteExpiry)
         hiddenSessions = hiddenSessions.filter { _, session in
-            guard !session.isRemote, let pid = session.pid else { return true }
+            guard !session.isRemote, let pid = session.pid else { return session.updatedAt > cutoff }
             return isRunning(pid)
         }
         dismissed = dismissed.filter { _, dismissal in
@@ -409,7 +425,8 @@ final class AgentSessionStore {
             return isRunning(pid)
         }
         let exited = sessions.filter { session in
-            guard !session.isRemote, let pid = session.pid else { return false }
+            if session.isRemote { return session.updatedAt <= cutoff && !session.state.requiresAttention }
+            guard let pid = session.pid else { return false }
             return !isRunning(pid)
         }
         guard !exited.isEmpty else { return }
