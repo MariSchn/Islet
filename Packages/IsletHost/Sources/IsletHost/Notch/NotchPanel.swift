@@ -26,6 +26,7 @@ public final class NotchPanel: NSPanel {
         collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
         isMovable = false
         hidesOnDeactivate = false
+        canHide = false
         isReleasedWhenClosed = false
         appearance = NSAppearance(named: .darkAqua)
 

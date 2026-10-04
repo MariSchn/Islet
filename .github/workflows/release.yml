@@ -10,6 +10,7 @@ permissions:
 
 env:
   SPARKLE_VERSION: 2.10.0
+  SPARKLE_SHA256: c2bf58aa8387266ac179357b1415d6f2635f044da8be41042af32425dae6da0c
 
 jobs:
   release:
@@ -139,7 +140,9 @@ jobs:
         run: |
           version=${{ steps.version.outputs.version }}
           mkdir -p "$RUNNER_TEMP/sparkle"
-          curl -sfL "https://github.com/sparkle-project/Sparkle/releases/download/$SPARKLE_VERSION/Sparkle-$SPARKLE_VERSION.tar.xz" | tar -xJ -C "$RUNNER_TEMP/sparkle"
+          curl -sfL -o "$RUNNER_TEMP/sparkle.tar.xz" "https://github.com/sparkle-project/Sparkle/releases/download/$SPARKLE_VERSION/Sparkle-$SPARKLE_VERSION.tar.xz"
+          echo "$SPARKLE_SHA256  $RUNNER_TEMP/sparkle.tar.xz" | shasum -a 256 -c
+          tar -xJf "$RUNNER_TEMP/sparkle.tar.xz" -C "$RUNNER_TEMP/sparkle"
           key="$RUNNER_TEMP/sparkle.key"
           (umask 077 && printf '%s' "$SPARKLE_PRIVATE_KEY" > "$key")
           signature=$("$RUNNER_TEMP/sparkle/bin/sign_update" --ed-key-file "$key" "dist/Islet-$version.zip")

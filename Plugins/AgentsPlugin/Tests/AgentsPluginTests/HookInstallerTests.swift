@@ -460,6 +460,8 @@ struct HookInstallerTests {
         #expect(try run("#!/bin/sh\necho evil\n").status != 0)
         #expect(try run("#!/bin/sh\necho evil\n").output.isEmpty)
         #expect(try run("").status != 0)
+        #expect(try run(#"{"error":"unauthorized"}"#).status != 0)
+        #expect(try run(#"{"error":"unauthorized"}"#).output.isEmpty)
     }
 
     @Test func installAndUninstallKeepUserHooksThatShareAGroup() throws {

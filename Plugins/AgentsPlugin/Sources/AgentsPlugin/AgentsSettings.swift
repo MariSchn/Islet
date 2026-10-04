@@ -125,7 +125,7 @@ struct AgentsSettings: View {
         } header: {
             Text("Remote Machines")
         } footer: {
-            Text("Follow agents running over SSH: add the config line to the machine's Host entry in ~/.ssh/config, connect, and run the install command there once. Each copied command works once within \(Int(HookServer.installCodeLifetime.components.seconds / 60)) minutes. Sessions show their host and are marked unreachable when no updates arrive for \(Int(AgentSessionStore.unreachableTimeout / 60)) minutes.")
+            Text("Follow agents running over SSH: add the config line to the machine's Host entry in ~/.ssh/config, connect, and run the install command there once. Each copied command works once within \(Int(HookServer.installCodeLifetime.components.seconds / 60)) minutes, and copying again replaces it. Sessions show their host and are marked unreachable when no updates arrive for \(Int(AgentSessionStore.unreachableTimeout / 60)) minutes.")
         }
         .confirmationDialog("Reset remote access?", isPresented: $confirmsRemoteReset) {
             Button("Reset", role: .destructive) { Task { await controller.resetRemoteAccess() } }

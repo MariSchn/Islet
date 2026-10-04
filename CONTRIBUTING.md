@@ -48,4 +48,4 @@ The [plugin developer guide](docs/plugins/README.md) explains the API, and `Plug
 
 ## New plugins
 
-New built-in plugins should be useful to many people and cheap when idle. Open an issue first to discuss the idea. For something personal, build the plugin in your fork; it only takes a package and one line in `App/AppDelegate.swift`.
+New built-in plugins should be useful to many people and cheap when idle. Open an issue first to discuss the idea. For something personal, build the plugin in your fork: add its package to `project.yml` (packages, app dependencies and the scheme's test targets) and its type to `builtInPlugins` in `App/AppDelegate.swift`. The `/new-plugin` skill in Claude Code does all of that for you.

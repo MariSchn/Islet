@@ -143,8 +143,8 @@ struct HookInstaller: Sendable {
     }
 
     func remoteInstallCommand(code: String, scriptHash: String) -> String {
-        let verify = #"import hashlib,subprocess,sys; s=sys.stdin.buffer.read(); sys.exit("Islet: could not reach Islet, is the SSH tunnel up?" if not s else "Islet: unexpected install script, not running it" if hashlib.sha256(s).hexdigest()!="\#(scriptHash)" else subprocess.run(["sh"],input=s).returncode)"#
-        return "printf 'header = \"Authorization: Bearer \(code)\"\\n' | curl -sf -K - http://127.0.0.1:\(port)\(HookServer.installPath) | python3 -c '\(verify)'"
+        let verify = #"import hashlib,subprocess,sys; s=sys.stdin.buffer.read(); sys.exit("Islet: could not reach Islet, is the SSH tunnel up?" if not s else "Islet: this install command expired or was replaced, copy a new one in Islet" if s.startswith(b"{") else "Islet: unexpected install script, not running it" if hashlib.sha256(s).hexdigest()!="\#(scriptHash)" else subprocess.run(["sh"],input=s).returncode)"#
+        return "printf 'header = \"Authorization: Bearer \(code)\"\\n' | curl -s -K - http://127.0.0.1:\(port)\(HookServer.installPath) | python3 -c '\(verify)'"
     }
 
     var sshConfigSnippet: String {

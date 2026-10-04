@@ -37,6 +37,7 @@ struct CalendarSettings: View {
                 } header: {
                     Text("Events")
                 }
+                .onAppear { controller.reload() }
                 ForEach(accounts) { account in
                     Section(account.title.isEmpty ? "Other Calendars" : account.title) {
                         ForEach(account.calendars) { calendar in
@@ -57,6 +58,7 @@ struct CalendarSettings: View {
                         Button("Allow Access") { Task { await controller.requestAccess() } }
                     }
                 }
+                .onAppear { controller.reload() }
             case .denied, .restricted:
                 Section {
                     LabeledContent("Calendar access is turned off for Islet.") {
@@ -65,9 +67,9 @@ struct CalendarSettings: View {
                 } footer: {
                     Text("Turn on Islet under Privacy & Security › Calendars.")
                 }
+                .onAppear { controller.reload() }
             }
         }
-        .onAppear { controller.reload() }
     }
 
     private func selection(for calendar: CalendarInfo) -> Binding<Bool> {

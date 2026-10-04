@@ -77,9 +77,11 @@ final class InterruptionMonitor {
         guard let end = try? handle.seekToEnd(), end != watch.offset else { return nil }
         guard end > watch.offset else { return (Data(), end) }
         guard (try? handle.seek(toOffset: watch.offset)) != nil,
-              let data = try? handle.read(upToCount: Int(min(end - watch.offset, TranscriptReader.tailSize))),
-              let lastNewline = data.lastIndex(of: UInt8(ascii: "\n"))
+              let data = try? handle.read(upToCount: Int(min(end - watch.offset, TranscriptReader.tailSize)))
         else { return nil }
+        guard let lastNewline = data.lastIndex(of: UInt8(ascii: "\n")) else {
+            return data.count == Int(TranscriptReader.tailSize) ? (Data(), watch.offset + UInt64(data.count)) : nil
+        }
         let complete = data[data.startIndex...lastNewline]
         return (Data(complete), watch.offset + UInt64(complete.count))
     }

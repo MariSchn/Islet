@@ -237,8 +237,8 @@ private struct PluginPage: View {
                         .foregroundStyle(.orange)
                 }
             } footer: {
-                if !registry.isEnabled(entry.id), entry.settingsView != nil {
-                    Text("Turn \(entry.manifest.displayName) on to change its settings.")
+                if !registry.isEnabled(entry.id) {
+                    Text("\(entry.manifest.displayName) is turned off and doesn't run.")
                 }
             }
             if registry.isEnabled(entry.id), let view = entry.settingsView {

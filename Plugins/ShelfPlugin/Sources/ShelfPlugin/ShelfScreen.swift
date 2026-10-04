@@ -9,7 +9,6 @@ struct ShelfScreen: View {
     @State private var selection = ShelfSelection()
     @State private var quickLookURL: URL?
     @State private var quickLookItems: [URL] = []
-    @State private var confirmsClear = false
     @FocusState private var isFocused: Bool
 
     var body: some View {
@@ -87,13 +86,10 @@ struct ShelfScreen: View {
             return true
         }
         .contextMenu {
-            Button("Clear Shelf…", role: .destructive) { confirmsClear = true }
-                .disabled(store.items.isEmpty)
-        }
-        .confirmationDialog("Clear the shelf?", isPresented: $confirmsClear) {
-            Button("Clear Shelf", role: .destructive) { store.removeAll() }
-        } message: {
-            Text("Copies that Islet keeps of dropped files, text and images are deleted.")
+            Menu("Clear Shelf") {
+                Button("Remove All \(store.items.count) Items", role: .destructive) { store.removeAll() }
+            }
+            .disabled(store.items.isEmpty)
         }
         .quickLookPreview($quickLookURL, in: quickLookItems)
     }
