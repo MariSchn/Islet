@@ -105,6 +105,7 @@ struct SessionDetails: Sendable, Equatable, Codable {
     var effort: String?
     var fastMode: Bool?
     var worktree: String?
+    var branch: String?
     var pullRequest: PullRequest?
     var costUSD: Double?
     var linesAdded: Int?
@@ -140,12 +141,28 @@ struct SessionDetails: Sendable, Equatable, Codable {
             effort: update.effort ?? effort,
             fastMode: update.fastMode ?? fastMode,
             worktree: update.worktree,
+            branch: update.branch ?? branch,
             pullRequest: update.pullRequest,
             costUSD: update.costUSD ?? costUSD,
             linesAdded: update.linesAdded ?? linesAdded,
             linesRemoved: update.linesRemoved ?? linesRemoved,
             duration: update.duration ?? duration
         )
+    }
+
+    static let effortLevels: Set<String> = ["minimal", "low", "medium", "high", "xhigh", "max"]
+
+    static func modelName(_ name: String, without effort: String?) -> String {
+        guard let effort, name.lowercased().hasSuffix(" (\(effort.lowercased()))") else { return name }
+        return String(name.dropLast(effort.count + 3))
+    }
+
+    static func antigravityModel(id: String) -> (model: String, effort: String?)? {
+        var parts = id.split(separator: "-").map(String.init)
+        guard parts.count > 1 else { return nil }
+        let effort = Self.effortLevels.contains(parts[parts.count - 1].lowercased()) ? parts.removeLast() : nil
+        let model = parts.map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined(separator: " ")
+        return (model, effort)
     }
 
     static func percentText(_ value: Double) -> String {

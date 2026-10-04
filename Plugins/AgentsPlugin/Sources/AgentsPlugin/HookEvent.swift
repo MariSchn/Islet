@@ -43,6 +43,9 @@ struct HookEvent: Sendable, Equatable, Decodable {
     var pid: Int32?
     var tmux: TmuxLocation?
     var title: String?
+    var model: String?
+    var effort: String?
+    var branch: String?
 
     private enum CodingKeys: String, CodingKey {
         case kind = "hook_event_name"
@@ -111,7 +114,7 @@ struct HookEvent: Sendable, Equatable, Decodable {
         title = (try? container.decodeIfPresent(String.self, forKey: .title)).flatMap { $0.isEmpty ? nil : $0 }
     }
 
-    static func decode(_ data: Data, agent: String? = nil, eventName: String? = nil, host: String? = nil, terminal: String? = nil, tty: String? = nil, pid: String? = nil, tmux: String? = nil, tmuxPane: String? = nil, title: String? = nil, lastPrompt: (String) -> String? = TranscriptReader.lastAntigravityPrompt(at:)) throws -> HookEvent {
+    static func decode(_ data: Data, agent: String? = nil, eventName: String? = nil, host: String? = nil, terminal: String? = nil, tty: String? = nil, pid: String? = nil, tmux: String? = nil, tmuxPane: String? = nil, title: String? = nil, branch: String? = nil, lastPrompt: (String) -> String? = TranscriptReader.lastAntigravityPrompt(at:)) throws -> HookEvent {
         let agent = agent.flatMap(AgentSession.Agent.init(rawValue:)) ?? .claudeCode
         var event = switch agent {
         case .antigravity: try JSONDecoder().decode(AntigravityPayload.self, from: data).event(named: eventName ?? "", lastPrompt: lastPrompt)
@@ -124,6 +127,7 @@ struct HookEvent: Sendable, Equatable, Decodable {
         event.pid = pid.flatMap { Int32($0) }.flatMap { $0 > 1 ? $0 : nil }
         if let tmux, let tmuxPane { event.tmux = TmuxLocation(environment: tmux, pane: tmuxPane) }
         event.title = title.flatMap { $0.isEmpty ? nil : $0 } ?? event.title
+        event.branch = branch.flatMap { $0.isEmpty ? nil : $0 }
         return event
     }
 
@@ -199,6 +203,7 @@ struct AntigravityPayload: Decodable {
     var toolCall: ToolCall?
     var error: String?
     var invocationNum: Int?
+    var modelName: String?
 
     func event(named name: String, lastPrompt: (String) -> String?) -> HookEvent {
         let failure = error.flatMap { $0.isEmpty ? nil : $0 }
@@ -208,7 +213,7 @@ struct AntigravityPayload: Decodable {
         case "Stop": failure == nil ? .stop : .stopFailure
         default: .other
         }
-        return HookEvent(
+        var event = HookEvent(
             kind: kind,
             sessionID: conversationId,
             cwd: workspacePaths?.first,
@@ -219,5 +224,10 @@ struct AntigravityPayload: Decodable {
             lastAssistantMessage: kind == .stopFailure ? failure : nil,
             agent: .antigravity
         )
+        if let model = modelName.flatMap(SessionDetails.antigravityModel(id:)) {
+            event.model = model.model
+            event.effort = model.effort
+        }
+        return event
     }
 }

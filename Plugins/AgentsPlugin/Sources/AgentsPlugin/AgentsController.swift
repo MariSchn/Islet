@@ -11,10 +11,12 @@ final class AgentsController {
     let codexInstaller: HookInstaller
     let antigravityInstaller: HookInstaller
     let statusLineInstaller: StatusLineInstaller
+    let antigravityStatusLineInstaller: StatusLineInstaller
     private(set) var isHookInstalled: Bool
     private(set) var isCodexHookInstalled: Bool
     private(set) var isAntigravityHookInstalled: Bool
     private(set) var statusLineState: StatusLineInstaller.State
+    private(set) var antigravityStatusLineState: StatusLineInstaller.State
     private(set) var serverError: String?
     private(set) var expandedSessionIDs: Set<String> = []
     private(set) var mutedSessionIDs: Set<String> = []
@@ -28,6 +30,9 @@ final class AgentsController {
         return display.visibleUsage(current)
     }
     var showsUsageBar: Bool { visibleUsage != nil }
+    var visibleAntigravityQuota: AntigravityQuota? {
+        usage.isEnabled ? usage.antigravityQuota : nil
+    }
     var dailyCost: Double { usage.dailyCost }
 
     func shouldAnnounce(_ announcement: PillAnnouncement) -> Bool {
@@ -74,10 +79,12 @@ final class AgentsController {
         codexInstaller = HookInstaller(agent: .codex, directory: codexDirectory, port: port, token: token)
         antigravityInstaller = HookInstaller(agent: .antigravity, directory: antigravityDirectory, port: port, token: token)
         statusLineInstaller = StatusLineInstaller(directory: claudeDirectory, port: port, token: token)
+        antigravityStatusLineInstaller = StatusLineInstaller(agent: .antigravity, directory: antigravityDirectory.deletingLastPathComponent().appending(path: "antigravity-cli", directoryHint: .isDirectory), port: port, token: token)
         isHookInstalled = installer.isInstalled
         isCodexHookInstalled = codexInstaller.isInstalled
         isAntigravityHookInstalled = antigravityInstaller.isInstalled
         statusLineState = statusLineInstaller.state
+        antigravityStatusLineState = antigravityStatusLineInstaller.state
         let usage = self.usage
         server = HookServer(port: port, token: token, installScript: HookInstaller.remoteInstallScript(for: [installer, codexInstaller])) { update in
             logger.debug("Status line update for \(update.sessionID, privacy: .public): 5h \(update.usage?.fiveHour.map { "\($0.utilization)%" } ?? "absent", privacy: .public), 7d \(update.usage?.sevenDay.map { "\($0.utilization)%" } ?? "absent", privacy: .public)")
@@ -85,7 +92,10 @@ final class AgentsController {
             if let limits = update.usage {
                 await usage.receive(limits)
             }
-            if let cost = update.details.costUSD {
+            if let quota = update.antigravityQuota {
+                await usage.receive(quota)
+            }
+            if !update.isAntigravity, let cost = update.details.costUSD {
                 await usage.record(sessionID: update.sessionID, cost: cost)
             }
         } handler: { event in
@@ -153,8 +163,8 @@ final class AgentsController {
         for installer in [installer, codexInstaller, antigravityInstaller] where installer.needsUpgrade {
             try? installer.install()
         }
-        if statusLineInstaller.state == .outdated {
-            try? statusLineInstaller.install()
+        for installer in [statusLineInstaller, antigravityStatusLineInstaller] where installer.state == .outdated {
+            try? installer.install()
         }
         refreshInstallState()
         interruptions.start()
@@ -193,6 +203,7 @@ final class AgentsController {
         isCodexHookInstalled = codexInstaller.isInstalled
         isAntigravityHookInstalled = antigravityInstaller.isInstalled
         statusLineState = statusLineInstaller.state
+        antigravityStatusLineState = antigravityStatusLineInstaller.state
         Task { [server] in
             if await !server.isListening, serverError == nil {
                 serverError = "The hook server stopped listening on 127.0.0.1:\(server.port). Restart Islet."
@@ -214,14 +225,18 @@ final class AgentsController {
         refreshInstallState()
     }
 
-    func installStatusLine() throws {
-        try statusLineInstaller.install()
+    func installStatusLine(for agent: AgentSession.Agent = .claudeCode) throws {
+        try statusLineInstaller(for: agent).install()
         refreshInstallState()
     }
 
-    func uninstallStatusLine() throws {
-        try statusLineInstaller.uninstall()
+    func uninstallStatusLine(for agent: AgentSession.Agent = .claudeCode) throws {
+        try statusLineInstaller(for: agent).uninstall()
         refreshInstallState()
+    }
+
+    private func statusLineInstaller(for agent: AgentSession.Agent) -> StatusLineInstaller {
+        agent == .antigravity ? antigravityStatusLineInstaller : statusLineInstaller
     }
 
     func isHookInstalled(for agent: AgentSession.Agent) -> Bool {

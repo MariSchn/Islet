@@ -4,7 +4,10 @@ struct StatusLineUpdate: Sendable, Equatable {
     var sessionID: String
     var sessionName: String?
     var usage: ClaudeUsage?
+    var antigravityQuota: AntigravityQuota?
     var details = SessionDetails()
+
+    var isAntigravity: Bool { antigravityQuota != nil }
 
     struct Invalid: Error {}
 
@@ -12,21 +15,22 @@ struct StatusLineUpdate: Sendable, Equatable {
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let sessionID = object["session_id"] as? String, !sessionID.isEmpty
         else { throw Invalid() }
-        let name = (object["session_name"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        let name = string(object["session_name"]) ?? string(object["conversation_title"])
         let usage = (object["rate_limits"] as? [String: Any]).map { limits in
             ClaudeUsage(fiveHour: window(limits["five_hour"]), sevenDay: window(limits["seven_day"]))
         }
-        return StatusLineUpdate(sessionID: sessionID, sessionName: name, usage: usage, details: details(from: object))
+        let quota = object["product"] as? String == "antigravity" ? antigravityQuota(object["quota"]) : nil
+        return StatusLineUpdate(sessionID: sessionID, sessionName: name, usage: usage, antigravityQuota: quota, details: details(from: object))
     }
 
     private static func details(from object: [String: Any]) -> SessionDetails {
         let context = object["context_window"] as? [String: Any]
         let model = object["model"] as? [String: Any]
-        let effort = object["effort"] as? [String: Any]
+        let effort = string((object["effort"] as? [String: Any])?["level"]) ?? string(model?["effort"])
         return SessionDetails(
             contextPercentage: double(context?["used_percentage"]),
-            model: string(model?["display_name"]),
-            effort: string(effort?["level"]),
+            model: string(model?["display_name"]).map { SessionDetails.modelName($0, without: effort) },
+            effort: effort,
             fastMode: object["fast_mode"] as? Bool,
             worktree: worktree(from: object),
             pullRequest: pullRequest(from: object),
@@ -42,7 +46,7 @@ struct StatusLineUpdate: Sendable, Equatable {
     }
 
     private static func costUSD(from object: [String: Any]) -> Double? {
-        double(costObject(object)?["total_cost_usd"])
+        double(object["cost"]) ?? double(costObject(object)?["total_cost_usd"])
     }
 
     private static func linesAdded(from object: [String: Any]) -> Int? {
@@ -91,6 +95,15 @@ struct StatusLineUpdate: Sendable, Equatable {
         let resetsAt = (object["resets_at"] as? Double).flatMap { (1...1e11).contains($0) ? Date(timeIntervalSince1970: $0) : nil }
         return UsageWindow(utilization: used, resetsAt: resetsAt)
     }
+
+    private static func antigravityQuota(_ value: Any?) -> AntigravityQuota {
+        let buckets = (value as? [String: Any] ?? [:]).compactMap { name, value -> AntigravityQuota.Bucket? in
+            guard let object = value as? [String: Any], let remaining = double(object["remaining_fraction"]) else { return nil }
+            let resetsAt = string(object["reset_time"]).flatMap { try? Date($0, strategy: .iso8601) }
+            return AntigravityQuota.Bucket(name: name, window: UsageWindow(utilization: (1 - remaining) * 100, resetsAt: resetsAt))
+        }
+        return AntigravityQuota(buckets: buckets.sorted { $0.name < $1.name })
+    }
 }
 
 struct StatusLineInstaller: Sendable {
@@ -102,20 +115,35 @@ struct StatusLineInstaller: Sendable {
     }
 
     struct InvalidStatusLine: Error, LocalizedError {
-        var errorDescription: String? { "The statusLine setting in ~/.claude/settings.json is not an object" }
+        var settingsDescription: String
+        var errorDescription: String? { "The statusLine setting in \(settingsDescription) is not an object" }
     }
 
     static let scriptName = "islet-statusline.sh"
     static let originalName = "islet-statusline.original"
 
+    let agent: AgentSession.Agent
     let directory: URL
     let port: UInt16
     let token: String
 
+    init(agent: AgentSession.Agent = .claudeCode, directory: URL, port: UInt16, token: String) {
+        self.agent = agent
+        self.directory = directory
+        self.port = port
+        self.token = token
+    }
+
     var scriptURL: URL { directory.appending(path: Self.scriptName) }
     var originalURL: URL { directory.appending(path: Self.originalName) }
+    private var settingsDescription: String {
+        switch agent {
+        case .claudeCode, .codex: "~/\(directory.lastPathComponent)/settings.json"
+        case .antigravity: "~/.gemini/\(directory.lastPathComponent)/settings.json"
+        }
+    }
     private var settingsFile: SettingsFile {
-        SettingsFile(url: directory.appending(path: "settings.json"), description: "~/\(directory.lastPathComponent)/settings.json")
+        SettingsFile(url: directory.appending(path: "settings.json"), description: settingsDescription)
     }
     private var command: String {
         "'" + scriptURL.path.replacingOccurrences(of: "'", with: "'\\''") + "'"
@@ -129,7 +157,7 @@ struct StatusLineInstaller: Sendable {
         printf '%s' "$input" | curl -sf --connect-timeout 1 -m 2 -K /dev/fd/3 -X POST "http://127.0.0.1:\(port)\(HookServer.statusLinePath)" \\
           -H "Content-Type: application/json" \\
           -H "Expect:" \\
-          -H "X-Islet-Agent: \(AgentSession.Agent.claudeCode.rawValue)" \\
+          -H "X-Islet-Agent: \(agent.rawValue)" \\
           --data-binary @- >/dev/null 2>&1 3<<'ISLET_CONFIG' &
         header = "Authorization: Bearer \(token)"
         ISLET_CONFIG
@@ -163,7 +191,7 @@ struct StatusLineInstaller: Sendable {
 
     func install() throws {
         var settings = try settingsFile.read() ?? [:]
-        guard settings["statusLine"] == nil || settings["statusLine"] is [String: Any] else { throw InvalidStatusLine() }
+        guard settings["statusLine"] == nil || settings["statusLine"] is [String: Any] else { throw InvalidStatusLine(settingsDescription: settingsDescription) }
         var statusLine = settings["statusLine"] as? [String: Any] ?? [:]
         switch statusLine["command"] as? String {
         case let existing? where Self.isOwn(existing):

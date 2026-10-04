@@ -68,6 +68,39 @@ struct HookInstallerTests {
         let call = try String(contentsOf: capture, encoding: .utf8).components(separatedBy: "\n")
         #expect(call.contains("X-Islet-Agent: antigravity"))
         #expect(call.contains("X-Islet-Event: PostToolUse"))
+        #expect(call.contains("X-Islet-Branch: "))
+    }
+
+    @Test func antigravityScriptReportsTheWorkspaceBranchAtTurnBoundaries() throws {
+        let installer = try makeInstaller(agent: .antigravity)
+        try installer.install()
+        let workspace = installer.directory.appending(path: "work space")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        let git = Process()
+        git.executableURL = URL(filePath: "/usr/bin/git")
+        git.arguments = ["-C", workspace.path, "init", "-q", "-b", "feature/notch"]
+        try git.run()
+        git.waitUntilExit()
+        let capture = installer.directory.appending(path: "curl-call")
+        let fakeCurl = installer.directory.appending(path: "curl")
+        try "#!/bin/sh\nprintf '%s\\n' \"$@\" > '\(capture.path)'\n".write(to: fakeCurl, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeCurl.path)
+        for (event, branch) in [("PreInvocation", "feature/notch"), ("PostToolUse", "")] {
+            let process = Process()
+            process.executableURL = URL(filePath: "/bin/sh")
+            process.arguments = [installer.scriptURL.path, "2", event]
+            process.environment = ["PATH": installer.directory.path + ":/usr/bin:/bin"]
+            let input = Pipe()
+            process.standardInput = input
+            process.standardOutput = Pipe()
+            try process.run()
+            input.fileHandleForWriting.write(Data(#"{"conversationId":"a","workspacePaths":["\#(workspace.path)"]}"#.utf8))
+            try input.fileHandleForWriting.close()
+            process.waitUntilExit()
+            let call = try String(contentsOf: capture, encoding: .utf8).components(separatedBy: "\n")
+            #expect(call.contains("X-Islet-Branch: \(branch)"))
+        }
+        #expect(!(try makeInstaller().script.contains("X-Islet-Branch")))
     }
 
     @Test func scriptForwardsThePayloadWithTheSessionTitleFromItsTranscript() throws {

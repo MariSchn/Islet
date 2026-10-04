@@ -68,7 +68,7 @@ struct HookInstaller: Sendable {
           [ -n "$title" ] || title=$(printf '%s\\n' "$titles" | grep '^"aiTitle"' | tail -n 1)
           title=$(printf '%s' "$title" | sed 's/^"[A-Za-z]*":"//; s/"$//; s/\\\\"/"/g; s/\\\\\\\\/\\\\/g')
         fi
-        terminal="${__CFBundleIdentifier:-$TERM_PROGRAM}"
+        \(agent == .antigravity ? Self.antigravityBranchLines : "")terminal="${__CFBundleIdentifier:-$TERM_PROGRAM}"
         tty=""
         agent_pid=""
         pid=$$
@@ -104,7 +104,7 @@ struct HookInstaller: Sendable {
           -H "X-Islet-Tmux: $TMUX" \\
           -H "X-Islet-Tmux-Pane: $TMUX_PANE" \\
           -H "X-Islet-Title: $title" \\
-          --data-binary "@$body" \(agent == .antigravity ? ">/dev/null " : "")2>/dev/null <<'ISLET_CONFIG' &
+          \(agent == .antigravity ? "-H \"X-Islet-Branch: $branch\" \\\n  " : "")--data-binary "@$body" \(agent == .antigravity ? ">/dev/null " : "")2>/dev/null <<'ISLET_CONFIG' &
         header = "Authorization: Bearer \(token)"
         ISLET_CONFIG
         request=$!
@@ -115,6 +115,16 @@ struct HookInstaller: Sendable {
 
         """
     }
+
+    private static let antigravityBranchLines = """
+        branch=""
+        case "$event" in
+          PreInvocation|Stop)
+            workspace=$(printf '%s' "$payload" | sed -n 's/.*"workspacePaths":\\["\\([^"]*\\)".*/\\1/p')
+            [ -n "$workspace" ] && branch=$(git -C "$workspace" branch --show-current 2>/dev/null) ;;
+        esac
+
+        """
 
     func remoteInstallCommand(code: String) -> String {
         "curl -sf -H 'Authorization: Bearer \(code)' http://127.0.0.1:\(port)\(HookServer.installPath) | sh"

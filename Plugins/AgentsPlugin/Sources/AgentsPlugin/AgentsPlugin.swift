@@ -22,8 +22,8 @@ public final class AgentsPlugin: IsletPlugin {
     static let planHeight: CGFloat = 140
     static let maxContentHeight = 2 * contentPadding + CGFloat(maxVisibleRows) * rowHeight + CGFloat(maxVisibleRows - 1) * rowSpacing
 
-    static func contentSize(for sessions: [AgentSession], expanded: Set<String>, showsUsage: Bool, historyLength: Int) -> CGSize {
-        let usage = showsUsage ? usageBarHeight + rowSpacing : 0
+    static func contentSize(for sessions: [AgentSession], expanded: Set<String>, showsUsage: Bool, showsAntigravityQuota: Bool = false, historyLength: Int) -> CGSize {
+        let usage = CGFloat([showsUsage, showsAntigravityQuota].filter { $0 }.count) * (usageBarHeight + rowSpacing)
         guard !sessions.isEmpty else { return CGSize(width: contentWidth, height: emptyContentHeight + usage) }
         let rows = sessions.map { rowHeight(for: $0, expanded: expanded.contains($0.id), historyLength: historyLength) }.reduce(0, +) + CGFloat(sessions.count - 1) * rowSpacing
         return CGSize(width: contentWidth, height: min(2 * contentPadding + usage + rows, maxContentHeight + usage))
@@ -117,7 +117,7 @@ public final class AgentsPlugin: IsletPlugin {
         }
         context.derive(\.pillStatus) { controller.store.pillStatus(for: controller.display) }
         context.derive(\.contentSize) {
-            Self.contentSize(for: controller.store.orderedSessions, expanded: controller.expandedSessionIDs, showsUsage: controller.showsUsageBar, historyLength: controller.display.historyLength)
+            Self.contentSize(for: controller.store.orderedSessions, expanded: controller.expandedSessionIDs, showsUsage: controller.showsUsageBar, showsAntigravityQuota: controller.visibleAntigravityQuota != nil, historyLength: controller.display.historyLength)
         }
         var announcer = StatusAnnouncer()
         var contextAlert = ContextAlert()

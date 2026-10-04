@@ -33,10 +33,18 @@ struct AgentsSettings: View {
                 Text("Installing adds a small script to ~/.claude (registered in ~/.claude/settings.json) or ~/.codex (registered in ~/.codex/hooks.json) so the agent reports session activity to Islet; the files are reformatted. Already running sessions need to be restarted. Codex additionally needs the hooks feature enabled in ~/.codex/config.toml and the hooks trusted once via /hooks. Antigravity hooks go to ~/.gemini/config/hooks.json; Antigravity has no hook for permission prompts, so answer those in the terminal. Nothing leaves your Mac.")
             }
             Section {
-                StatusLineRow(state: controller.statusLineState, error: $error) {
+                StatusLineRow(title: "Claude Code status line", state: controller.statusLineState, error: $error) {
                     switch controller.statusLineState {
                     case .installed, .outdated: try controller.uninstallStatusLine()
                     case .notInstalled, .replaced: try controller.installStatusLine()
+                    }
+                }
+                if controller.isAntigravityAvailable {
+                    StatusLineRow(title: "Antigravity status line", state: controller.antigravityStatusLineState, error: $error) {
+                        switch controller.antigravityStatusLineState {
+                        case .installed, .outdated: try controller.uninstallStatusLine(for: .antigravity)
+                        case .notInstalled, .replaced: try controller.installStatusLine(for: .antigravity)
+                        }
                     }
                 }
                 if controller.statusLineState == .replaced {
@@ -54,7 +62,7 @@ struct AgentsSettings: View {
             } header: {
                 Text("Status line")
             } footer: {
-                Text("Claude Code passes its status line command the session name and your usage limits. Installing adds a small script to ~/.claude that forwards this data to Islet and then runs your own status line command, so Claude Code still shows the same status line. While any status line is configured, Claude Code hides its keyboard hints below the prompt. Removing restores your previous status line.")
+                Text("Claude Code passes its status line command the session name and your usage limits. Installing adds a small script to ~/.claude that forwards this data to Islet and then runs your own status line command, so Claude Code still shows the same status line. While any status line is configured, Claude Code hides its keyboard hints below the prompt. The Antigravity status line works the same way through ~/.gemini/antigravity-cli and adds the conversation title, model, context and weekly quota. Removing restores your previous status line.")
             }
             Section {
                 LabeledContent("Needs attention") {
@@ -110,7 +118,7 @@ struct AgentsSettings: View {
                 Text("The number of recent tool calls listed when a session is expanded.")
             }
             Section {
-                Toggle("Show Claude usage limits", isOn: $controller.showsUsage)
+                Toggle("Show usage limits", isOn: $controller.showsUsage)
                 if controller.showsUsage {
                     LabeledContent("Show") {
                         VStack(alignment: .leading) {
@@ -135,7 +143,7 @@ struct AgentsSettings: View {
             } header: {
                 Text("Usage")
             } footer: {
-                Text("Shows how much of the 5-hour and 7-day Claude quota is used above the session list. The numbers come from Claude Code's status line and update while you use Claude Code.")
+                Text("Shows how much of the 5-hour and 7-day Claude quota is used above the session list. The numbers come from Claude Code's status line and update while you use Claude Code. With the Antigravity status line installed, a second bar shows how much of Antigravity's weekly quota is used.")
             }
             Section {
                 CopyableCommand(title: "SSH config") { [snippet = controller.installer.sshConfigSnippet] in snippet }
@@ -190,6 +198,7 @@ private struct InstallRow: View {
 }
 
 private struct StatusLineRow: View {
+    let title: String
     let state: StatusLineInstaller.State
     @Binding var error: String?
     let perform: () throws -> Void
@@ -197,11 +206,11 @@ private struct StatusLineRow: View {
     var body: some View {
         switch state {
         case .installed, .outdated:
-            InstallRow(title: "Claude Code status line", status: "Installed", action: "Remove", error: $error, perform: perform)
+            InstallRow(title: title, status: "Installed", action: "Remove", error: $error, perform: perform)
         case .notInstalled:
-            InstallRow(title: "Claude Code status line", status: "Not installed", action: "Install", error: $error, perform: perform)
+            InstallRow(title: title, status: "Not installed", action: "Install", error: $error, perform: perform)
         case .replaced:
-            InstallRow(title: "Claude Code status line", status: "Replaced", action: "Reinstall", error: $error, perform: perform)
+            InstallRow(title: title, status: "Replaced", action: "Reinstall", error: $error, perform: perform)
         }
     }
 }

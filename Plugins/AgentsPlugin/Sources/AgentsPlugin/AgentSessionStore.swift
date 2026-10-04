@@ -121,6 +121,11 @@ final class AgentSessionStore {
         if let tmux = event.tmux { session.tmux = tmux }
         if let transcriptPath = event.transcriptPath { session.transcriptPath = transcriptPath }
         if let title = event.title, !session.hasStatusLineTitle { session.title = title }
+        if let model = event.model {
+            session.details.model = model
+            session.details.effort = event.effort
+        }
+        if let branch = event.branch { session.details.branch = branch }
         session.updatedAt = timestamp
         if event.toolName == "ExitPlanMode", let plan = event.toolInput?["plan"]?.stringValue {
             session.plan = plan

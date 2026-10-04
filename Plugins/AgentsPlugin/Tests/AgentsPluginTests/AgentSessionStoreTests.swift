@@ -17,6 +17,25 @@ struct AgentSessionStoreTests {
         #expect(store.sessions[0].tmux == second)
     }
 
+    @Test func antigravityHooksFillTheModelAndBranchUntilTheStatusLineRefinesThem() throws {
+        let store = AgentSessionStore()
+        var prompt = HookEvent(kind: .userPromptSubmit, sessionID: "c1", prompt: "go", agent: .antigravity)
+        prompt.model = "Gemini 3.8 Flash"
+        prompt.effort = "high"
+        prompt.branch = "main"
+        store.apply(prompt)
+        #expect(store.sessions[0].details.badgeText == "Gemini 3.8 Flash · high")
+        #expect(store.sessions[0].details.branch == "main")
+
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "c1", toolName: "view_file", agent: .antigravity))
+        #expect(store.sessions[0].details.branch == "main")
+        store.applyStatusLine(try StatusLineUpdate.decode(Data(#"{"session_id":"c1","product":"antigravity","conversation_title":"Fix it","context_window":{"used_percentage":12}}"#.utf8)))
+        #expect(store.sessions[0].title == "Fix it")
+        #expect(store.sessions[0].details.contextPercentage == 12)
+        #expect(store.sessions[0].details.branch == "main")
+        #expect(store.sessions[0].details.badgeText == "Gemini 3.8 Flash · high")
+    }
+
     @Test func recordsRecentToolCallsAndPlans() {
         let store = AgentSessionStore()
         let read = JSONValue.object(["file_path": .string("/a/b.swift")])
