@@ -142,6 +142,22 @@ struct IsletCommandTests {
         #expect(body(failed.calls[2]) == #"{"text":"tests failed (exit 3)","priority":"attention"}"#)
     }
 
+    @Test func runShortensLongCommandsToFitTheActivityText() throws {
+        let long = String(repeating: "x", count: 300)
+        let result = try Fixture().run(["run", "tests", "--", "sh", "-c", "exit 0", long])
+        #expect(body(result.calls[0]) == #"{"id":"tests","text":"Running sh","ttl":86400}"#)
+    }
+
+    @Test func installedCommandIsOutdatedWhenItsScriptChanged() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: "IsletCommandTests.outdated." + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let command = IsletCommand(port: 7777, tokenFile: directory.appending(path: "token"), directory: directory)
+        try command.install()
+        #expect(!command.isOutdated)
+        try (command.script + "# old\n").write(to: command.url, atomically: true, encoding: .utf8)
+        #expect(command.isOutdated)
+    }
+
     @Test func runStillRunsTheCommandWhenIsletIsNotAvailable() throws {
         let marker = FileManager.default.temporaryDirectory.appending(path: "IsletCommandTests.marker." + UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: marker) }

@@ -81,15 +81,18 @@ private struct TimersSection: View {
                 Spacer(minLength: 4)
                 Button { customMinutes = max(customMinutes - 1, 1) } label: { Image(systemName: "minus") }
                     .buttonStyle(RoundButtonStyle(size: 24))
+                    .accessibilityLabel("One minute less")
                 Text("\(customMinutes) min")
                     .font(.system(size: 13, weight: .medium).monospacedDigit())
                     .frame(minWidth: 44)
                     .fixedSize()
                 Button { customMinutes = min(customMinutes + 1, 180) } label: { Image(systemName: "plus") }
                     .buttonStyle(RoundButtonStyle(size: 24))
+                    .accessibilityLabel("One minute more")
                 Button { store.startTimer(minutes: customMinutes) } label: { Image(systemName: "play.fill") }
                     .buttonStyle(RoundButtonStyle(size: TimerPlugin.newTimerHeight, tint: Color(TimerStore.remainingTint)))
                     .help("Start timer")
+                    .accessibilityLabel("Start a \(customMinutes)-minute timer")
             }
             .frame(height: TimerPlugin.newTimerHeight)
             if !store.timers.isEmpty {
@@ -128,6 +131,7 @@ private struct TimerRow: View {
             }
             .buttonStyle(RoundButtonStyle(size: 24))
             .help(timer.isRunning ? "Pause" : "Resume")
+            .accessibilityLabel(timer.isRunning ? "Pause \(timer.label)" : "Resume \(timer.label)")
             Button {
                 store.cancel(timer.id)
             } label: {
@@ -135,6 +139,7 @@ private struct TimerRow: View {
             }
             .buttonStyle(RoundButtonStyle(size: 24))
             .help("Cancel")
+            .accessibilityLabel("Cancel \(timer.label)")
         }
         .padding(.horizontal, 10)
         .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
@@ -167,6 +172,7 @@ private struct StopwatchSection: View {
                 }
                 .buttonStyle(RoundButtonStyle(size: TimerPlugin.primaryButtonSize))
                 .help(isRunning ? "Stop" : "Start")
+                .accessibilityLabel(isRunning ? "Stop stopwatch" : "Start stopwatch")
                 Button {
                     store.resetStopwatch()
                 } label: {
@@ -174,6 +180,7 @@ private struct StopwatchSection: View {
                 }
                 .buttonStyle(RoundButtonStyle(size: TimerPlugin.secondaryButtonSize))
                 .help("Reset")
+                .accessibilityLabel("Reset stopwatch")
                 .disabled(!isRunning && store.stopwatch.accumulated == 0)
             }
             .frame(height: TimerPlugin.primaryButtonSize)
@@ -231,6 +238,7 @@ private struct PomodoroSection: View {
                 }
                 .buttonStyle(RoundButtonStyle(size: TimerPlugin.primaryButtonSize))
                 .help(isRunning ? "Pause" : "Start")
+                .accessibilityLabel(isRunning ? "Pause Pomodoro" : "Start Pomodoro")
                 Button {
                     store.stopPomodoro()
                 } label: {
@@ -238,6 +246,7 @@ private struct PomodoroSection: View {
                 }
                 .buttonStyle(RoundButtonStyle(size: TimerPlugin.secondaryButtonSize))
                 .help("Stop")
+                .accessibilityLabel("Stop Pomodoro")
                 .disabled(state == nil)
             }
             .frame(height: TimerPlugin.primaryButtonSize)

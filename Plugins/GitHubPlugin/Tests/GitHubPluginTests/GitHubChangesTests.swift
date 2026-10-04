@@ -91,7 +91,7 @@ struct GitHubChangesTests {
         #expect(info.priority == .info)
     }
 
-    @Test func announcesChangesBetweenPollsButNotAfterAnError() async throws {
+    @Test func announcesChangesAcrossAFailedPoll() async throws {
         let suite = "GitHubChangesTests." + UUID().uuidString
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -100,7 +100,7 @@ struct GitHubChangesTests {
 
         let pending = GitHubSnapshot(mine: [pullRequest(1, checks: .pending)], reviewRequested: [])
         let failing = GitHubSnapshot(mine: [pullRequest(1, checks: .failing)], reviewRequested: [])
-        let client = StubClient([.success(pending), .failure(.failed("down")), .success(failing), .success(pending), .success(failing)])
+        let client = StubClient([.success(pending), .failure(.failed("down")), .success(failing)])
         let registry = PluginRegistry(storageRoot: root, userDefaults: defaults)
         let entry = try await registry.register(manifest: GitHubPlugin.manifest) {
             GitHubPlugin(context: $0, client: client, networkUpdates: networkNeverChanges)
@@ -118,11 +118,6 @@ struct GitHubChangesTests {
         #expect(plugin.controller.phase == .failed("down"))
         await plugin.controller.refresh()
         #expect(plugin.controller.phase == .loaded(failing))
-        await plugin.controller.refresh()
-        #expect(plugin.controller.phase == .loaded(pending))
-        #expect(entry.context.announcement == nil)
-
-        await plugin.controller.refresh()
         try await waitFor { entry.context.announcement != nil }
         #expect(entry.context.announcement?.text == "app #1 checks failed")
         #expect(entry.context.announcement?.priority == .attention)

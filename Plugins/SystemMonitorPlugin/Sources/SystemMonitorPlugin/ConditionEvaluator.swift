@@ -104,7 +104,7 @@ struct ConditionEvaluator {
         case .warning: conditions.append(SystemCondition(kind: .memory, text: "Memory pressure high", priority: .info))
         case .critical: conditions.append(SystemCondition(kind: .memory, text: "Memory almost full", priority: .attention))
         }
-        if let battery = sample.battery, !battery.isCharging, battery.percent <= thresholds.batteryPercent {
+        if let battery = sample.battery, !battery.isCharging, !battery.isPluggedIn, battery.percent <= thresholds.batteryPercent {
             let priority: PillStatus.Priority = battery.percent <= thresholds.batteryAttentionPercent ? .attention : .info
             conditions.append(SystemCondition(kind: .battery, text: "Battery \(battery.percent)%", priority: priority))
         }

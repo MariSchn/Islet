@@ -3,7 +3,9 @@ import SwiftUI
 
 @MainActor
 public final class HelloPlugin: IsletPlugin {
-    public static let manifest = PluginManifest(id: "islet.hello", displayName: "Hello", systemImage: "hand.wave")
+    public static let manifest = PluginManifest(id: "com.example.hello", displayName: "Hello", systemImage: "hand.wave")
+    static let greetingKey = "greeting"
+    static let defaultGreeting = "Hello"
 
     private let context: PluginContext
 
@@ -20,24 +22,25 @@ public final class HelloPlugin: IsletPlugin {
     }
 
     public func makeSettingsView() -> AnyView? {
-        AnyView(HelloSettings(context: context))
+        AnyView(HelloSettings(settings: context.settings))
     }
 }
 
 private struct HelloSettings: View {
-    let context: PluginContext
-    @State private var greeting = ""
+    let settings: PluginSettings
 
     var body: some View {
         Form {
-            TextField("Greeting", text: $greeting)
-                .onChange(of: greeting) { context.settings.set(greeting, forKey: "greeting") }
+            TextField("Greeting", text: Binding(
+                get: { settings.value(forKey: HelloPlugin.greetingKey) ?? "" },
+                set: { settings.set($0.isEmpty ? nil : $0, forKey: HelloPlugin.greetingKey) }
+            ), prompt: Text(HelloPlugin.defaultGreeting))
         }
-        .onAppear { greeting = context.settings.value(forKey: "greeting") ?? "Hello" }
+        .formStyle(.grouped)
     }
 }
 
-private struct HelloScreen: View {
+struct HelloScreen: View {
     static let compactSize = CGSize(width: 400, height: 140)
     static let largeSize = CGSize(width: 640, height: 300)
 
@@ -49,7 +52,7 @@ private struct HelloScreen: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("\(context.settings.value(forKey: "greeting") ?? "Hello") from \(context.manifest.displayName)")
+            Text("\(context.settings.value(forKey: HelloPlugin.greetingKey) ?? HelloPlugin.defaultGreeting) from \(context.manifest.displayName)")
                 .font(.title3.weight(.semibold))
             Text("Pill: \(context.pillStatus?.text ?? "none")")
                 .foregroundStyle(.secondary)

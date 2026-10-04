@@ -11,6 +11,7 @@ let package = Package(
         .package(path: "../../Packages/IsletCore")
     ],
     targets: [
-        .target(name: "HelloPlugin", dependencies: ["IsletCore"])
+        .target(name: "HelloPlugin", dependencies: ["IsletCore"]),
+        .testTarget(name: "HelloPluginTests", dependencies: ["HelloPlugin"])
     ]
 )

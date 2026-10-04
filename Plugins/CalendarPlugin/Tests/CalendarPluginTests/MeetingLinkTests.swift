@@ -23,6 +23,7 @@ struct MeetingLinkTests {
 
     @Test func findsWebexLinks() {
         #expect(meetingLink(url: nil, location: "https://acme.webex.com/meet/jane", notes: nil)?.absoluteString == "https://acme.webex.com/meet/jane")
+        #expect(meetingLink(url: nil, location: nil, notes: "Help: https://help.webex.com/en-us/article/x then https://acme.webex.com/acme/j.php?MTID=m1")?.absoluteString == "https://acme.webex.com/acme/j.php?MTID=m1")
     }
 
     @Test func isCaseInsensitive() {

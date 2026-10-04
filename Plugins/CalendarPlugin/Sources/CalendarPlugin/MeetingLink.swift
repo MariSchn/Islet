@@ -6,7 +6,7 @@ private let meetingLinkExpression = try! NSRegularExpression(
         #"https://meet\.google\.com/[a-z]{3}-[a-z]{4}-[a-z]{3}"#,
         #"https://teams\.microsoft\.com/l/meetup-join/[^\s<>"]+"#,
         #"https://teams\.live\.com/meet/[^\s<>"]+"#,
-        #"https://([a-z0-9-]+\.)?webex\.com/[^\s<>"]+"#,
+        #"https://([a-z0-9-]+\.)?webex\.com/(meet/|join/|wbxmjs/|[a-z0-9-]+/j\.php)[^\s<>"]*"#,
     ].joined(separator: "|"),
     options: .caseInsensitive
 )

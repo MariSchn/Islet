@@ -5,9 +5,15 @@ import SwiftUI
 @MainActor
 final class EventKitSource: CalendarSource {
     private let store = EKEventStore()
+    private var lastStatus = EKEventStore.authorizationStatus(for: .event)
 
     var authorization: CalendarAuthorization {
-        switch EKEventStore.authorizationStatus(for: .event) {
+        let status = EKEventStore.authorizationStatus(for: .event)
+        if status != lastStatus {
+            lastStatus = status
+            store.reset()
+        }
+        return switch status {
         case .notDetermined: .notDetermined
         case .restricted: .restricted
         case .fullAccess: .fullAccess
@@ -43,7 +49,7 @@ final class EventKitSource: CalendarSource {
         let calendars = store.calendars(for: .event).filter { calendarIDs.contains($0.calendarIdentifier) }
         guard !calendars.isEmpty else { return [] }
         let predicate = store.predicateForEvents(withStart: start, end: end, calendars: calendars)
-        return store.events(matching: predicate).map { event in
+        return store.events(matching: predicate).filter(Self.isAttended).map { event in
             CalendarEvent(
                 identifier: event.eventIdentifier ?? event.calendarItemIdentifier,
                 title: event.title ?? "",
@@ -68,6 +74,10 @@ final class EventKitSource: CalendarSource {
             }
             continuation.onTermination = { _ in task.cancel() }
         }
+    }
+
+    private static func isAttended(_ event: EKEvent) -> Bool {
+        event.status != .canceled && event.attendees?.first(where: \.isCurrentUser)?.participantStatus != .declined
     }
 
     static func openPrivacySettings() {

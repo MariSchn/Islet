@@ -47,9 +47,9 @@ public final class GitHubPlugin: IsletPlugin {
         context.observe({ controller.showsPill }) { settings.set($0, forKey: Self.showsPillKey) }
         var previous: GitHubSnapshot?
         context.observe({ controller.phase }) { [unowned context] phase in
-            let current = phase.snapshot
+            guard let current = phase.snapshot else { return }
             defer { previous = current }
-            if let current, let announcement = GitHubChanges.announcement(from: previous, to: current) {
+            if let announcement = GitHubChanges.announcement(from: previous, to: current) {
                 context.announce(announcement)
             }
         }

@@ -105,7 +105,7 @@ private struct TopProcesses: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Text("Top processes")
+            Text("Your top processes")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, minHeight: SystemMonitorPlugin.processHeaderHeight, maxHeight: SystemMonitorPlugin.processHeaderHeight, alignment: .bottomLeading)

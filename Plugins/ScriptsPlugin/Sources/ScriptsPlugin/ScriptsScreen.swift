@@ -64,6 +64,7 @@ private struct ScriptActivityRow: View {
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
             .help("Remove")
+            .accessibilityLabel("Remove")
         }
         .frame(height: ScriptsPlugin.rowHeight)
     }

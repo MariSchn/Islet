@@ -79,6 +79,7 @@ schemes:
       targets:
         - package: IsletCore/IsletCoreTests
         - package: IsletHost/IsletHostTests
+        - package: HelloPlugin/HelloPluginTests
         - package: ShelfPlugin/ShelfPluginTests
         - package: MediaPlugin/MediaPluginTests
         - package: AgentsPlugin/AgentsPluginTests

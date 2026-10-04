@@ -22,6 +22,10 @@ struct IsletCommand: Sendable, Equatable {
         (try? String(contentsOf: url, encoding: .utf8))?.contains(Self.marker) == true
     }
 
+    var isOutdated: Bool {
+        isInstalled && (try? String(contentsOf: url, encoding: .utf8)) != script
+    }
+
     func install() throws {
         if FileManager.default.fileExists(atPath: url.path), !isInstalled {
             throw CocoaError(.fileWriteFileExists, userInfo: [NSLocalizedDescriptionKey: "\(url.path) already exists and was not installed by Islet."])
@@ -180,11 +184,16 @@ struct IsletCommand: Sendable, Equatable {
             check_id "$1"
             id="$1"
             shift 2
-            call POST /activity "{\"id\":\"$id\",\"text\":\"$(escape "Running $*")\",\"ttl\":86400}"
+            text="Running $*"
+            [ "${#text}" -le 200 ] || text="Running $1"
+            [ "${#text}" -le 200 ] || text="Running a command"
+            call POST /activity "{\"id\":\"$id\",\"text\":\"$(escape "$text")\",\"ttl\":86400}"
             trap : INT
+            trap 'call DELETE "/activity/$id"; exit 129' HUP
+            trap 'call DELETE "/activity/$id"; exit 143' TERM
             "$@"
             code=$?
-            trap - INT
+            trap - INT HUP TERM
             call DELETE "/activity/$id"
             if [ "$code" -eq 0 ]; then
               call POST /announce "{\"text\":\"$(escape "$id finished")\"}"

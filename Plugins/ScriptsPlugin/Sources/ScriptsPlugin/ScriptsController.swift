@@ -43,6 +43,9 @@ final class ScriptsController {
 
     func start() async {
         writeTokenFile()
+        if command.isOutdated {
+            installCommand()
+        }
         api.isAccepting = true
         do {
             let api = api

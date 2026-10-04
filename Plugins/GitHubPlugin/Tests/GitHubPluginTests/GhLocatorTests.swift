@@ -51,7 +51,7 @@ struct GhLocatorTests {
         #expect(await locator.locate()?.path == "/custom/gh")
         #expect(await locator.locate()?.path == "/custom/gh")
         #expect(probe.shellCalls.withLock { $0 } == 1)
-        #expect(probe.checks.withLock { $0 } == ["/opt/homebrew/bin/gh", "/usr/local/bin/gh", "/custom/gh", "/opt/homebrew/bin/gh", "/usr/local/bin/gh", "/custom/gh"])
+        #expect(probe.checks.withLock { $0 } == GhLocator.candidates + ["/custom/gh"] + GhLocator.candidates + ["/custom/gh"])
     }
 
     @Test func cachesAMissingResultToo() async {
