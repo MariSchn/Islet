@@ -32,9 +32,13 @@ public final class MediaPlugin: IsletPlugin {
 
     public init(context: PluginContext) {
         self.context = context
-        player = MediaPlayer(setting: context.settings.value(forKey: Self.playerKey))
+        let stored = MediaPlayer(setting: context.settings.value(forKey: Self.playerKey))
+        player = MediaPlayer.offered().contains(stored) ? stored : .automatic
         let controller = MediaController(sources: player.makeSources(), showsPill: context.settings.value(forKey: Self.showsPillKey) ?? true)
         self.controller = controller
+        controller.onCommandError = { [unowned context] message in
+            context.announce(PillAnnouncement(text: message, systemImage: "exclamationmark.triangle.fill"))
+        }
         context.derive(\.pillStatus) { controller.pillStatus }
         context.derive(\.contentSize) {
             Self.contentSize(isBrowsing: controller.isBrowsingPlaylists, playlistCount: controller.playlists.count)

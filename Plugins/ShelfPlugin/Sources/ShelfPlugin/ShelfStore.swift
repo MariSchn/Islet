@@ -47,7 +47,16 @@ final class ShelfStore {
         if changed {
             save()
         }
+        removeOrphanedCopies()
         refreshReachability()
+    }
+
+    private func removeOrphanedCopies() {
+        let owned = Set(items.filter(\.ownsFile).map(\.id.uuidString))
+        let folders = (try? FileManager.default.contentsOfDirectory(at: directory.appending(path: "Items"), includingPropertiesForKeys: nil)) ?? []
+        for folder in folders where !owned.contains(folder.lastPathComponent) {
+            try? FileManager.default.removeItem(at: folder)
+        }
     }
 
     @discardableResult
@@ -92,7 +101,6 @@ final class ShelfStore {
                 ShelfItem(url: item.source)
             }
         }
-        guard !added.isEmpty else { return [] }
         items.insert(contentsOf: added, at: 0)
         save()
         return added
@@ -125,8 +133,8 @@ final class ShelfStore {
     }
 
     @discardableResult
-    func addImage(pngData: Data, date: Date = .now) -> ShelfItem? {
-        addOwned(data: pngData, fileName: ShelfItemNaming.imageFileName(date: date), kind: .image, title: nil)
+    func addImage(data: Data, fileExtension: String = "png", date: Date = .now) -> ShelfItem? {
+        addOwned(data: data, fileName: ShelfItemNaming.imageFileName(date: date, fileExtension: fileExtension), kind: .image, title: nil)
     }
 
     private func addOwned(data: Data, fileName: String, kind: ShelfItemKind, title: String?) -> ShelfItem? {
