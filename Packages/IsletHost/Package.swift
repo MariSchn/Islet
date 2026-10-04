@@ -11,11 +11,7 @@ let package = Package(
         .package(path: "../IsletCore")
     ],
     targets: [
-        .target(
-            name: "CSkyLight",
-            linkerSettings: [.unsafeFlags(["-F/System/Library/PrivateFrameworks", "-framework", "SkyLight"])]
-        ),
-        .target(name: "IsletHost", dependencies: ["IsletCore", "CSkyLight"]),
+        .target(name: "IsletHost", dependencies: ["IsletCore"]),
         .testTarget(name: "IsletHostTests", dependencies: ["IsletHost", .product(name: "IsletTestSupport", package: "IsletCore")])
     ]
 )

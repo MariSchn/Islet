@@ -129,6 +129,24 @@ struct PluginRegistryTests {
         #expect(second.selectedID == "test.second")
     }
 
+    @Test func theSavedSelectionSurvivesPluginsThatRegisterBeforeIt() async throws {
+        let first = harness.makeRegistry()
+        try await harness.registerStub(in: first)
+        try await harness.registerSecond(in: first)
+        first.select("test.second")
+
+        let second = harness.makeRegistry()
+        try await harness.registerStub(in: second)
+        #expect(second.selectedID == "test.stub")
+        try await harness.registerSecond(in: second)
+        #expect(second.selectedID == "test.second")
+
+        let third = harness.makeRegistry()
+        try await harness.registerStub(in: third)
+        try await harness.registerSecond(in: third)
+        #expect(third.selectedID == "test.second")
+    }
+
     @Test func selectRejectsDisabledOrUnknownPlugins() async throws {
         let registry = harness.makeRegistry()
         try await harness.registerStub(in: registry)

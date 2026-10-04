@@ -1,6 +1,6 @@
 # API reference
 
-Everything below is in the `IsletCore` module (`Packages/IsletCore/Sources/IsletCore`). All plugin-facing types that hold state are `@MainActor`. `IsletCore` contains only what plugins build against; the notch windows, views and settings window live in `IsletHost`, which plugins don't import.
+Everything below is in the `IsletCore` module (`Packages/IsletCore/Sources/IsletCore`). All plugin-facing types that hold state are `@MainActor`. The notch windows, views and settings window live in `IsletHost`, which plugins don't import. A few public members of `PluginRegistry` exist for the host and are not meant for plugins.
 
 ## IsletPlugin
 
@@ -105,7 +105,7 @@ public final class PluginContext {
 | `logger` | An `os.Logger` with the app's subsystem and the plugin id as its category, so the plugin's messages can be filtered in Console. |
 | `pillStatus` | What the closed notch shows for this plugin, or `nil` for nothing. See [Collapsed pill](collapsed-pill.md). |
 | `contentSize` | The size the expanded notch should give your screen, or `nil` for the default. See [Sizing](sizing.md). |
-| `isScreenVisible` | `true` while the notch is open on this plugin. Use it to do expensive work, such as frequent polling, only while the screen is seen. |
+| `isScreenVisible` | `true` while the notch is open on this plugin. Use it to do expensive work, such as frequent polling, only while the screen is seen. While the notch is open, the screens of the neighbouring plugins stay in the view hierarchy for the switch animation, so `onAppear` and `.task` are not a reliable signal for this. |
 | `announcement`, `announce(_:)` | A short line shown once below the closed notch. See [Announcements](collapsed-pill.md#announcements). |
 | `derive(_:from:)` | Keeps `pillStatus` or `contentSize` equal to a value computed from observable state. See [Deriving state](#deriving-state). |
 | `observe(_:initial:onChange:)` | Calls `onChange` whenever the observed value changes, and once with the current value when `initial` is `true`. See [Deriving state](#deriving-state). |
@@ -136,7 +136,7 @@ The value is applied while the plugin is active: right after `activate()` return
 @Observable
 public final class PluginSettings {
     public func value<T>(forKey key: String) -> T?
-    public func set(_ value: (some Any)?, forKey key: String)
+    public func set(_ value: (some PluginSettingsValue)?, forKey key: String)
 }
 ```
 

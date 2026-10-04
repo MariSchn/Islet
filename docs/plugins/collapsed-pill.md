@@ -68,7 +68,7 @@ Use `.attention` and `.urgent` sparingly: they override the user's choice of whi
 
 The host considers every enabled plugin with a non-nil `pillStatus`:
 
-1. If any pill has priority `.attention` or higher, the one with the highest priority is shown. On a tie, the plugin registered first wins.
+1. If any pill has priority `.attention` or higher, the one with the highest priority is shown. On a tie, the plugin that comes first in the user's plugin order wins.
 2. Otherwise the user's choice under Settings › Notch › Collapsed Pill (`PillSelection`) decides:
    - **Last viewed plugin** (`lastViewed`, the default): the plugin that was open when the notch collapsed. If it has no pill, the most important pill is shown instead, and the notch keeps showing that plugin until its pill becomes `nil` or the notch is opened again.
    - **Latest activity** (`latestActivity`): the plugin whose activity started most recently.

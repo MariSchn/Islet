@@ -6,11 +6,11 @@
 
 ```swift
 public func value<T>(forKey key: String) -> T?
-public func set(_ value: (some Any)?, forKey key: String)
+public func set(_ value: (some PluginSettingsValue)?, forKey key: String)
 ```
 
 - Values are stored in `UserDefaults.standard` under `plugin.<id>.<key>`, so keys only need to be unique within your plugin.
-- Use property-list types: `Bool`, `Int`, `Double`, `String`, `Data`, `Date`, and arrays or dictionaries of these. `value(forKey:)` returns `nil` when the key is missing or the stored value is not of type `T`, so the type has to be known from context: `let step: Int? = context.settings.value(forKey: "step")`, or `?? default` in a typed position.
+- Values are property-list types: `Bool`, `Int`, `Double`, `String`, `Data`, `Date`, and arrays or `[String: …]` dictionaries of these, which is what `PluginSettingsValue` covers. Store an enum through its `rawValue`. `value(forKey:)` returns `nil` when the key is missing or the stored value is not of type `T`, so the type has to be known from context: `let step: Int? = context.settings.value(forKey: "step")`, or `?? default` in a typed position.
 - Setting `nil` removes the key. Because the parameter is generic, a bare `nil` literal doesn't compile; spell out the type, as in `context.settings.set(String?.none, forKey: "greeting")`.
 - `PluginSettings` is `@Observable`. A SwiftUI view that reads a value in its `body` updates when any value of the plugin changes.
 - Settings are not affected by resetting all settings in the General tab, and they survive disabling the plugin.
