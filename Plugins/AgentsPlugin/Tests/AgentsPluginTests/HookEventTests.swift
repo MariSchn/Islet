@@ -68,6 +68,21 @@ struct HookEventTests {
         #expect(try HookEvent.decode(payload, pid: "12; rm").pid == nil)
     }
 
+    @Test func decodesTheModelAndRecognizesGeminiSessions() throws {
+        let event = try HookEvent.decode(Data(#"{"session_id":"a","hook_event_name":"SessionStart","model":"gemini-3-pro"}"#.utf8), agent: "codex")
+        #expect(event.model == "gemini-3-pro")
+        var session = AgentSession(id: "a", agent: .codex, state: .starting, startedAt: .now, turnStartedAt: .now, updatedAt: .now)
+        #expect(!session.isGeminiModel)
+        session.details.model = "Gemini 3 Pro"
+        #expect(session.isGeminiModel)
+    }
+
+    @Test func takesTheBranchFromTheHeader() throws {
+        let data = Data(#"{"session_id":"a","hook_event_name":"Stop"}"#.utf8)
+        #expect(try HookEvent.decode(data, branch: "main").branch == "main")
+        #expect(try HookEvent.decode(data, branch: "").branch == nil)
+    }
+
     @Test func decodesUnknownEventsAsOther() throws {
         #expect(try HookEvent.decode(Data(#"{"session_id":"a","hook_event_name":"Nope"}"#.utf8)).kind == .other)
     }

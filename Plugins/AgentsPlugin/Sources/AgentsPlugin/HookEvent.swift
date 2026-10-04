@@ -24,6 +24,7 @@ struct HookEvent: Sendable, Equatable, Decodable {
     var sessionID: String
     var cwd: String?
     var transcriptPath: String?
+    var model: String?
     var toolName: String?
     var toolInput: JSONValue?
     var prompt: String?
@@ -43,12 +44,14 @@ struct HookEvent: Sendable, Equatable, Decodable {
     var pid: Int32?
     var tmux: TmuxLocation?
     var title: String?
+    var branch: String?
 
     private enum CodingKeys: String, CodingKey {
         case kind = "hook_event_name"
         case sessionID = "session_id"
         case cwd
         case transcriptPath = "transcript_path"
+        case model
         case toolName = "tool_name"
         case toolInput = "tool_input"
         case prompt
@@ -96,6 +99,7 @@ struct HookEvent: Sendable, Equatable, Decodable {
         sessionID = try container.decode(String.self, forKey: .sessionID)
         cwd = try container.decodeIfPresent(String.self, forKey: .cwd)
         transcriptPath = try container.decodeIfPresent(String.self, forKey: .transcriptPath)
+        model = try? container.decodeIfPresent(String.self, forKey: .model)
         toolName = try container.decodeIfPresent(String.self, forKey: .toolName)
         toolInput = try container.decodeIfPresent(JSONValue.self, forKey: .toolInput)
         prompt = try container.decodeIfPresent(String.self, forKey: .prompt)
@@ -111,7 +115,7 @@ struct HookEvent: Sendable, Equatable, Decodable {
         title = (try? container.decodeIfPresent(String.self, forKey: .title)).flatMap { $0.isEmpty ? nil : $0 }
     }
 
-    static func decode(_ data: Data, agent: String? = nil, host: String? = nil, terminal: String? = nil, tty: String? = nil, pid: String? = nil, tmux: String? = nil, tmuxPane: String? = nil, title: String? = nil) throws -> HookEvent {
+    static func decode(_ data: Data, agent: String? = nil, host: String? = nil, terminal: String? = nil, tty: String? = nil, pid: String? = nil, tmux: String? = nil, tmuxPane: String? = nil, title: String? = nil, branch: String? = nil) throws -> HookEvent {
         var event = try JSONDecoder().decode(HookEvent.self, from: data)
         event.agent = agent.flatMap(AgentSession.Agent.init(rawValue:)) ?? .claudeCode
         event.host = host
@@ -120,6 +124,7 @@ struct HookEvent: Sendable, Equatable, Decodable {
         event.pid = pid.flatMap { Int32($0) }.flatMap { $0 > 1 ? $0 : nil }
         if let tmux, let tmuxPane { event.tmux = TmuxLocation(environment: tmux, pane: tmuxPane) }
         event.title = title.flatMap { $0.isEmpty ? nil : $0 } ?? event.title
+        event.branch = branch.flatMap { $0.isEmpty ? nil : $0 }
         return event
     }
 

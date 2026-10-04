@@ -17,6 +17,59 @@ struct AgentSessionStoreTests {
         #expect(store.sessions[0].tmux == second)
     }
 
+    @Test func showsTheHookModelOnlyForCodexSessions() {
+        let store = AgentSessionStore()
+        var codex = HookEvent(kind: .userPromptSubmit, sessionID: "c", prompt: "go", agent: .codex)
+        codex.model = "gpt-5.5"
+        store.apply(codex)
+        var claude = HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "go")
+        claude.model = "claude-opus-5-5"
+        store.apply(claude)
+        #expect(store.sessions.first { $0.id == "c" }?.details.model == "gpt-5.5")
+        #expect(store.sessions.first { $0.id == "a" }?.details.model == nil)
+    }
+
+    @Test func codexQuestionsNeedAttentionUntilTheNextPrompt() {
+        let store = AgentSessionStore()
+        let input = JSONValue.object(["questions": .array([.object(["title": .string("Indices or values?"), "options": .array([.string("Indices"), .string("Values")])])])])
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "c", prompt: "go", agent: .codex))
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "c", toolName: "request_user_input_async", toolInput: input, agent: .codex))
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "c", toolName: "request_user_input_async", toolInput: input, agent: .codex))
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "c", toolName: "request_user_input_async", toolInput: input, agent: .codex))
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "c", toolName: "Bash", toolInput: .object(["command": .string("ls")]), agent: .codex))
+        store.apply(HookEvent(kind: .stop, sessionID: "c", agent: .codex))
+        let request = store.sessions[0].pendingRequests
+        #expect(request.count == 1)
+        #expect(request.first?.kind == .question([PendingRequest.Question(text: "Indices or values?", options: [.init(label: "Indices"), .init(label: "Values")])]))
+        #expect(request.first?.isAnswerable == false)
+        #expect(store.sessions[0].state == .needsAttention("Has a question"))
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "c", prompt: "Indices", agent: .codex))
+        #expect(store.sessions[0].pendingRequests.isEmpty)
+        #expect(store.sessions[0].state == .working)
+    }
+
+    @Test func codexPermissionRequestsComeBeforeAPendingQuestion() {
+        let store = AgentSessionStore()
+        let input = JSONValue.object(["questions": .array([.object(["title": .string("Free-form?")])])])
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "c", toolName: "request_user_input_async", toolInput: input, agent: .codex))
+        store.apply(HookEvent(kind: .permissionRequest, sessionID: "c", toolName: "shell", toolInput: .object(["command": .array([.string("ls")])]), agent: .codex))
+        #expect(store.sessions[0].pendingRequests.count == 2)
+        #expect(store.sessions[0].pendingRequest?.isAnswerable == true)
+        #expect(store.sessions[0].state == .needsAttention("Wants to $ ls"))
+        store.apply(HookEvent(kind: .stopFailure, sessionID: "c", error: "rate_limit", agent: .codex))
+        #expect(store.sessions[0].state.isFailed)
+    }
+
+    @Test func answeredSynchronousCodexQuestionsAreWithdrawn() {
+        let store = AgentSessionStore()
+        let input = JSONValue.object(["questions": .array([.object(["id": .string("q"), "header": .string("Lang"), "question": .string("Which?"), "options": .array([.object(["label": .string("Swift")])])])])])
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "c", toolName: "request_user_input", toolInput: input, agent: .codex))
+        #expect(store.sessions[0].state == .needsAttention("Has a question"))
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "c", toolName: "request_user_input", toolInput: input, agent: .codex))
+        #expect(store.sessions[0].pendingRequests.isEmpty)
+        #expect(store.sessions[0].state == .working)
+    }
+
     @Test func recordsRecentToolCallsAndPlans() {
         let store = AgentSessionStore()
         let read = JSONValue.object(["file_path": .string("/a/b.swift")])
