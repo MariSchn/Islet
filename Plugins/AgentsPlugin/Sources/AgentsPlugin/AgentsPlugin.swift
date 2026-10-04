@@ -110,9 +110,7 @@ public final class AgentsPlugin: IsletPlugin {
         display.historyLength = settings.value(forKey: Self.historyLengthKey) ?? display.historyLength
         let controller = AgentsController(
             token: token,
-            claudeDirectory: URL.homeDirectory.appending(path: ".claude", directoryHint: .isDirectory),
-            codexDirectory: URL.homeDirectory.appending(path: ".codex", directoryHint: .isDirectory),
-            antigravityDirectory: URL.homeDirectory.appending(path: ".gemini/config", directoryHint: .isDirectory),
+            home: URL.homeDirectory,
             alerts: Self.load(AlertSettings(), Self.alertKeys, from: settings),
             display: display,
             showsUsage: settings.value(forKey: Self.usageKey) ?? false,

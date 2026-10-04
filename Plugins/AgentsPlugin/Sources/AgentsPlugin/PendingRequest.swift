@@ -43,7 +43,7 @@ struct PendingRequest: Sendable, Equatable, Identifiable {
         self.toolInput = toolInput
         self.agentType = agentType
         switch toolName {
-        case "AskUserQuestion", _ where Self.codexQuestionTools.contains(toolName):
+        case _ where toolName == "AskUserQuestion" || Self.codexQuestionTools.contains(toolName):
             guard let questions = Self.questions(from: toolInput, requiresOptions: toolName == "AskUserQuestion"), !questions.isEmpty else { return nil }
             kind = .question(questions)
             alwaysAllowRule = nil

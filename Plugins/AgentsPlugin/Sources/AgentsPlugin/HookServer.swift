@@ -105,8 +105,4 @@ struct HookReply: Sendable, Equatable {
     static let empty = HookReply(body: "{}")
 
     var body: String
-
-    init(body: String) {
-        self.body = body
-    }
 }

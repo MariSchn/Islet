@@ -413,7 +413,7 @@ struct AgentSessionStoreTests {
         #expect(store.sessions.first { $0.id == "bg" }?.task == "Research something on the web")
 
         store.apply(HookEvent(kind: .sessionStart, sessionID: "hidden-bg", cwd: "/p", transcriptPath: "/t/bg.jsonl", source: "fork", host: "mac", pid: 11))
-        try await Task.sleep(for: .milliseconds(100))
+        try await waitUntil { store.snapshot().hiddenSessions.first { $0.id == "hidden-bg" }?.task != nil }
         store.apply(HookEvent(kind: .preToolUse, sessionID: "hidden-bg", toolName: "Read", host: "mac", pid: 11))
         #expect(store.sessions.first { $0.id == "hidden-bg" }?.task == "Research something on the web")
 
