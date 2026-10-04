@@ -3,7 +3,7 @@ import SwiftUI
 
 @MainActor
 public final class SystemMonitorPlugin: IsletPlugin {
-    public static let manifest = PluginManifest(id: "islet.system", displayName: "System", systemImage: "gauge.with.dots.needle.67percent")
+    public static let manifest = PluginManifest(id: "islet.system", displayName: "System", systemImage: "gauge.with.dots.needle.67percent", summary: "CPU, memory, network, disk and battery at a glance.", tint: .green)
     static let contentWidth: CGFloat = 420
     static let contentPadding: CGFloat = 12
     static let rowHeight: CGFloat = 28
@@ -84,38 +84,61 @@ public final class SystemMonitorPlugin: IsletPlugin {
     }
 }
 
+private struct ValueStepper: View {
+    let title: String
+    @Binding var value: Int
+    let range: ClosedRange<Int>
+    let step: Int
+    let unit: String
+
+    init(_ title: String, value: Binding<Int>, in range: ClosedRange<Int>, step: Int, unit: String) {
+        self.title = title
+        self._value = value
+        self.range = range
+        self.step = step
+        self.unit = unit
+    }
+
+    var body: some View {
+        LabeledContent(title) {
+            Stepper(value: $value, in: range, step: step) {
+                Text("\(value) \(unit)")
+                    .monospacedDigit()
+            }
+        }
+    }
+}
+
 private struct SystemSettings: View {
     @Bindable var monitor: SystemMonitor
 
     var body: some View {
-        Form {
-            Section {
-                ForEach(SystemRow.allCases) { row in
-                    Toggle(row.title, isOn: binding(for: row))
-                }
-            } header: {
-                Text("Rows")
-            } footer: {
-                Text("The battery row only appears on Macs with a battery.")
+        Section {
+            ForEach(SystemRow.allCases) { row in
+                Toggle(row.title, isOn: binding(for: row))
             }
-            Section {
-                Toggle("Always show CPU in the closed notch", isOn: $monitor.alwaysShowsCPU)
-            } header: {
-                Text("Closed notch")
-            } footer: {
-                Text("Otherwise the closed notch only shows system information when one of the alerts below is active.")
-            }
-            Section {
-                Stepper("CPU above \(monitor.thresholds.cpuPercent)%", value: $monitor.thresholds.cpuPercent, in: 50...95, step: 5)
-                Stepper("for \(monitor.thresholds.cpuSeconds) seconds", value: $monitor.thresholds.cpuSeconds, in: 5...300, step: 5)
-                Stepper("Battery at or below \(monitor.thresholds.batteryPercent)%", value: batteryPercent, in: 5...50, step: 5)
-                Stepper("Needs attention at or below \(monitor.thresholds.batteryAttentionPercent)%", value: batteryAttentionPercent, in: 5...50, step: 5)
-                Stepper("Startup disk below \(monitor.thresholds.diskFreeGigabytes) GB free", value: $monitor.thresholds.diskFreeGigabytes, in: 1...500)
-            } header: {
-                Text("Alerts")
-            } footer: {
-                Text("Memory pressure and a hot Mac always count as alerts. Each alert is announced once when it starts, and again only after it has been clear for a minute.")
-            }
+        } header: {
+            Text("Show")
+        } footer: {
+            Text("Battery only appears on Macs with a battery.")
+        }
+        Section {
+            Toggle("Always show CPU usage", isOn: $monitor.alwaysShowsCPU)
+        } header: {
+            Text("Collapsed Notch")
+        } footer: {
+            Text("Otherwise the collapsed notch only shows system information while an alert is active.")
+        }
+        Section {
+            ValueStepper("CPU usage above", value: $monitor.thresholds.cpuPercent, in: 50...95, step: 5, unit: "%")
+            ValueStepper("for at least", value: $monitor.thresholds.cpuSeconds, in: 5...300, step: 5, unit: "s")
+            ValueStepper("Battery at or below", value: batteryPercent, in: 5...50, step: 5, unit: "%")
+            ValueStepper("Urgent at or below", value: batteryAttentionPercent, in: 5...50, step: 5, unit: "%")
+            ValueStepper("Free disk space below", value: $monitor.thresholds.diskFreeGigabytes, in: 1...500, step: 1, unit: "GB")
+        } header: {
+            Text("Alerts")
+        } footer: {
+            Text("High memory pressure and a hot Mac always raise an alert. Each alert is announced once, and again only after it has been clear for a minute.")
         }
     }
 

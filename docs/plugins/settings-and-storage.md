@@ -17,11 +17,11 @@ public func set(_ value: (some PluginSettingsValue)?, forKey key: String)
 
 For anything more than a few flags, or for state that isn't a preference, write a file to the [storage directory](#storage-directory) instead.
 
-## Settings pane
+## Settings page
 
-Return a view from `makeSettingsView()` to get a tab under "Plugin Settings" in the settings window's sidebar. The tab shows your `displayName` and `systemImage`, and it is only listed while the plugin is enabled.
+Every plugin gets a page in the settings window's sidebar, with its icon, `displayName` and `summary` at the top and a switch to turn it on or off. Return a view from `makeSettingsView()` to add your own settings below that switch. They are shown while the plugin is enabled.
 
-The host places your view below a header with the plugin's icon, name and a one-line description, and applies `.formStyle(.grouped)`, so a `Form` with `Section`s matches the rest of the window:
+Return the `Section`s themselves, not a `Form`: the host already places them in a grouped `Form`, so they match the rest of the window:
 
 ```swift
 public func makeSettingsView() -> AnyView? {
@@ -39,12 +39,20 @@ private struct CounterSettings: View {
     }
 
     var body: some View {
-        Form {
-            Stepper("Step: \(step.wrappedValue)", value: step, in: 1...10)
+        Section {
+            LabeledContent("Step") {
+                Stepper("\(step.wrappedValue)", value: step, in: 1...10)
+            }
+        } header: {
+            Text("Counting")
+        } footer: {
+            Text("How much each click adds.")
         }
     }
 }
 ```
+
+Give each section a header, keep footers to one or two sentences, and put the current value next to a stepper rather than into its label.
 
 Like the screen, the settings view is built once and cached, so it has to read live state rather than capture it.
 

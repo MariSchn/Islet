@@ -110,6 +110,13 @@ public final class PluginRegistry {
         userDefaults.set(ids, forKey: orderKey)
     }
 
+    public func move(fromOffsets source: IndexSet, toOffset destination: Int) {
+        var ids = orderedEntries.map(\.id)
+        ids.move(fromOffsets: source, toOffset: destination)
+        order = ids
+        userDefaults.set(ids, forKey: orderKey)
+    }
+
     public func activePill(_ selection: PillSelection, keeping heldID: String? = nil) -> PillStatus? {
         pillOwner(selection, keeping: heldID).flatMap { entry(for: $0)?.context.pillStatus }
     }

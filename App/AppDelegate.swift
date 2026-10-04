@@ -32,6 +32,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let examplePlugins: [any IsletPlugin.Type] = []
     #endif
     private static let terminationTimeout: Duration = .seconds(2)
+    private static let sourceURL = URL(string: "https://github.com/MariSchn/Islet")!
+    private static let hasLaunchedKey = "islet.hasLaunched"
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Islet", category: "app")
 
     let settings = AppSettings(defaults: .standard)
@@ -43,17 +45,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     private var statusItem: NSStatusItem?
     private var registration: Task<Void, Never>?
-    private lazy var settingsWindow = SettingsWindowController(settings: settings, registry: registry)
+    private let updater = SparkleUpdater()
+    private lazy var settingsWindow = SettingsWindowController(settings: settings, registry: registry, info: AppInfo(sourceURL: Self.sourceURL), updater: updater)
     private lazy var hotKey = GlobalHotKey { [unowned self] in
         displays.toggleNotch(at: NSEvent.mouseLocation)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.mainMenu = makeMainMenu()
         displays.start()
         observeMenuBarIconSetting()
         observeShortcutSetting()
         registration = Task { @MainActor in
             await registerBuiltInPlugins()
+        }
+        if !UserDefaults.standard.bool(forKey: Self.hasLaunchedKey) {
+            UserDefaults.standard.set(true, forKey: Self.hasLaunchedKey)
+            showSettings()
         }
     }
 
@@ -85,6 +93,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindow.show()
     }
 
+    @objc private func showAbout() {
+        settingsWindow.show(.about)
+    }
+
+    @objc private func checkForUpdates() {
+        updater?.checkForUpdates()
+    }
+
     private func makePanel(for display: NotchDisplay) -> NotchPanel {
         let controller = NotchController(settings: settings)
         controller.attach(registry)
@@ -105,7 +121,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func observeShortcutSetting() {
         withObservationTracking {
-            hotKey.register(settings.openShortcut)
+            settings.isShortcutUnavailable = !hotKey.register(settings.openShortcut)
         } onChange: { [weak self] in
             Task { @MainActor in
                 self?.observeShortcutSetting()
@@ -128,11 +144,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = NSImage(systemSymbolName: "circle.hexagongrid", accessibilityDescription: "Islet")
         let menu = NSMenu()
+        menu.addItem(withTitle: "About Islet", action: #selector(showAbout), keyEquivalent: "").target = self
+        if updater != nil {
+            menu.addItem(withTitle: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "").target = self
+        }
+        menu.addItem(.separator())
         menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",").target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Islet", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         item.menu = menu
         return item
+    }
+
+    private func makeMainMenu() -> NSMenu {
+        let main = NSMenu()
+
+        let app = NSMenu(title: "Islet")
+        app.addItem(withTitle: "About Islet", action: #selector(showAbout), keyEquivalent: "").target = self
+        if updater != nil {
+            app.addItem(withTitle: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "").target = self
+        }
+        app.addItem(.separator())
+        app.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",").target = self
+        app.addItem(.separator())
+        app.addItem(withTitle: "Hide Islet", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        app.addItem(withTitle: "Quit Islet", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        main.addItem(withTitle: "Islet", action: nil, keyEquivalent: "").submenu = app
+
+        let edit = NSMenu(title: "Edit")
+        edit.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        edit.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
+        edit.addItem(.separator())
+        edit.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        main.addItem(withTitle: "Edit", action: nil, keyEquivalent: "").submenu = edit
+
+        let window = NSMenu(title: "Window")
+        window.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        window.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        main.addItem(withTitle: "Window", action: nil, keyEquivalent: "").submenu = window
+        NSApp.windowsMenu = window
+
+        return main
     }
 
     @objc private func openSettings() {

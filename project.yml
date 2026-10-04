@@ -5,6 +5,9 @@ options:
     macOS: "15.0"
   createIntermediateGroups: true
 packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: 2.10.0
   IsletCore:
     path: Packages/IsletCore
   IsletHost:
@@ -36,6 +39,7 @@ targets:
     sources:
       - App
     dependencies:
+      - package: Sparkle
       - package: IsletCore
       - package: IsletHost
       - package: HelloPlugin
@@ -54,18 +58,27 @@ targets:
         CFBundleDisplayName: Islet
         LSUIElement: true
         LSMinimumSystemVersion: "15.0"
-        NSHumanReadableCopyright: ""
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSHumanReadableCopyright: © 2026 Marian Schneider. Released under the MIT License.
+        SUFeedURL: https://github.com/MariSchn/Islet/releases/latest/download/appcast.xml
+        SUPublicEDKey: $(SPARKLE_PUBLIC_KEY)
+        SUEnableAutomaticChecks: true
         NSAppleEventsUsageDescription: Islet controls your music player to show what's playing, and your terminal to bring an agent's session to the front.
         NSCalendarsFullAccessUsageDescription: Islet shows your upcoming events in the notch.
         NSDownloadsFolderUsageDescription: Islet shows the progress of your downloads in the notch and lists recent downloads so you can drag them elsewhere.
     settings:
       base:
         PRODUCT_NAME: Islet
+        MARKETING_VERSION: 0.1.0
+        CURRENT_PROJECT_VERSION: 1
+        SPARKLE_PUBLIC_KEY: ""
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_VERSION: "6.0"
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "-"
-        ENABLE_HARDENED_RUNTIME: false
+        ENABLE_HARDENED_RUNTIME: true
+        CODE_SIGN_ENTITLEMENTS: App/Islet.entitlements
         MACOSX_DEPLOYMENT_TARGET: "15.0"
 schemes:
   Islet:

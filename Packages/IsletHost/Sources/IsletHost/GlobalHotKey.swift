@@ -23,17 +23,20 @@ public final class GlobalHotKey {
         }
     }
 
-    public func register(_ shortcut: NotchShortcut) {
+    @discardableResult
+    public func register(_ shortcut: NotchShortcut) -> Bool {
         unregister()
-        guard let key = shortcut.carbonKey, installHandlerIfNeeded() else { return }
+        guard let key = shortcut.carbonKey else { return true }
+        guard installHandlerIfNeeded() else { return false }
         var ref: EventHotKeyRef?
         let id = EventHotKeyID(signature: hotKeySignature, id: 1)
         let status = RegisterEventHotKey(key.code, key.modifiers, id, GetApplicationEventTarget(), 0, &ref)
         guard status == noErr, let ref else {
             Self.logger.error("Failed to register the shortcut \(shortcut.rawValue, privacy: .public): \(status)")
-            return
+            return false
         }
         hotKeyRef = ref
+        return true
     }
 
     fileprivate func pressed() {

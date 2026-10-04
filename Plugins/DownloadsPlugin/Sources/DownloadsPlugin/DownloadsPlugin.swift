@@ -3,7 +3,7 @@ import SwiftUI
 
 @MainActor
 public final class DownloadsPlugin: IsletPlugin {
-    public static let manifest = PluginManifest(id: "islet.downloads", displayName: "Downloads", systemImage: "arrow.down.circle")
+    public static let manifest = PluginManifest(id: "islet.downloads", displayName: "Downloads", systemImage: "arrow.down.circle", summary: "Progress of your downloads and the latest files, ready to drag anywhere.", tint: .cyan)
     static let contentWidth: CGFloat = 380
     static let contentPadding: CGFloat = 12
     static let activeRowHeight: CGFloat = 40

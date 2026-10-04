@@ -30,7 +30,7 @@ public protocol IsletPlugin: AnyObject {
 | `deactivate()` | When the user disables the plugin, and when the app quits. | Stop everything `activate()` started. On quit, the host waits at most 2 seconds for all plugins together. |
 | `makeScreen()` | Once, the first time the host needs the screen. The result is cached for the lifetime of the app. | Return the expanded view. Because it is built only once, it has to observe your model rather than capture values. |
 | `acceptedDropTypes` | Whenever the user drags content over the notch. | The types you accept make the notch react to matching drags and switch to this plugin during one (see [Drops](resources-and-concurrency.md#file-drops)). |
-| `makeSettingsView()` | Once, when the settings window first lists plugin settings. Cached like the screen. | Return a view for the plugin's settings tab, or `nil` for no tab. |
+| `makeSettingsView()` | Once, the first time the plugin's settings page is shown while it is enabled. Cached like the screen. | Return the `Section`s of the plugin's settings page, or `nil` if there is nothing to configure. |
 
 `init(context:)` is called when the host registers the plugin with `PluginRegistry.register(_:)`. It runs even for plugins the user has disabled, so keep it cheap and start work in `activate()`. Setting up `derive` and `observe` in the initializer is fine: they only read your model.
 
@@ -61,8 +61,10 @@ public struct PluginManifest: Sendable, Hashable {
     public let id: String
     public let displayName: String
     public let systemImage: String
+    public let summary: String?
+    public let tint: Color?
 
-    public init(id: String, displayName: String, systemImage: String)
+    public init(id: String, displayName: String, systemImage: String, summary: String? = nil, tint: Color? = nil)
 
     public var hasValidID: Bool { get }
 }
@@ -71,6 +73,8 @@ public struct PluginManifest: Sendable, Hashable {
 - `id` identifies the plugin. It names the storage directory and prefixes the settings keys, and it is used to remember whether the plugin is enabled and which plugin was last selected. Don't change it after release. It must be non-empty, contain only letters, digits, `.`, `-` and `_`, not start with `.` and not contain `..`. Built-in plugins use `islet.<name>`; use your own reverse-DNS prefix, such as `com.example.counter`.
 - `displayName` is shown in the settings window, as the tooltip of the tab icon, and in the failure message.
 - `systemImage` is an SF Symbol name, used for the tab icon in the navigation row and in the settings window.
+- `summary` is one short sentence that describes the plugin in Settings › Plugins and on its settings page.
+- `tint` colours the plugin's icon in the settings window. Without one, the icon is gray.
 
 `register` throws `PluginRegistryError.invalidID(_:)` for an invalid id and `PluginRegistryError.duplicateID(_:)` if the id is already registered.
 
@@ -250,7 +254,7 @@ Start it in `activate()` and stop it in `deactivate()`.
 
 Plugins don't need these at runtime, but they are public and useful in tests:
 
-- `PluginRegistry(storageRoot: URL, userDefaults: UserDefaults = .standard)` owns all plugins. `register(_:) async throws -> PluginEntry` (discardable result) registers and activates a plugin type; `register(manifest:make:)` does the same with a factory closure. `setEnabled(_:for:) async`, `isEnabled(_:)`, `entry(for:)`, `entries` (registration order), `orderedEntries` (the user's order from Settings › Plugins, stored under `islet.pluginOrder`, then any remaining entries in registration order), `enabledEntries` (`orderedEntries` without disabled plugins) and `selectedID` expose the rest of its state. `move(_:by:)` moves an entry within `orderedEntries`, clamped to the ends, and stores the order. `deactivateAll()` deactivates every plugin, and `setNotchExpanded(_:by:)` is how the host reports an open notch.
+- `PluginRegistry(storageRoot: URL, userDefaults: UserDefaults = .standard)` owns all plugins. `register(_:) async throws -> PluginEntry` (discardable result) registers and activates a plugin type; `register(manifest:make:)` does the same with a factory closure. `setEnabled(_:for:) async`, `isEnabled(_:)`, `entry(for:)`, `entries` (registration order), `orderedEntries` (the user's order from Settings › Plugins, stored under `islet.pluginOrder`, then any remaining entries in registration order), `enabledEntries` (`orderedEntries` without disabled plugins) and `selectedID` expose the rest of its state. `move(_:by:)` moves an entry within `orderedEntries`, clamped to the ends, and `move(fromOffsets:toOffset:)` moves entries the way `onMove` reports them; both store the order. `deactivateAll()` deactivates every plugin, and `setNotchExpanded(_:by:)` is how the host reports an open notch.
 - `PluginEntry` exposes `manifest`, `context`, `plugin`, `state`, and the cached `screen` and `settingsView`.
 - `PluginState.isActive` is `true` only for `.active`.
 - `PillSelection` is the user's choice of how the collapsed pill is picked (see [Collapsed pill](collapsed-pill.md#which-plugins-pill-is-shown)).

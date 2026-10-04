@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 
 @MainActor
 public final class ShelfPlugin: IsletPlugin {
-    public static let manifest = PluginManifest(id: "islet.shelf", displayName: "Shelf", systemImage: "tray.full")
+    public static let manifest = PluginManifest(id: "islet.shelf", displayName: "Shelf", systemImage: "tray.full", summary: "Park files, text, links and images, then drag them into any app.", tint: .teal)
     static let contentPadding: CGFloat = 12
     static let listPadding: CGFloat = 4
     static let itemWidth: CGFloat = 84
@@ -75,15 +75,17 @@ private struct ShelfSettings: View {
     @Bindable var store: ShelfStore
 
     var body: some View {
-        Form {
-            Section {
-                Picker("Keep a copy of dropped files", selection: $store.copyMode) {
-                    ForEach(ShelfCopyMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
+        Section {
+            Picker("Keep a copy of dropped files", selection: $store.copyMode) {
+                ForEach(ShelfCopyMode.allCases) { mode in
+                    Text(mode.title).tag(mode)
                 }
-                Toggle("Show item count in the closed notch", isOn: $store.showsCountPill)
             }
+            Toggle("Show the number of items in the collapsed notch", isOn: $store.showsCountPill)
+        } header: {
+            Text("Shelf")
+        } footer: {
+            Text("Without a copy, the shelf points to the original file, which can move or disappear. Copies are deleted when you remove the item.")
         }
     }
 }

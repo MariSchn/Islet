@@ -32,6 +32,7 @@ public final class AppSettings {
     public var openShortcut: NotchShortcut {
         didSet { save(openShortcut, forKey: Keys.openShortcut) }
     }
+    public var isShortcutUnavailable = false
 
     private let defaults: UserDefaults?
 

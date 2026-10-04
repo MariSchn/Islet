@@ -4,7 +4,7 @@ import SwiftUI
 
 @MainActor
 public final class AgentsPlugin: IsletPlugin {
-    public static let manifest = PluginManifest(id: "islet.agents", displayName: "Agents", systemImage: "terminal")
+    public static let manifest = PluginManifest(id: "islet.agents", displayName: "Agents", systemImage: "terminal", summary: "Follow your coding agents and answer them from the notch.", tint: .purple)
     static let contentWidth: CGFloat = 520
     static let emptyContentHeight: CGFloat = 130
     static let rowHeight: CGFloat = 68

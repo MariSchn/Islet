@@ -3,7 +3,7 @@ import SwiftUI
 
 @MainActor
 public final class HelloPlugin: IsletPlugin {
-    public static let manifest = PluginManifest(id: "com.example.hello", displayName: "Hello", systemImage: "hand.wave")
+    public static let manifest = PluginManifest(id: "com.example.hello", displayName: "Hello", systemImage: "hand.wave", summary: "A minimal example plugin.", tint: .yellow)
     static let greetingKey = "greeting"
     static let defaultGreeting = "Hello"
 
@@ -30,13 +30,12 @@ private struct HelloSettings: View {
     let settings: PluginSettings
 
     var body: some View {
-        Form {
+        Section {
             TextField("Greeting", text: Binding(
                 get: { settings.value(forKey: HelloPlugin.greetingKey) ?? "" },
                 set: { settings.set($0.isEmpty ? nil : $0, forKey: HelloPlugin.greetingKey) }
             ), prompt: Text(HelloPlugin.defaultGreeting))
         }
-        .formStyle(.grouped)
     }
 }
 

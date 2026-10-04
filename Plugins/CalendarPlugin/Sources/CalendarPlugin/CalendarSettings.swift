@@ -22,23 +22,23 @@ struct CalendarSettings: View {
     }
 
     var body: some View {
-        Form {
+        Group {
             switch controller.authorization {
             case .fullAccess:
                 Section {
                     Toggle("Show all-day events", isOn: $controller.includesAllDay)
-                }
-                Section {
-                    Toggle("Show upcoming events in the closed notch", isOn: $controller.showsPill)
-                    Picker("Lead time", selection: $controller.leadMinutes) {
+                    Toggle("Show the next event in the collapsed notch", isOn: $controller.showsPill)
+                    Picker("Starting", selection: $controller.leadMinutes) {
                         ForEach(CalendarController.leadMinuteChoices, id: \.self) { minutes in
-                            Text("\(minutes) minutes").tag(minutes)
+                            Text("\(minutes) minutes before").tag(minutes)
                         }
                     }
                     .disabled(!controller.showsPill)
+                } header: {
+                    Text("Events")
                 }
                 ForEach(accounts) { account in
-                    Section(account.title.isEmpty ? "Other" : account.title) {
+                    Section(account.title.isEmpty ? "Other Calendars" : account.title) {
                         ForEach(account.calendars) { calendar in
                             Toggle(isOn: selection(for: calendar)) {
                                 HStack(spacing: 8) {
@@ -53,19 +53,17 @@ struct CalendarSettings: View {
                 }
             case .notDetermined:
                 Section {
-                    HStack {
-                        Text("Islet needs access to your calendars to show your events.")
-                        Spacer()
-                        Button("Allow Calendar Access") { Task { await controller.requestAccess() } }
+                    LabeledContent("Islet needs access to your calendars to show your events.") {
+                        Button("Allow Access") { Task { await controller.requestAccess() } }
                     }
                 }
             case .denied, .restricted:
                 Section {
-                    HStack {
-                        Text("Calendar access is off")
-                        Spacer()
+                    LabeledContent("Calendar access is turned off for Islet.") {
                         Button("Open Privacy Settings") { EventKitSource.openPrivacySettings() }
                     }
+                } footer: {
+                    Text("Turn on Islet under Privacy & Security › Calendars.")
                 }
             }
         }
