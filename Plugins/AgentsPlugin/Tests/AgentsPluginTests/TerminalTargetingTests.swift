@@ -45,4 +45,12 @@ struct TerminalTargetingTests {
         #expect(ProcessTree.parent(of: me) == getppid())
         #expect(ProcessTree.executablePath(of: me) != nil)
     }
+
+    @Test func processTreeReadsWorkingDirectory() {
+        let me = ProcessInfo.processInfo.processIdentifier
+        let expected = URL(filePath: FileManager.default.currentDirectoryPath).resolvingSymlinksInPath().path
+        #expect(ProcessTree.workingDirectory(of: me).map { URL(filePath: $0).resolvingSymlinksInPath().path } == expected)
+        #expect(ProcessTree.workingDirectory(of: -1) == nil)
+        #expect(ProcessTree.terminalDirectory(of: -1) == nil)
+    }
 }

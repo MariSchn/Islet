@@ -120,7 +120,12 @@ final class AgentsController {
     }
 
     private func activateTerminal(for session: AgentSession) {
-        terminal(for: session)?.activate(tty: session.isRemote ? nil : session.tty, cwd: session.isRemote ? nil : session.cwd)
+        guard !session.isRemote else {
+            terminal(for: session)?.activate(tty: nil, cwd: nil)
+            return
+        }
+        let directory = session.pid.flatMap(ProcessTree.terminalDirectory) ?? session.cwd
+        terminal(for: session)?.activate(tty: session.tty, cwd: directory)
     }
 
     func showTerminal(forSession id: String) {
