@@ -8,7 +8,7 @@
 
 Islet turns the notch into a home for small, glanceable tools: your coding agents, music, files, calendar and more.<br>Every screen is a plugin, and you can write your own in a few lines of SwiftUI.
 
-<a href="https://github.com/MariSchn/Islet/releases/latest"><b>Download for macOS</b></a> · <code>brew install --cask marischn/tap/islet</code>
+<a href="#install"><b>Build from source</b></a>
 
 <sub>Free and open source · macOS 15 Sequoia or later · works on Macs without a notch too</sub>
 
@@ -31,11 +31,21 @@ Islet turns the notch into a home for small, glanceable tools: your coding agent
 
 ## Install
 
-1. [Download the latest release](https://github.com/MariSchn/Islet/releases/latest), open the DMG and drag Islet into Applications.
-2. Open Islet. The settings window opens on first launch; turn on **Open Islet at login** there.
-3. Hover over the notch to open it. Islet keeps itself up to date.
+There are no prebuilt releases yet, so build Islet from source. You need macOS 15 or later, Xcode 26 or later and [XcodeGen](https://github.com/yonaskolb/XcodeGen). No Apple Developer account is needed.
 
-With [Homebrew](https://brew.sh): `brew install --cask marischn/tap/islet`.
+1. Build Islet and copy it into Applications:
+
+   ```sh
+   brew install xcodegen
+   git clone https://github.com/MariSchn/Islet.git
+   cd Islet
+   xcodegen generate
+   xcodebuild -project Islet.xcodeproj -scheme Islet -configuration Release -derivedDataPath DerivedData build
+   cp -R DerivedData/Build/Products/Release/Islet.app /Applications/
+   ```
+
+2. Open Islet. The settings window opens on first launch; turn on **Open Islet at login** there.
+3. Hover over the notch to open it. To update, quit Islet, run `git pull` and the last three commands again.
 
 Some plugins need a one-time setup:
 
@@ -176,13 +186,13 @@ A plugin can also:
 | **`context.derive`**, **`context.observe`**, **`context.isScreenVisible`** | Keep size and pill in sync with its model, and pause work while hidden. |
 | **`context.storageDirectory`**, **`context.logger`** | Store data in its own folder and log through its own `os.Logger`. |
 
-To start one, run the `/new-plugin` skill in Claude Code or follow the [getting started guide](docs/plugins/getting-started.md). The [plugin developer guide](docs/plugins/README.md) covers the full API. Plugins are compiled into the app, so add yours in a fork and [build from source](#build-from-source).
+To start one, run the `/new-plugin` skill in Claude Code or follow the [getting started guide](docs/plugins/getting-started.md). The [plugin developer guide](docs/plugins/README.md) covers the full API. Plugins are compiled into the app, so add yours in a fork and [build from source](#install).
 
 <br>
 
 ## Privacy
 
-Islet has no account and collects no analytics. It connects to the internet only to check GitHub for updates and to load Spotify artwork; the GitHub plugin asks the GitHub CLI for your pull requests.
+Islet has no account and collects no analytics. It connects to the internet only to load Spotify artwork; the GitHub plugin asks the GitHub CLI for your pull requests.
 
 To follow your agents, Islet adds a small hook script to `~/.claude`, `~/.codex` or `~/.gemini` that forwards session events to Islet on your Mac (`127.0.0.1`). The optional status line connection wraps your Claude Code status line command and keeps showing your own status line. Both are removed again with **Disconnect**. See [SECURITY.md](SECURITY.md) for details.
 
@@ -192,25 +202,8 @@ To follow your agents, Islet adds a small hook script to `~/.claude`, `~/.codex`
 
 1. Under **Settings › Agents**, disconnect your agents and the status line. This restores your previous status line.
 2. Under **Settings › Scripts**, remove the `islet` command if you installed it.
-3. Quit Islet and move it to the Trash, or run `brew uninstall --zap --cask islet`.
+3. Quit Islet and move it to the Trash.
 4. To remove its data too: `rm -rf ~/Library/Application\ Support/Islet` and `defaults delete com.marischn.Islet`.
-
-<br>
-
-## Build from source
-
-You need macOS 15 or later, Xcode 26 or later and [XcodeGen](https://github.com/yonaskolb/XcodeGen). No Apple Developer account is needed.
-
-```sh
-brew install xcodegen
-git clone https://github.com/MariSchn/Islet.git
-cd Islet
-xcodegen generate
-xcodebuild -project Islet.xcodeproj -scheme Islet -configuration Release -derivedDataPath DerivedData build
-open DerivedData/Build/Products/Release/Islet.app
-```
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for tests and the project layout.
 
 <br>
 
