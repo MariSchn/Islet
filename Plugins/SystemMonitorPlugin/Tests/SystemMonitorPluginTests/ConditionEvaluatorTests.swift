@@ -73,6 +73,10 @@ struct ConditionEvaluatorTests {
         let pill = ConditionEvaluator.pillStatus(for: everything.conditions, cpuPercent: 99, alwaysShowsCPU: true)
         #expect(pill == PillStatus(text: "Battery 8%", systemImage: "battery.25", priority: .attention))
 
+        var pluggedInEvaluator = ConditionEvaluator()
+        let pluggedIn = BatteryState(percent: 8, isCharging: false, isPluggedIn: true)
+        #expect(!pluggedInEvaluator.evaluate(sample(battery: pluggedIn), at: at(0)).conditions.contains { $0.kind == .battery })
+
         let infoOnly = evaluator.evaluate(sample(cpu: 99, thermal: .serious, diskFree: 1_000), at: at(35))
         #expect(ConditionEvaluator.pillStatus(for: infoOnly.conditions, cpuPercent: 99, alwaysShowsCPU: false) == PillStatus(text: "CPU 99%", systemImage: "cpu", priority: .info))
         let disk = evaluator.evaluate(sample(diskFree: 1_000), at: at(40))

@@ -8,6 +8,7 @@ public final class NotchDisplayManager {
     private let makePanel: (NotchDisplay) -> NotchPanel
     private var panels: [NotchPanel] = []
     private var pendingRelayout: Task<Void, Never>?
+    private var isLocked = false
 
     public init(settings: AppSettings, makePanel: @escaping (NotchDisplay) -> NotchPanel) {
         self.settings = settings
@@ -37,6 +38,12 @@ public final class NotchDisplayManager {
             name: NSApplication.didChangeScreenParametersNotification,
             object: nil
         )
+        let distributed = DistributedNotificationCenter.default()
+        distributed.addObserver(self, selector: #selector(sessionDidLock), name: Notification.Name("com.apple.screenIsLocked"), object: nil)
+        distributed.addObserver(self, selector: #selector(sessionDidUnlock), name: Notification.Name("com.apple.screenIsUnlocked"), object: nil)
+        let workspace = NSWorkspace.shared.notificationCenter
+        workspace.addObserver(self, selector: #selector(sessionDidLock), name: NSWorkspace.sessionDidResignActiveNotification, object: nil)
+        workspace.addObserver(self, selector: #selector(sessionDidUnlock), name: NSWorkspace.sessionDidBecomeActiveNotification, object: nil)
         observePlacement()
         relayout()
     }
@@ -50,6 +57,16 @@ public final class NotchDisplayManager {
                 self?.observePlacement()
             }
         }
+    }
+
+    @objc private func sessionDidLock() {
+        isLocked = true
+        panels.forEach { $0.hide() }
+    }
+
+    @objc private func sessionDidUnlock() {
+        isLocked = false
+        relayout()
     }
 
     @objc private func screenParametersDidChange() {
@@ -72,7 +89,11 @@ public final class NotchDisplayManager {
             panels.append(makePanel(display))
         }
         for panel in panels {
-            panel.show()
+            if isLocked {
+                panel.hide()
+            } else {
+                panel.show()
+            }
         }
     }
 }

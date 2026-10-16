@@ -86,8 +86,10 @@ struct ShelfScreen: View {
             return true
         }
         .contextMenu {
-            Button("Clear Shelf", role: .destructive) { store.removeAll() }
-                .disabled(store.items.isEmpty)
+            Menu("Clear Shelf") {
+                Button("Remove All \(store.items.count) Items", role: .destructive) { store.removeAll() }
+            }
+            .disabled(store.items.isEmpty)
         }
         .quickLookPreview($quickLookURL, in: quickLookItems)
     }
@@ -146,8 +148,8 @@ struct ShelfScreen: View {
                 if let url = await loadURL(from: provider) {
                     fileURLs.append(url)
                 }
-            } else if let png = await loadPNG(from: provider) {
-                store.addImage(pngData: png)
+            } else if let image = await loadImage(from: provider) {
+                store.addImage(data: image.data, fileExtension: image.fileExtension)
             } else if provider.hasItemConformingToTypeIdentifier(UTType.url.identifier),
                       let url = await loadURL(from: provider),
                       let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" {
@@ -175,17 +177,21 @@ struct ShelfScreen: View {
         }
     }
 
-    private func loadPNG(from provider: NSItemProvider) async -> Data? {
-        guard let identifier = provider.registeredTypeIdentifiers.first(where: { UTType($0)?.conforms(to: .image) == true }) else {
-            return nil
-        }
+    private func loadImage(from provider: NSItemProvider) async -> (data: Data, fileExtension: String)? {
+        guard let identifier = provider.registeredTypeIdentifiers.first(where: { UTType($0)?.conforms(to: .image) == true }),
+              let type = UTType(identifier)
+        else { return nil }
         let data: Data? = await withCheckedContinuation { continuation in
             _ = provider.loadDataRepresentation(forTypeIdentifier: identifier) { data, _ in
                 continuation.resume(returning: data)
             }
         }
         guard let data else { return nil }
-        return NSBitmapImageRep(data: data)?.representation(using: .png, properties: [:])
+        if let fileExtension = type.preferredFilenameExtension, [UTType.png, .jpeg, .gif, .heic, .webP].contains(type) {
+            return (data, fileExtension)
+        }
+        let png = await Task.detached { NSBitmapImageRep(data: data)?.representation(using: .png, properties: [:]) }.value
+        return png.map { ($0, "png") }
     }
 }
 
@@ -238,6 +244,7 @@ private struct ShelfItemView: View {
                 }
                 .buttonStyle(.plain)
                 .offset(x: 4, y: -4)
+                .accessibilityLabel("Remove from Shelf")
             }
         }
         .onHover { isHovering = $0 }

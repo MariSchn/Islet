@@ -24,6 +24,7 @@ final class SessionAlerter {
         }
     }
     var onOpenSession: ((String) -> Void)?
+    private var deliveredAttention: Set<String> = []
 
     private lazy var responder = NotificationResponder { [weak self] sessionID in
         self?.onOpenSession?(sessionID)
@@ -39,6 +40,7 @@ final class SessionAlerter {
         case .needsAttention(let session):
             if settings.attentionSound { play(Self.attentionSound) }
             if settings.attentionNotification {
+                deliveredAttention.insert(session.id)
                 notify(id: "attention-\(session.id)", sessionID: session.id, title: "\(session.displayName) needs you", body: Self.reason(for: session))
             }
         case .finished(let session):
@@ -47,6 +49,14 @@ final class SessionAlerter {
                 notify(id: "finished-\(session.id)", sessionID: session.id, title: "\(session.displayName) finished", body: session.task ?? session.agent.displayName)
             }
         }
+    }
+
+    func withdrawResolvedNotifications(for sessions: [AgentSession]) {
+        guard !deliveredAttention.isEmpty else { return }
+        let resolved = deliveredAttention.subtracting(sessions.filter(\.state.requiresAttention).map(\.id))
+        guard !resolved.isEmpty else { return }
+        deliveredAttention.subtract(resolved)
+        notificationCenter.removeDeliveredNotifications(withIdentifiers: resolved.map { "attention-\($0)" })
     }
 
     private static func reason(for session: AgentSession) -> String {

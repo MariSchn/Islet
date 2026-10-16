@@ -21,6 +21,7 @@ final class MediaController {
     private(set) var playlists: [MediaPlaylist] = []
     private(set) var playlistError: String?
     var showsPill: Bool
+    @ObservationIgnored var onCommandError: ((String) -> Void)?
     var isScreenVisible = false {
         didSet {
             guard isScreenVisible, !oldValue, pollTask != nil else { return }
@@ -76,7 +77,8 @@ final class MediaController {
 
     var pillStatus: PillStatus? {
         guard showsPill, let nowPlaying, nowPlaying.isPlaying else { return nil }
-        return PillStatus(text: "\(nowPlaying.title) · \(nowPlaying.artist)", systemImage: "music.note", priority: .ambient, artwork: artwork, tint: tint)
+        let text = [nowPlaying.title, nowPlaying.artist].filter { !$0.isEmpty }.joined(separator: " · ")
+        return PillStatus(text: text, systemImage: "music.note", priority: .ambient, artwork: artwork, tint: tint)
     }
 
     private var pollInterval: Duration {
@@ -296,7 +298,7 @@ final class MediaController {
         } catch let error as AppleScriptError where error.isApplicationNotRunning {
             hidePlaylists()
         } catch {
-            errorMessage = error.localizedDescription
+            onCommandError?(error.localizedDescription)
         }
         await refresh()
     }
@@ -349,9 +351,9 @@ final class MediaController {
                 loaded = nil
             }
             let artwork = await Task.detached { loaded.flatMap(Artwork.init(data:)) }.value
-            guard let self, !Task.isCancelled, artworkURL == url, let artwork else { return }
-            self.artwork = artwork.image
-            tint = artwork.tint
+            guard let self, !Task.isCancelled, artworkURL == url else { return }
+            self.artwork = artwork?.image
+            tint = artwork?.tint
         }
     }
 

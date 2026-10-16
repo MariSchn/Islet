@@ -45,6 +45,18 @@ struct GhClientTests {
         }
     }
 
+    @Test func usesPartialResultsAndOnlyBlamesTheLoginWhenGhSaysSo() async throws {
+        let partial = StubRunner { _ in self.result(1, output: GitHubSnapshotTests.fixture, error: "gh: SAML enforcement") }
+        #expect(try await GhClient(locator: locator(), runner: partial).fetch().mine.count == 3)
+
+        let offline = StubRunner { arguments in
+            arguments.first == "auth" ? self.result(1, error: "error connecting to api.github.com") : self.result(1, error: "gh: error connecting to api.github.com")
+        }
+        await #expect(throws: GitHubError.failed("error connecting to api.github.com")) {
+            try await GhClient(locator: locator(), runner: offline).fetch()
+        }
+    }
+
     @Test func fallsBackToTheExitStatusWithoutAMessage() {
         #expect(GhClient.message(from: result(2)) == "The GitHub CLI exited with status 2.")
     }

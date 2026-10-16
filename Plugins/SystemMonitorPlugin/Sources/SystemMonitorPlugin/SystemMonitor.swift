@@ -134,6 +134,7 @@ final class SystemMonitor {
         if let started = evaluation.announcement {
             announcement = started.announcement
         }
+        guard isScreenVisible else { return }
         cpuHistory.append(sample.cpuPercent)
         memoryHistory.append(Double(sample.memoryUsed))
         if let received = sample.networkIn, let sent = sample.networkOut {

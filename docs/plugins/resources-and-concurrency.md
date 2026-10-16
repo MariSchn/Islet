@@ -89,13 +89,14 @@ The app and all packages build in the Swift 6 language mode with strict concurre
 
 ### Known pitfalls
 
-- **`NSAppleScript` must run on the main actor.** Create and execute scripts from `@MainActor` code, as `InstalledTerminal` in `AgentsPlugin` does:
+- **`NSAppleScript` blocks until the other app answers.** Run scripts in an `actor` of their own instead of on the main actor, and wrap them in `with timeout`, as `TerminalScriptRunner` in `AgentsPlugin` and `AppleScriptRunner` in `MediaPlugin` do:
 
   ```swift
-  @MainActor
-  func openTerminal() {
-      var error: NSDictionary?
-      NSAppleScript(source: "tell application \"Terminal\" to activate")?.executeAndReturnError(&error)
+  actor ScriptRunner {
+      func run(_ source: String) -> NSAppleEventDescriptor? {
+          var error: NSDictionary?
+          return NSAppleScript(source: "with timeout of 2 seconds\n\(source)\nend timeout")?.executeAndReturnError(&error)
+      }
   }
   ```
 

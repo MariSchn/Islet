@@ -99,11 +99,13 @@ struct HookInstaller: Sendable {
             ;;
         esac
         case "$terminal" in vscode) case "$VSCODE_GIT_ASKPASS_MAIN" in *[Cc]ursor*) terminal=cursor ;; esac ;; esac
-        body=$(mktemp) || exit 0
+        if [ -r /proc/net/tcp ]; then
+          owner=$(awk '($2 == "0100007F:\(hexPort)" || $2 == "00000000:\(hexPort)") && $4 == "0A" { print $8; exit }' /proc/net/tcp)
+          [ "$owner" = "$(id -u)" ] || exit 0
+        fi
         request=""
-        trap '[ -n "$request" ] && kill "$request" 2>/dev/null; rm -f "$body"; exit 0' HUP INT TERM
-        printf '%s' "$payload" > "$body"
-        curl -sf --connect-timeout 1 -m "$timeout" -K - -X POST "http://127.0.0.1:\(port)\(HookServer.hookPath)" \\
+        trap '[ -n "$request" ] && kill "$request" 2>/dev/null; exit 0' HUP INT TERM
+        printf '%s' "$payload" | curl -sf --connect-timeout 1 -m "$timeout" -K /dev/fd/3 -X POST "http://127.0.0.1:\(port)\(HookServer.hookPath)" \\
           -H "Content-Type: application/json" \\
           -H "Expect:" \\
           -H "X-Islet-Agent: \(agent.rawValue)" \\
@@ -116,13 +118,11 @@ struct HookInstaller: Sendable {
           -H "X-Islet-Tmux-Pane: $TMUX_PANE" \\
           -H "X-Islet-Title: $title" \\
           -H "X-Islet-Branch: $branch" \\
-          --data-binary "@$body" \(agent == .antigravity ? ">/dev/null " : "")2>/dev/null <<'ISLET_CONFIG' &
+          --data-binary @- \(agent == .antigravity ? ">/dev/null " : "")2>/dev/null 3<<'ISLET_CONFIG' &
         header = "Authorization: Bearer \(token)"
         ISLET_CONFIG
         request=$!
         wait "$request"
-        request=""
-        rm -f "$body"
         exit 0
 
         """
@@ -138,8 +138,13 @@ struct HookInstaller: Sendable {
 
         """
 
-    func remoteInstallCommand(code: String) -> String {
-        "curl -sf -H 'Authorization: Bearer \(code)' http://127.0.0.1:\(port)\(HookServer.installPath) | sh"
+    private var hexPort: String {
+        String(format: "%04X", port)
+    }
+
+    func remoteInstallCommand(code: String, scriptHash: String) -> String {
+        let verify = #"import hashlib,subprocess,sys; s=sys.stdin.buffer.read(); sys.exit("Islet: could not reach Islet, is the SSH tunnel up?" if not s else "Islet: this install command expired or was replaced, copy a new one in Islet" if s.startswith(b"{") else "Islet: unexpected install script, not running it" if hashlib.sha256(s).hexdigest()!="\#(scriptHash)" else subprocess.run(["sh"],input=s).returncode)"#
+        return "printf 'header = \"Authorization: Bearer \(code)\"\\n' | curl -s -K - http://127.0.0.1:\(port)\(HookServer.installPath) | python3 -c '\(verify)'"
     }
 
     var sshConfigSnippet: String {
@@ -158,23 +163,41 @@ struct HookInstaller: Sendable {
           (umask 077 && printf '%s\n' "$3" > "$script")
           chmod 700 "$script"
           python3 - "$dir/$2" "$script" "$4" <<'ISLET_SETTINGS'
-        import json, os, sys
-        path, script, entries = sys.argv[1], sys.argv[2], json.loads(sys.argv[3].replace("\(scriptPlaceholder)", sys.argv[2]))
+        import json, os, sys, tempfile
+        path, script, entries = os.path.realpath(sys.argv[1]), sys.argv[2], json.loads(sys.argv[3])
         settings = {}
         if os.path.exists(path):
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 text = f.read()
             settings = json.loads(text) if text.strip() else {}
-        if not isinstance(settings, dict):
-            sys.exit(f"Islet: {path} is not a JSON object")
-        hooks = settings.setdefault("hooks", {})
+        if not isinstance(settings, dict) or not isinstance(settings.setdefault("hooks", {}), dict):
+            sys.exit(f"Islet: {path} has an unexpected format, not changing it")
+        hooks = settings["hooks"]
+        def islet(hook):
+            return isinstance(hook, dict) and "\(scriptName)" in str(hook.get("command", ""))
         for event, entry in entries.items():
-            groups = [g for g in hooks.get(event, []) if not any("\(scriptName)" in h.get("command", "") for h in g.get("hooks", []))]
+            entry["command"] = entry["command"].replace("'\(scriptPlaceholder)'", "'" + script.replace("'", "'\\\\''") + "'")
+            groups = []
+            for group in hooks.get(event) if isinstance(hooks.get(event), list) else []:
+                if isinstance(group, dict) and isinstance(group.get("hooks"), list) and any(islet(h) for h in group["hooks"]):
+                    kept = [h for h in group["hooks"] if not islet(h)]
+                    if not kept:
+                        continue
+                    group = dict(group, hooks=kept)
+                groups.append(group)
             groups.append({"hooks": [entry]})
             hooks[event] = groups
-        with open(path, "w") as f:
-            json.dump(settings, f, indent=2, sort_keys=True, ensure_ascii=False)
-            f.write("\\n")
+        fd, temp = tempfile.mkstemp(prefix=".islet-", dir=os.path.dirname(path))
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(settings, f, indent=2, sort_keys=True, ensure_ascii=False)
+                f.write("\\n")
+            if os.path.exists(path):
+                os.chmod(temp, os.stat(path).st_mode & 0o7777)
+            os.replace(temp, path)
+        except BaseException:
+            os.unlink(temp)
+            raise
         ISLET_SETTINGS
           echo "Islet hooks installed in $dir."
         }
@@ -251,9 +274,10 @@ struct HookInstaller: Sendable {
                 try settingsFile.write(settings)
             }
         } else if var settings = try settingsFile.read(), var hooks = settings["hooks"] as? [String: Any] {
-            for event in hooks.keys {
-                let groups = Self.withoutIsletHooks(hooks[event])
-                hooks[event] = groups.isEmpty ? nil : groups
+            for (event, value) in hooks {
+                guard let groups = value as? [Any], !Self.isletHooks(in: groups).isEmpty else { continue }
+                let kept = Self.withoutIsletHooks(groups)
+                hooks[event] = kept.isEmpty ? nil : kept
             }
             settings["hooks"] = hooks.isEmpty ? nil : hooks
             try settingsFile.write(settings)
@@ -282,16 +306,23 @@ struct HookInstaller: Sendable {
         }
     }
 
+    private static func isIsletHook(_ hook: Any) -> Bool {
+        ((hook as? [String: Any])?["command"] as? String)?.contains(scriptName) == true
+    }
+
     private static func isletHooks(in groups: Any?) -> [[String: Any]] {
-        (groups as? [[String: Any]] ?? []).flatMap { group in
-            (group["hooks"] as? [[String: Any]] ?? []).filter { ($0["command"] as? String)?.contains(scriptName) == true }
+        (groups as? [Any] ?? []).flatMap { group in
+            ((group as? [String: Any])?["hooks"] as? [Any] ?? []).filter(isIsletHook).compactMap { $0 as? [String: Any] }
         }
     }
 
-    private static func withoutIsletHooks(_ groups: Any?) -> [[String: Any]] {
-        (groups as? [[String: Any]] ?? []).filter { group in
-            let commands = (group["hooks"] as? [[String: Any]] ?? []).compactMap { $0["command"] as? String }
-            return !commands.contains { $0.contains(scriptName) }
+    private static func withoutIsletHooks(_ groups: Any?) -> [Any] {
+        (groups as? [Any] ?? []).compactMap { element in
+            guard var group = element as? [String: Any], let hooks = group["hooks"] as? [Any], hooks.contains(where: isIsletHook) else { return element }
+            let kept = hooks.filter { !isIsletHook($0) }
+            guard !kept.isEmpty else { return nil }
+            group["hooks"] = kept
+            return group
         }
     }
 }

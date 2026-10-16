@@ -1,0 +1,180 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  SPARKLE_VERSION: 2.10.0
+  SPARKLE_SHA256: c2bf58aa8387266ac179357b1415d6f2635f044da8be41042af32425dae6da0c
+
+jobs:
+  release:
+    name: Build, sign and notarize
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Read the version
+        id: version
+        run: |
+          version=$(sed -n 's/^ *MARKETING_VERSION: *//p' project.yml | tr -d '"')
+          build=$(git rev-list --count HEAD)
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::The tag $GITHUB_REF_NAME does not match MARKETING_VERSION $version in project.yml"
+            exit 1
+          fi
+          if ! sed -n 's/^ *SPARKLE_PUBLIC_KEY: *//p' project.yml | tr -d '"' | grep -q .; then
+            echo "::error::Set SPARKLE_PUBLIC_KEY in project.yml before releasing (see docs/releasing.md)"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+
+      - name: Check the signing secrets
+        env:
+          DEVELOPER_ID_CERTIFICATE: ${{ secrets.DEVELOPER_ID_CERTIFICATE }}
+          DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+          TEAM_ID: ${{ secrets.TEAM_ID }}
+          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          missing=""
+          for name in DEVELOPER_ID_CERTIFICATE DEVELOPER_ID_CERTIFICATE_PASSWORD TEAM_ID NOTARY_APPLE_ID NOTARY_PASSWORD SPARKLE_PRIVATE_KEY; do
+            [ -n "$(printenv "$name")" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing (see docs/releasing.md)"
+            exit 1
+          fi
+
+      - name: Import the Developer ID certificate
+        env:
+          DEVELOPER_ID_CERTIFICATE: ${{ secrets.DEVELOPER_ID_CERTIFICATE }}
+          DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          keychain_password=$(uuidgen)
+          printf '%s' "$DEVELOPER_ID_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$RUNNER_TEMP/certificate.p12" -P "$DEVELOPER_ID_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+          security set-key-partition-list -S apple-tool:,apple: -k "$keychain_password" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/certificate.p12"
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate the Xcode project
+        run: xcodegen generate
+
+      - name: Archive
+        env:
+          TEAM_ID: ${{ secrets.TEAM_ID }}
+        run: |
+          xcodebuild -project Islet.xcodeproj -scheme Islet -configuration Release \
+            -derivedDataPath DerivedData -archivePath build/Islet.xcarchive archive \
+            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Developer ID Application" DEVELOPMENT_TEAM="$TEAM_ID" \
+            OTHER_CODE_SIGN_FLAGS=--timestamp CURRENT_PROJECT_VERSION=${{ steps.version.outputs.build }}
+
+      - name: Export the app
+        env:
+          TEAM_ID: ${{ secrets.TEAM_ID }}
+        run: |
+          cat > build/ExportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>developer-id</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>signingCertificate</key><string>Developer ID Application</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+          </dict>
+          </plist>
+          EOF
+          xcodebuild -exportArchive -archivePath build/Islet.xcarchive -exportPath build/export -exportOptionsPlist build/ExportOptions.plist
+          codesign --verify --deep --strict --verbose=2 build/export/Islet.app
+
+      - name: Notarize the app
+        env:
+          TEAM_ID: ${{ secrets.TEAM_ID }}
+          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
+        run: |
+          ditto -c -k --keepParent build/export/Islet.app build/notarize.zip
+          xcrun notarytool submit build/notarize.zip --apple-id "$NOTARY_APPLE_ID" --password "$NOTARY_PASSWORD" --team-id "$TEAM_ID" --wait
+          xcrun stapler staple build/export/Islet.app
+          spctl --assess --type execute --verbose=2 build/export/Islet.app
+
+      - name: Package the DMG and the update archive
+        env:
+          TEAM_ID: ${{ secrets.TEAM_ID }}
+          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
+        run: |
+          version=${{ steps.version.outputs.version }}
+          mkdir -p build/dmg dist
+          cp -R build/export/Islet.app build/dmg/
+          ln -s /Applications build/dmg/Applications
+          hdiutil create -volname Islet -srcfolder build/dmg -fs HFS+ -format UDZO "dist/Islet-$version.dmg"
+          codesign --sign "Developer ID Application" --timestamp "dist/Islet-$version.dmg"
+          xcrun notarytool submit "dist/Islet-$version.dmg" --apple-id "$NOTARY_APPLE_ID" --password "$NOTARY_PASSWORD" --team-id "$TEAM_ID" --wait
+          xcrun stapler staple "dist/Islet-$version.dmg"
+          ditto -c -k --keepParent build/export/Islet.app "dist/Islet-$version.zip"
+          shasum -a 256 dist/* > dist/SHA256SUMS.txt
+
+      - name: Write the Sparkle appcast
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          version=${{ steps.version.outputs.version }}
+          mkdir -p "$RUNNER_TEMP/sparkle"
+          curl -sfL -o "$RUNNER_TEMP/sparkle.tar.xz" "https://github.com/sparkle-project/Sparkle/releases/download/$SPARKLE_VERSION/Sparkle-$SPARKLE_VERSION.tar.xz"
+          echo "$SPARKLE_SHA256  $RUNNER_TEMP/sparkle.tar.xz" | shasum -a 256 -c
+          tar -xJf "$RUNNER_TEMP/sparkle.tar.xz" -C "$RUNNER_TEMP/sparkle"
+          key="$RUNNER_TEMP/sparkle.key"
+          (umask 077 && printf '%s' "$SPARKLE_PRIVATE_KEY" > "$key")
+          signature=$("$RUNNER_TEMP/sparkle/bin/sign_update" --ed-key-file "$key" "dist/Islet-$version.zip")
+          rm "$key"
+          cat > dist/appcast.xml <<EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+            <channel>
+              <title>Islet</title>
+              <item>
+                <title>Islet $version</title>
+                <pubDate>$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S +0000')</pubDate>
+                <sparkle:version>${{ steps.version.outputs.build }}</sparkle:version>
+                <sparkle:shortVersionString>$version</sparkle:shortVersionString>
+                <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+                <sparkle:releaseNotesLink>https://github.com/$GITHUB_REPOSITORY/releases/tag/v$version</sparkle:releaseNotesLink>
+                <enclosure url="https://github.com/$GITHUB_REPOSITORY/releases/download/v$version/Islet-$version.zip" $signature type="application/octet-stream"/>
+              </item>
+            </channel>
+          </rss>
+          EOF
+
+      - name: Draft the GitHub release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --draft --generate-notes --title "Islet ${{ steps.version.outputs.version }}"
+
+      - name: Keep the build
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: islet-${{ steps.version.outputs.version }}
+          path: dist/
+          retention-days: 7

@@ -25,8 +25,11 @@ struct SystemMonitorTests {
         #expect(reader.detailRequests.last == true)
     }
 
-    @Test func keepsOneMinuteOfHistory() {
+    @Test func keepsOneMinuteOfHistoryWhileVisible() {
         let monitor = SystemMonitor(sampler: SystemSampler(reader: FakeSystemReader()))
+        monitor.apply(SystemSample(cpuPercent: 99, memoryUsed: 1, memoryTotal: 100, memoryPressure: .normal, thermalState: .nominal))
+        #expect(monitor.cpuHistory.values.isEmpty)
+        monitor.isScreenVisible = true
         for index in 0..<70 {
             var sample = SystemSample(cpuPercent: Double(index), memoryUsed: UInt64(index), memoryTotal: 100, memoryPressure: .normal, thermalState: .nominal)
             if index.isMultiple(of: 2) {

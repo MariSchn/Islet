@@ -30,4 +30,11 @@ final class ProcessMonitor {
     nonisolated static func isRunning(_ pid: Int32) -> Bool {
         kill(pid, 0) == 0 || errno == EPERM
     }
+
+    nonisolated static var bootTime: Date {
+        var time = timeval()
+        var size = MemoryLayout<timeval>.size
+        guard sysctlbyname("kern.boottime", &time, &size, nil, 0) == 0 else { return .distantPast }
+        return Date(timeIntervalSince1970: TimeInterval(time.tv_sec) + TimeInterval(time.tv_usec) / 1_000_000)
+    }
 }

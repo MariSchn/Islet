@@ -1,0 +1,16 @@
+name: Feature or plugin idea
+description: Suggest an improvement or a new plugin.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like?
+      description: Describe the problem it solves or what you would use it for.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Anything else?
+      description: Apps that already do this, mockups, or how you work around it today.

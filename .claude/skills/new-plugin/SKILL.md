@@ -52,7 +52,7 @@ import SwiftUI
 
 @MainActor
 public final class <Name>Plugin: IsletPlugin {
-    public static let manifest = PluginManifest(id: "<id>", displayName: "<Display Name>", systemImage: "<symbol>")
+    public static let manifest = PluginManifest(id: "<id>", displayName: "<Display Name>", systemImage: "<symbol>", summary: "<One short sentence for Settings>", tint: .<color>)
     static let contentSize = CGSize(width: 360, height: 120)
 
     let model = <Name>Model()
@@ -106,7 +106,7 @@ Replace the counter with the real feature, keeping these rules:
 - Persist preferences with `context.settings` and save them with `context.observe`; put data files in `context.storageDirectory`.
 - Log through `context.logger`, never `print` or `NSLog`.
 - If the height depends on content, compute it in a static function from the same constants the views use and derive `contentSize` from it.
-- Return `makeSettingsView()` only when there is something to configure, and set `acceptedDropTypes` only for plugins that handle dropped content.
+- Return `makeSettingsView()` only when there is something to configure, and set `acceptedDropTypes` only for plugins that handle dropped content. The settings view returns `Section`s with headers, not a `Form`; the host wraps them in a grouped form below the plugin's header and on/off switch.
 
 ## 3. Add tests
 

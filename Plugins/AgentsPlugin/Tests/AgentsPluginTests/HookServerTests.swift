@@ -40,6 +40,9 @@ struct HookServerTests {
 
         var install = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/install")!)
         install.setValue("Bearer secret", forHTTPHeaderField: "Authorization")
+        let (_, tokenInstall) = try await URLSession.shared.data(for: install)
+        #expect((tokenInstall as? HTTPURLResponse)?.statusCode == 404)
+        install.setValue("Bearer \(await server.issueInstallCode())", forHTTPHeaderField: "Authorization")
         let (script, installResponse) = try await URLSession.shared.data(for: install)
         #expect((installResponse as? HTTPURLResponse)?.statusCode == 200)
         #expect((installResponse as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type") == "text/plain; charset=utf-8")
@@ -89,6 +92,12 @@ struct HookServerTests {
         let (_, reused) = try await URLSession.shared.data(for: install)
         #expect((reused as? HTTPURLResponse)?.statusCode == 401)
 
+        let replaced = await server.issueInstallCode()
+        _ = await server.issueInstallCode()
+        install.setValue("Bearer \(replaced)", forHTTPHeaderField: "Authorization")
+        let (_, superseded) = try await URLSession.shared.data(for: install)
+        #expect((superseded as? HTTPURLResponse)?.statusCode == 401)
+
         let expiringPort = try freePort()
         let expiring = HookServer(port: expiringPort, token: "secret", installScript: "#!/bin/sh\n", installCodeLifetime: .zero) { _ in .empty }
         try await expiring.start()
@@ -97,6 +106,39 @@ struct HookServerTests {
         expired.setValue("Bearer \(await expiring.issueInstallCode())", forHTTPHeaderField: "Authorization")
         let (_, expiredResponse) = try await URLSession.shared.data(for: expired)
         #expect((expiredResponse as? HTTPURLResponse)?.statusCode == 401)
+    }
+
+    @Test func eventsSentWithTheRemoteTokenAreAlwaysRemote() async throws {
+        let received = Received()
+        let port = try freePort()
+        let server = HookServer(port: port, token: "secret", remoteToken: "remote", installScript: "#!/bin/sh\n") { event in
+            await received.add(event)
+            return .empty
+        }
+        try await server.start()
+        defer { Task { await server.stop() } }
+
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/hook")!)
+        request.httpMethod = "POST"
+        request.httpBody = Data(#"{"session_id":"s","hook_event_name":"Stop"}"#.utf8)
+        request.setValue("Bearer remote", forHTTPHeaderField: "Authorization")
+        _ = try await URLSession.shared.data(for: request)
+        request.setValue("Bearer secret", forHTTPHeaderField: "Authorization")
+        _ = try await URLSession.shared.data(for: request)
+        let events = await received.events
+        #expect(events.map(\.isFromRemoteHost) == [true, false])
+        #expect(events.map(\.host) == ["remote", nil])
+
+        var install = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/install")!)
+        install.setValue("Bearer remote", forHTTPHeaderField: "Authorization")
+        let (_, remoteInstall) = try await URLSession.shared.data(for: install)
+        #expect((remoteInstall as? HTTPURLResponse)?.statusCode == 404)
+
+        await server.setRemoteAccess(token: "rotated", installScript: "#!/bin/sh\necho rotated\n")
+        request.setValue("Bearer remote", forHTTPHeaderField: "Authorization")
+        let (_, revoked) = try await URLSession.shared.data(for: request)
+        #expect((revoked as? HTTPURLResponse)?.statusCode == 401)
+        #expect(await server.installScriptHash == HookServer.hash("#!/bin/sh\necho rotated\n"))
     }
 
     @Test func repliesWaitForTheHandlerAndCancelWhenTheClientLeaves() async throws {

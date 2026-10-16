@@ -125,6 +125,21 @@ final class ShelfStoreTests {
         #expect(!FileManager.default.fileExists(atPath: shelfFile.path))
     }
 
+    @Test func loadingRemovesCopiesThatNoItemReferences() throws {
+        let store = ShelfStore(directory: directory)
+        let kept = try #require(store.addText("keep me"))
+        let orphan = directory.appending(path: "Items").appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: orphan, withIntermediateDirectories: true)
+
+        ShelfStore(directory: directory).load()
+        #expect(!FileManager.default.fileExists(atPath: orphan.path))
+        #expect(FileManager.default.fileExists(atPath: kept.url.path))
+
+        try Data("not json".utf8).write(to: directory.appending(path: "shelf.json"))
+        ShelfStore(directory: directory).load()
+        #expect(FileManager.default.fileExists(atPath: kept.url.path))
+    }
+
     @Test func loadWithoutFileKeepsEmptyShelf() {
         let store = ShelfStore(directory: directory)
         store.load()
@@ -307,7 +322,7 @@ final class ShelfStoreTests {
         let store = ShelfStore(directory: directory)
         let png = Data([0x89, 0x50, 0x4E, 0x47])
         let date = Date(timeIntervalSince1970: 0)
-        let item = try #require(store.addImage(pngData: png, date: date))
+        let item = try #require(store.addImage(data: png, date: date))
 
         #expect(item.kind == .image)
         #expect(item.ownsFile)
@@ -321,7 +336,7 @@ final class ShelfStoreTests {
         let store = ShelfStore(directory: directory)
         let text = try #require(store.addText("hi"))
         let link = try #require(store.addLink(URL(string: "https://example.com")!))
-        let image = try #require(store.addImage(pngData: Data([1])))
+        let image = try #require(store.addImage(data: Data([1])))
         let folders = [text, link, image].map { $0.url.deletingLastPathComponent() }
         for folder in folders {
             #expect(FileManager.default.fileExists(atPath: folder.path))

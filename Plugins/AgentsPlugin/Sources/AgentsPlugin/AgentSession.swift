@@ -93,6 +93,12 @@ struct AgentSession: Identifiable, Sendable, Equatable, Codable {
 
     var pendingRequest: PendingRequest? { pendingRequests.first }
 
+    mutating func completeOpenActivities() {
+        for index in activities.indices where !activities[index].isComplete {
+            activities[index].isComplete = true
+        }
+    }
+
     var displayName: String {
         title ?? projectName
     }

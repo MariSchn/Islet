@@ -34,7 +34,7 @@ final class ScriptsController {
         command = commandDirectory.map { IsletCommand(port: port, tokenFile: tokenFile, directory: $0) } ?? IsletCommand(port: port, tokenFile: tokenFile)
         isCommandInstalled = command.isInstalled
         api = ScriptsAPI(token: token, store: store, announce: announce)
-        server = LocalHTTPServer(port: port)
+        server = LocalHTTPServer(port: port, maxBodySize: 64 << 10)
     }
 
     static func makeToken() -> String {
@@ -43,10 +43,15 @@ final class ScriptsController {
 
     func start() async {
         writeTokenFile()
+        if command.isOutdated {
+            installCommand()
+        }
         api.isAccepting = true
         do {
             let api = api
             try await server.start { request in
+                await api.isAuthorized(request)
+            } handler: { request in
                 await api.respond(to: request)
             }
             serverError = nil

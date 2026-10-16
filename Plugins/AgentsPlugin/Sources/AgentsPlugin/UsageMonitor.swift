@@ -105,8 +105,8 @@ final class UsageMonitor {
         scheduleCostReset()
     }
 
-    func record(sessionID: String, cost: Double) {
-        costs.record(sessionID: sessionID, cost: cost, at: now())
+    func record(sessionID: String, cost: Double, sessionDuration: Duration? = nil) {
+        costs.record(sessionID: sessionID, cost: cost, at: now(), sessionDuration: sessionDuration)
         costTick += 1
         scheduleCostReset()
     }

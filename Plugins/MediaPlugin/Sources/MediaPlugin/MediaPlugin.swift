@@ -4,7 +4,7 @@ import SwiftUI
 
 @MainActor
 public final class MediaPlugin: IsletPlugin {
-    public static let manifest = PluginManifest(id: "islet.media", displayName: "Media", systemImage: "music.note")
+    public static let manifest = PluginManifest(id: "islet.media", displayName: "Media", systemImage: "music.note", summary: "Control Spotify and Apple Music, their volume and the audio output.", tint: .pink)
     static let contentWidth: CGFloat = 420
     static let contentPadding: CGFloat = 12
     static let nowPlayingHeight: CGFloat = 136
@@ -32,9 +32,13 @@ public final class MediaPlugin: IsletPlugin {
 
     public init(context: PluginContext) {
         self.context = context
-        player = MediaPlayer(setting: context.settings.value(forKey: Self.playerKey))
+        let stored = MediaPlayer(setting: context.settings.value(forKey: Self.playerKey))
+        player = MediaPlayer.offered().contains(stored) ? stored : .automatic
         let controller = MediaController(sources: player.makeSources(), showsPill: context.settings.value(forKey: Self.showsPillKey) ?? true)
         self.controller = controller
+        controller.onCommandError = { [unowned context] message in
+            context.announce(PillAnnouncement(text: message, systemImage: "exclamationmark.triangle.fill"))
+        }
         context.derive(\.pillStatus) { controller.pillStatus }
         context.derive(\.contentSize) {
             Self.contentSize(isBrowsing: controller.isBrowsingPlaylists, playlistCount: controller.playlists.count)
@@ -118,18 +122,18 @@ private struct MediaSettings: View {
     let onPlayerChange: (MediaPlayer) -> Void
 
     var body: some View {
-        Form {
-            Section {
-                Picker("Player", selection: $player) {
-                    ForEach(MediaPlayer.offered()) { player in
-                        Text(player.displayName).tag(player)
-                    }
+        Section {
+            Picker("Player", selection: $player) {
+                ForEach(MediaPlayer.offered()) { player in
+                    Text(player.displayName).tag(player)
                 }
-                .onChange(of: player) { onPlayerChange(player) }
-                Toggle("Show the current track in the collapsed notch", isOn: $controller.showsPill)
-            } footer: {
-                Text("Islet needs permission to control \(permissionName). macOS asks for it the first time the plugin reads what's playing.")
             }
+            .onChange(of: player) { onPlayerChange(player) }
+            Toggle("Show the current track in the collapsed notch", isOn: $controller.showsPill)
+        } header: {
+            Text("Playback")
+        } footer: {
+            Text("Automatic follows whichever player is playing. macOS asks once for permission to control \(permissionName).")
         }
     }
 

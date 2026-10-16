@@ -25,8 +25,13 @@ struct CostTracker: Codable, Equatable {
         return accumulated
     }
 
-    mutating func record(sessionID: String, cost: Double, at date: Date) {
+    mutating func record(sessionID: String, cost: Double, at date: Date, sessionDuration: Duration? = nil) {
         roll(to: date)
+        if lastCost[sessionID] == nil, let sessionDuration,
+           date.addingTimeInterval(-TimeInterval(sessionDuration.components.seconds)) < calendar.startOfDay(for: date) {
+            lastCost[sessionID] = cost
+            return
+        }
         let previous = lastCost[sessionID] ?? 0
         accumulated += max(cost - previous, 0)
         lastCost[sessionID] = max(previous, cost)

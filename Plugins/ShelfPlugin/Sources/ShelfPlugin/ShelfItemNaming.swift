@@ -23,11 +23,11 @@ enum ShelfItemNaming {
         url.host(percentEncoded: false) ?? url.absoluteString
     }
 
-    static func imageFileName(date: Date) -> String {
+    static func imageFileName(date: Date, fileExtension: String = "png") -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd HH.mm.ss"
-        return "Image \(formatter.string(from: date)).png"
+        return "Image \(formatter.string(from: date)).\(fileExtension)"
     }
 
     private static func sanitized(_ name: String) -> String {

@@ -39,6 +39,7 @@ struct HookEvent: Sendable, Equatable, Decodable {
     var permissionSuggestions: [JSONValue]?
     var agent: AgentSession.Agent = .claudeCode
     var host: String?
+    var isFromRemoteHost = false
     var terminal: TerminalApp?
     var tty: String?
     var pid: Int32?
@@ -116,14 +117,15 @@ struct HookEvent: Sendable, Equatable, Decodable {
         title = (try? container.decodeIfPresent(String.self, forKey: .title)).flatMap { $0.isEmpty ? nil : $0 }
     }
 
-    static func decode(_ data: Data, agent: String? = nil, eventName: String? = nil, host: String? = nil, terminal: String? = nil, tty: String? = nil, pid: String? = nil, tmux: String? = nil, tmuxPane: String? = nil, title: String? = nil, branch: String? = nil, lastPrompt: (String) -> String? = TranscriptReader.lastAntigravityPrompt(at:), parent: (String) -> String? = TranscriptReader.antigravityParent(at:)) throws -> HookEvent {
+    static func decode(_ data: Data, agent: String? = nil, eventName: String? = nil, host: String? = nil, isRemote: Bool = false, terminal: String? = nil, tty: String? = nil, pid: String? = nil, tmux: String? = nil, tmuxPane: String? = nil, title: String? = nil, branch: String? = nil, lastPrompt: (String) -> String? = TranscriptReader.lastAntigravityPrompt(at:), parent: (String) -> String? = TranscriptReader.antigravityParent(at:)) throws -> HookEvent {
         let agent = agent.flatMap(AgentSession.Agent.init(rawValue:)) ?? .claudeCode
         var event = switch agent {
-        case .antigravity: try JSONDecoder().decode(AntigravityPayload.self, from: data).event(named: eventName ?? "", lastPrompt: lastPrompt, parent: parent)
+        case .antigravity: try JSONDecoder().decode(AntigravityPayload.self, from: data).event(named: eventName ?? "", lastPrompt: isRemote ? { _ in nil } : lastPrompt, parent: isRemote ? { _ in nil } : parent)
         case .claudeCode, .codex: try JSONDecoder().decode(HookEvent.self, from: data)
         }
         event.agent = agent
-        event.host = host
+        event.host = isRemote ? host.flatMap { $0.isEmpty ? nil : $0 } ?? "remote" : host
+        event.isFromRemoteHost = isRemote
         event.terminal = terminal.flatMap { Self.isSafeIdentifier($0) ? TerminalApp(identifier: $0) : nil }
         event.tty = tty.flatMap { $0.hasPrefix("/dev/") && Self.isSafeIdentifier($0) ? $0 : nil }
         event.pid = pid.flatMap { Int32($0) }.flatMap { $0 > 1 ? $0 : nil }

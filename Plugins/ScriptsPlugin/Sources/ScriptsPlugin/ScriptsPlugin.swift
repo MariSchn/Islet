@@ -3,7 +3,7 @@ import SwiftUI
 
 @MainActor
 public final class ScriptsPlugin: IsletPlugin {
-    public static let manifest = PluginManifest(id: "islet.scripts", displayName: "Scripts", systemImage: "bolt.fill")
+    public static let manifest = PluginManifest(id: "islet.scripts", displayName: "Scripts", systemImage: "bolt.fill", summary: "Show the progress of your own scripts and commands.", tint: .mint)
 
     static let width: CGFloat = 420
     static let rowHeight: CGFloat = 36

@@ -72,13 +72,7 @@ struct MusicSource: MediaSource {
     func artwork(at url: URL) async throws -> Data {
         guard let persistentID = Self.persistentID(fromArtworkURL: url) else { throw MissingArtwork() }
         guard await !artworkFailures.contains(persistentID) else { throw MissingArtwork() }
-        let artwork: (persistentID: String, data: Data?)?
-        do {
-            artwork = try await runner.run(Self.artworkScript) { Self.artwork(from: $0) }
-        } catch let error as AppleScriptError where !error.isApplicationNotRunning {
-            await artworkFailures.insert(persistentID)
-            throw error
-        }
+        let artwork = try await runner.run(Self.artworkScript) { Self.artwork(from: $0) }
         guard let artwork, artwork.persistentID == persistentID else { throw CancellationError() }
         guard let data = artwork.data else {
             await artworkFailures.insert(persistentID)

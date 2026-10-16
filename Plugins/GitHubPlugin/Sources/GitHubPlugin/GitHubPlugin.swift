@@ -3,7 +3,7 @@ import SwiftUI
 
 @MainActor
 public final class GitHubPlugin: IsletPlugin {
-    public static let manifest = PluginManifest(id: "islet.github", displayName: "GitHub", systemImage: "arrow.triangle.pull")
+    public static let manifest = PluginManifest(id: "islet.github", displayName: "GitHub", systemImage: "arrow.triangle.pull", summary: "Your pull requests and review requests with their checks.", tint: Color(red: 0.25, green: 0.27, blue: 0.31))
     static let contentWidth: CGFloat = 480
     static let contentPadding: CGFloat = 12
     static let messageHeight: CGFloat = 96
@@ -47,9 +47,9 @@ public final class GitHubPlugin: IsletPlugin {
         context.observe({ controller.showsPill }) { settings.set($0, forKey: Self.showsPillKey) }
         var previous: GitHubSnapshot?
         context.observe({ controller.phase }) { [unowned context] phase in
-            let current = phase.snapshot
+            guard let current = phase.snapshot else { return }
             defer { previous = current }
-            if let current, let announcement = GitHubChanges.announcement(from: previous, to: current) {
+            if let announcement = GitHubChanges.announcement(from: previous, to: current) {
                 context.announce(announcement)
             }
         }
@@ -77,12 +77,12 @@ private struct GitHubSettings: View {
     @Bindable var controller: GitHubController
 
     var body: some View {
-        Form {
-            Section {
-                Toggle("Show the closed-notch status", isOn: $controller.showsPill)
-            } footer: {
-                Text("A ring with the CI state of your pull requests. It turns orange when checks fail or someone requests your review.")
-            }
+        Section {
+            Toggle("Show the status of your checks in the collapsed notch", isOn: $controller.showsPill)
+        } header: {
+            Text("Collapsed Notch")
+        } footer: {
+            Text("A ring with the CI state of your pull requests. It turns orange when checks fail or someone requests your review. Islet uses the GitHub CLI, so install it with `brew install gh` and log in with `gh auth login`.")
         }
     }
 }

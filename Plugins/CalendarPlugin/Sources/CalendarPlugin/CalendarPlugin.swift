@@ -3,7 +3,7 @@ import SwiftUI
 
 @MainActor
 public final class CalendarPlugin: IsletPlugin {
-    public static let manifest = PluginManifest(id: "islet.calendar", displayName: "Calendar", systemImage: "calendar")
+    public static let manifest = PluginManifest(id: "islet.calendar", displayName: "Calendar", systemImage: "calendar", summary: "Today's and tomorrow's events, with a Join button for video calls.", tint: .red)
     static let contentWidth: CGFloat = 420
     static let contentPadding: CGFloat = 12
     static let headerHeight: CGFloat = 18

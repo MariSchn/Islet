@@ -4,7 +4,7 @@ import SwiftUI
 
 @MainActor
 public final class AgentsPlugin: IsletPlugin {
-    public static let manifest = PluginManifest(id: "islet.agents", displayName: "Agents", systemImage: "terminal")
+    public static let manifest = PluginManifest(id: "islet.agents", displayName: "Agents", systemImage: "terminal", summary: "Follow your coding agents and answer them from the notch.", tint: .purple)
     static let contentWidth: CGFloat = 520
     static let emptyContentHeight: CGFloat = 130
     static let rowHeight: CGFloat = 68
@@ -73,6 +73,7 @@ public final class AgentsPlugin: IsletPlugin {
     }
 
     private static let tokenKey = "hookToken"
+    private static let remoteTokenKey = "remoteHookToken"
     private static let usageKey = "showUsage"
     private static let pillContentKey = "pillContent"
     private static let historyLengthKey = "historyLength"
@@ -98,18 +99,14 @@ public final class AgentsPlugin: IsletPlugin {
     public init(context: PluginContext) {
         self.context = context
         let settings = context.settings
-        let token: String
-        if let stored: String = settings.value(forKey: Self.tokenKey) {
-            token = stored
-        } else {
-            token = HookServer.makeToken()
-            settings.set(token, forKey: Self.tokenKey)
-        }
+        let token = Self.storedToken(forKey: Self.tokenKey, in: settings)
+        let remoteToken = Self.storedToken(forKey: Self.remoteTokenKey, in: settings)
         var display = Self.load(DisplaySettings(), Self.displayKeys, from: settings)
         display.pillContent = settings.value(forKey: Self.pillContentKey).flatMap(DisplaySettings.PillContent.init(rawValue:)) ?? display.pillContent
         display.historyLength = settings.value(forKey: Self.historyLengthKey) ?? display.historyLength
         let controller = AgentsController(
             token: token,
+            remoteToken: remoteToken,
             home: URL.homeDirectory,
             alerts: Self.load(AlertSettings(), Self.alertKeys, from: settings),
             display: display,
@@ -119,6 +116,7 @@ public final class AgentsPlugin: IsletPlugin {
         )
         self.controller = controller
 
+        context.observe({ controller.remoteToken }) { settings.set($0, forKey: Self.remoteTokenKey) }
         context.observe({ controller.showsUsage }) { settings.set($0, forKey: Self.usageKey) }
         context.observe({ controller.alerts }) { Self.save($0, Self.alertKeys, to: settings) }
         context.observe({ controller.display }) { display in
@@ -151,6 +149,13 @@ public final class AgentsPlugin: IsletPlugin {
 
     public func makeSettingsView() -> AnyView? {
         AnyView(AgentsSettings(controller: controller))
+    }
+
+    private static func storedToken(forKey key: String, in settings: PluginSettings) -> String {
+        if let stored: String = settings.value(forKey: key) { return stored }
+        let token = HookServer.makeToken()
+        settings.set(token, forKey: key)
+        return token
     }
 
     private static func load<Settings>(_ defaults: Settings, _ keys: [(key: String, value: WritableKeyPath<Settings, Bool>)], from settings: PluginSettings) -> Settings {

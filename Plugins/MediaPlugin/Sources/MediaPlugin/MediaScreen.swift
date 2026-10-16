@@ -136,9 +136,9 @@ private struct NowPlayingView: View {
                         }
                         Spacer(minLength: 0)
                         HStack(spacing: 24) {
-                            TransportButton(systemImage: "backward.fill", size: 17) { await controller.previousTrack() }
-                            TransportButton(systemImage: nowPlaying.isPlaying ? "pause.fill" : "play.fill", size: 24) { await controller.playPause() }
-                            TransportButton(systemImage: "forward.fill", size: 17) { await controller.nextTrack() }
+                            TransportButton(systemImage: "backward.fill", size: 17, label: "Previous track") { await controller.previousTrack() }
+                            TransportButton(systemImage: nowPlaying.isPlaying ? "pause.fill" : "play.fill", size: 24, label: nowPlaying.isPlaying ? "Pause" : "Play") { await controller.playPause() }
+                            TransportButton(systemImage: "forward.fill", size: 17, label: "Next track") { await controller.nextTrack() }
                         }
                         Spacer(minLength: 0)
                         if capabilities.canRepeat {
@@ -273,6 +273,15 @@ private struct Timeline: View {
                 }
                 .frame(height: 14)
                 .onHover { isHovering = $0 }
+                .accessibilityElement()
+                .accessibilityLabel("Position")
+                .accessibilityValue("\(timestamp(played * nowPlaying.duration)) of \(timestamp(nowPlaying.duration))")
+                .accessibilityAdjustableAction { direction in
+                    let step: TimeInterval = direction == .increment ? 10 : -10
+                    let target = min(max(played * nowPlaying.duration + step, 0), nowPlaying.duration)
+                    seekTask?.cancel()
+                    seekTask = Task { await onSeek(target) }
+                }
                 HStack {
                     Text(timestamp(played * nowPlaying.duration))
                     Spacer()
@@ -350,6 +359,12 @@ private struct VolumeSlider: View {
                     )
                 }
                 .frame(height: 14)
+                .accessibilityElement()
+                .accessibilityLabel("Volume")
+                .accessibilityValue("\(Int(displayed.rounded()))%")
+                .accessibilityAdjustableAction { direction in
+                    send(min(max(Int(displayed.rounded()) + (direction == .increment ? 10 : -10), 0), 100), force: true)
+                }
                 Image(systemName: "speaker.wave.3.fill")
             }
             .font(.system(size: 11, weight: .semibold))
@@ -384,6 +399,7 @@ private struct VolumeSlider: View {
 private struct TransportButton: View {
     let systemImage: String
     let size: CGFloat
+    let label: String
     let action: () async -> Void
 
     var body: some View {
@@ -396,6 +412,7 @@ private struct TransportButton: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(label)
     }
 }
 

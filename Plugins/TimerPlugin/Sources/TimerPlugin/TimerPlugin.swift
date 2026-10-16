@@ -4,7 +4,7 @@ import SwiftUI
 
 @MainActor
 public final class TimerPlugin: IsletPlugin {
-    public static let manifest = PluginManifest(id: "islet.timer", displayName: "Timer", systemImage: "timer")
+    public static let manifest = PluginManifest(id: "islet.timer", displayName: "Timer", systemImage: "timer", summary: "Countdown timers, Pomodoro sessions and a stopwatch.", tint: .orange)
     static let contentWidth: CGFloat = 380
     static let contentPadding: CGFloat = 12
     static let sectionSpacing: CGFloat = 10
@@ -115,16 +115,35 @@ private struct TimerSettings: View {
     @Bindable var store: TimerStore
 
     var body: some View {
-        Form {
-            Section {
-                Stepper("Work: \(store.pomodoroSettings.workMinutes) min", value: $store.pomodoroSettings.workMinutes, in: 1...120)
-                Stepper("Short break: \(store.pomodoroSettings.shortBreakMinutes) min", value: $store.pomodoroSettings.shortBreakMinutes, in: 1...60)
-                Stepper("Long break: \(store.pomodoroSettings.longBreakMinutes) min", value: $store.pomodoroSettings.longBreakMinutes, in: 1...60)
-                Toggle("Start the next phase automatically", isOn: $store.pomodoroSettings.startsNextPhaseAutomatically)
-            } header: {
-                Text("Pomodoro")
-            } footer: {
-                Text("A long break follows every \(PomodoroSettings.workPhasesPerLongBreak) work phases. New durations apply from the next phase.")
+        Section {
+            MinuteStepper("Work", value: $store.pomodoroSettings.workMinutes, in: 1...120)
+            MinuteStepper("Short break", value: $store.pomodoroSettings.shortBreakMinutes, in: 1...60)
+            MinuteStepper("Long break", value: $store.pomodoroSettings.longBreakMinutes, in: 1...60)
+            Toggle("Start the next phase automatically", isOn: $store.pomodoroSettings.startsNextPhaseAutomatically)
+        } header: {
+            Text("Pomodoro")
+        } footer: {
+            Text("A long break follows every \(PomodoroSettings.workPhasesPerLongBreak) work phases. New durations apply from the next phase.")
+        }
+    }
+}
+
+private struct MinuteStepper: View {
+    let title: String
+    @Binding var value: Int
+    let range: ClosedRange<Int>
+
+    init(_ title: String, value: Binding<Int>, in range: ClosedRange<Int>) {
+        self.title = title
+        self._value = value
+        self.range = range
+    }
+
+    var body: some View {
+        LabeledContent(title) {
+            Stepper(value: $value, in: range) {
+                Text("\(value) min")
+                    .monospacedDigit()
             }
         }
     }

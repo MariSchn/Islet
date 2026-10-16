@@ -21,6 +21,22 @@ struct InterruptionMonitorTests {
         #expect(!InterruptionMonitor.containsInterruption(Data("[Request interrupted by user] not json\n".utf8)))
     }
 
+    @Test func readsPastLinesLongerThanTheReadLimit() throws {
+        let transcript = FileManager.default.temporaryDirectory.appending(path: "InterruptionMonitorTests.\(UUID().uuidString).jsonl")
+        try Data().write(to: transcript)
+        defer { try? FileManager.default.removeItem(at: transcript) }
+        var interrupted: [String] = []
+        let monitor = InterruptionMonitor { interrupted.append($0) }
+        let store = AgentSessionStore()
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "local", transcriptPath: transcript.path, prompt: "x"))
+        monitor.track(store.sessions)
+
+        let image = #"{"type":"user","message":{"content":""# + String(repeating: "A", count: Int(TranscriptReader.tailSize) + 200_000) + #""}}"#
+        try Data((image + "\n" + Self.interrupted + "\n").utf8).write(to: transcript)
+        for _ in 0..<5 { monitor.poll() }
+        #expect(interrupted == ["local"])
+    }
+
     @Test func reportsInterruptionsAppendedWhileASessionWorks() throws {
         let transcript = FileManager.default.temporaryDirectory.appending(path: "InterruptionMonitorTests.\(UUID().uuidString).jsonl")
         try Data((Self.interrupted + "\n").utf8).write(to: transcript)

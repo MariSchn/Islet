@@ -27,6 +27,10 @@ struct ActivityEntry: Identifiable, Sendable, Equatable, Codable {
     static func digest(of input: JSONValue?) -> String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = .sortedKeys
+        var input = input
+        if case .object(var fields)? = input, fields.removeValue(forKey: "answers") != nil {
+            input = .object(fields)
+        }
         let data = (try? encoder.encode(input)) ?? Data()
         return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }

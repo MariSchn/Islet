@@ -172,7 +172,7 @@ struct MediaControllerTests {
         #expect((tint?.green ?? 0) > (tint?.blue ?? 0))
     }
 
-    @Test func failedArtworkLoadKeepsPreviousArtworkAndRetriesOnlyWhenTheTrackReturns() async {
+    @Test func failedArtworkLoadClearsTheArtworkAndRetriesOnlyWhenTheTrackReturns() async {
         let source = StubSource()
         let first = URL(string: "https://example.com/first.png")!
         let second = URL(string: "https://example.com/second.png")!
@@ -192,8 +192,10 @@ struct MediaControllerTests {
 
         await source.set(NowPlaying(title: "Second", artist: "Band", artworkURL: second, isPlaying: true))
         await controller.refresh()
-        try? await Task.sleep(for: .milliseconds(50))
-        #expect(controller.artwork === firstArtwork)
+        await waitUntil { controller.artwork == nil }
+        #expect(controller.artwork == nil)
+        #expect(controller.tint == nil)
+        _ = firstArtwork
 
         await controller.refresh()
         try? await Task.sleep(for: .milliseconds(50))

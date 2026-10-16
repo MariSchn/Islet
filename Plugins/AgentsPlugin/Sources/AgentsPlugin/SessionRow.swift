@@ -36,6 +36,8 @@ struct SessionRow: View {
         .contentShape(Rectangle())
         .onTapGesture(perform: toggleExpanded)
         .onHover { isHovering = $0 }
+        .accessibilityElement(children: .contain)
+        .accessibilityAction(named: isExpanded ? "Hide recent actions" : "Show recent actions", toggleExpanded)
     }
 
     private var summary: some View {
@@ -57,6 +59,7 @@ struct SessionRow: View {
                         .buttonStyle(.plain)
                         .onHover { isHoveringTerminal = $0 }
                         .help("Show in \(terminal.name)")
+                        .accessibilityLabel("Show in \(terminal.name)")
                     }
                     if session.isRemote, let host = session.host {
                         Label(host, systemImage: session.isUnreachable ? "network.slash" : "network")
@@ -91,6 +94,7 @@ struct SessionRow: View {
                     }
                     .buttonStyle(.plain)
                     .help(isMuted ? "Unmute" : "Mute")
+                    .accessibilityLabel(isMuted ? "Unmute" : "Mute")
                     .opacity(isHovering ? 1 : 0)
                     .frame(width: isHovering ? nil : 0)
                     .clipped()
@@ -106,6 +110,7 @@ struct SessionRow: View {
                         }
                         .buttonStyle(.plain)
                         .help("Remove from list")
+                        .accessibilityLabel("Remove from list")
                         .opacity(isHovering ? 1 : 0)
                     }
                     .frame(width: 16, height: 16)
@@ -269,6 +274,9 @@ private struct ContextMeter: View {
             }
             .fixedSize()
             .help("Context \(SessionDetails.percentText(percentage))% used")
+            .accessibilityElement()
+            .accessibilityLabel("Context")
+            .accessibilityValue("\(SessionDetails.percentText(percentage))% used")
     }
 
     private var fill: Color {
@@ -308,14 +316,17 @@ private struct DetailChip: View {
                 Image(systemName: systemImage)
             }
             Text(text)
+                .truncationMode(.middle)
         }
         .font(.system(size: 10, weight: .medium))
         .foregroundStyle(style)
         .lineLimit(1)
+        .frame(maxWidth: 160)
+        .fixedSize(horizontal: false, vertical: true)
         .padding(.horizontal, 6)
         .padding(.vertical, 2)
         .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(.white.opacity(0.12)))
-        .fixedSize()
+        .help(text)
     }
 }
 
@@ -324,7 +335,7 @@ private struct PullRequestChip: View {
 
     var body: some View {
         Button {
-            if let url = pullRequest.url.flatMap(URL.init(string:)) {
+            if let url = pullRequest.url.flatMap(URL.init(string:)), ["http", "https"].contains(url.scheme?.lowercased()) {
                 NSWorkspace.shared.open(url)
             }
         } label: {

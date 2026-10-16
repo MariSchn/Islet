@@ -1,6 +1,17 @@
 import Foundation
 import Observation
 
+public protocol PluginSettingsValue {}
+
+extension Bool: PluginSettingsValue {}
+extension Int: PluginSettingsValue {}
+extension Double: PluginSettingsValue {}
+extension String: PluginSettingsValue {}
+extension Date: PluginSettingsValue {}
+extension Data: PluginSettingsValue {}
+extension Array: PluginSettingsValue where Element: PluginSettingsValue {}
+extension Dictionary: PluginSettingsValue where Key == String, Value: PluginSettingsValue {}
+
 @MainActor
 @Observable
 public final class PluginSettings {
@@ -18,7 +29,7 @@ public final class PluginSettings {
         return defaults.object(forKey: prefix + key) as? T
     }
 
-    public func set(_ value: (some Any)?, forKey key: String) {
+    public func set(_ value: (some PluginSettingsValue)?, forKey key: String) {
         if let value {
             defaults.set(value, forKey: prefix + key)
         } else {

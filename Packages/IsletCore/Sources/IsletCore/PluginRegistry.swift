@@ -69,6 +69,7 @@ public final class PluginRegistry {
     public private(set) var selectedID: String?
 
     private var order: [String]
+    private var preferredID: String?
     private var expandedNotches: Set<ObjectIdentifier> = []
     private let storageRoot: URL
     private let userDefaults: UserDefaults
@@ -80,7 +81,7 @@ public final class PluginRegistry {
         self.storageRoot = storageRoot
         self.userDefaults = userDefaults
         self.disabledIDs = Set(userDefaults.stringArray(forKey: disabledKey) ?? [])
-        self.selectedID = userDefaults.string(forKey: selectedKey)
+        self.preferredID = userDefaults.string(forKey: selectedKey)
         self.order = userDefaults.stringArray(forKey: orderKey) ?? []
     }
 
@@ -105,6 +106,13 @@ public final class PluginRegistry {
         let target = min(max(index + offset, 0), ids.count - 1)
         guard target != index else { return }
         ids.insert(ids.remove(at: index), at: target)
+        order = ids
+        userDefaults.set(ids, forKey: orderKey)
+    }
+
+    public func move(fromOffsets source: IndexSet, toOffset destination: Int) {
+        var ids = orderedEntries.map(\.id)
+        ids.move(fromOffsets: source, toOffset: destination)
         order = ids
         userDefaults.set(ids, forKey: orderKey)
     }
@@ -233,6 +241,7 @@ public final class PluginRegistry {
     public func select(_ id: String?) {
         guard id == nil || (entry(for: id!) != nil && isEnabled(id!)) else { return }
         selectedID = id
+        preferredID = id
         userDefaults.set(id, forKey: selectedKey)
         updateScreenVisibility()
     }
@@ -258,8 +267,10 @@ public final class PluginRegistry {
 
     private func ensureSelection() {
         let enabled = enabledEntries
-        if let selectedID, enabled.contains(where: { $0.id == selectedID }) { return }
-        select(enabled.first?.id)
+        let preferred = enabled.first { $0.id == preferredID }
+        if let selectedID, enabled.contains(where: { $0.id == selectedID }), preferred == nil || selectedID == preferredID { return }
+        selectedID = preferred?.id ?? enabled.first?.id
+        updateScreenVisibility()
     }
 
     private func transition(_ entry: PluginEntry, toActive: Bool) async {
@@ -274,6 +285,7 @@ public final class PluginRegistry {
                     entry.state = .active
                     entry.context.isActive = true
                 } catch {
+                    await entry.plugin.deactivate()
                     entry.state = .failed(error)
                 }
             } else {

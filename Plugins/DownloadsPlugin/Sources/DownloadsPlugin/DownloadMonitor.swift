@@ -11,7 +11,6 @@ struct FinishedDownload: Equatable, Sendable {
 @Observable
 final class DownloadMonitor {
     static let pollInterval: Duration = .seconds(1)
-    static let stalePollEvery = 10
 
     private(set) var downloads: [ActiveDownload] = []
     private(set) var accessDenied = false
@@ -141,7 +140,7 @@ final class DownloadMonitor {
     }
 
     private func updatePolling() {
-        if !tracker.hasListedDownloads {
+        if !tracker.hasRecentListedDownloads(now: .now) {
             pollTask?.cancel()
             pollTask = nil
         } else if pollTask == nil {
@@ -151,16 +150,15 @@ final class DownloadMonitor {
 
     private func startPolling() {
         pollTask = Task { [weak self] in
-            var ticks = 0
             while !Task.isCancelled {
                 try? await Task.sleep(for: Self.pollInterval)
                 guard let self, !Task.isCancelled else { return }
-                ticks += 1
-                if tracker.hasRecentListedDownloads(now: .now) || (tracker.hasListedDownloads && ticks % Self.stalePollEvery == 0) {
-                    rescan()
-                } else {
+                guard tracker.hasRecentListedDownloads(now: .now) else {
                     refresh()
+                    pollTask = nil
+                    return
                 }
+                rescan()
             }
         }
     }

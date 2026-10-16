@@ -80,7 +80,7 @@ struct InstalledTerminal {
     }
 
     private static func tmuxBinary(for location: TmuxLocation) -> String? {
-        if let path = ProcessTree.executablePath(of: location.serverPID), FileManager.default.isExecutableFile(atPath: path) { return path }
+        if let path = ProcessTree.executablePath(of: location.serverPID), (path as NSString).lastPathComponent == "tmux", FileManager.default.isExecutableFile(atPath: path) { return path }
         return tmuxFallbacks.first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 

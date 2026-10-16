@@ -6,22 +6,22 @@
 
 ```swift
 public func value<T>(forKey key: String) -> T?
-public func set(_ value: (some Any)?, forKey key: String)
+public func set(_ value: (some PluginSettingsValue)?, forKey key: String)
 ```
 
 - Values are stored in `UserDefaults.standard` under `plugin.<id>.<key>`, so keys only need to be unique within your plugin.
-- Use property-list types: `Bool`, `Int`, `Double`, `String`, `Data`, `Date`, and arrays or dictionaries of these. `value(forKey:)` returns `nil` when the key is missing or the stored value is not of type `T`, so the type has to be known from context: `let step: Int? = context.settings.value(forKey: "step")`, or `?? default` in a typed position.
+- Values are property-list types: `Bool`, `Int`, `Double`, `String`, `Data`, `Date`, and arrays or `[String: …]` dictionaries of these, which is what `PluginSettingsValue` covers. Store an enum through its `rawValue`. `value(forKey:)` returns `nil` when the key is missing or the stored value is not of type `T`, so the type has to be known from context: `let step: Int? = context.settings.value(forKey: "step")`, or `?? default` in a typed position.
 - Setting `nil` removes the key. Because the parameter is generic, a bare `nil` literal doesn't compile; spell out the type, as in `context.settings.set(String?.none, forKey: "greeting")`.
 - `PluginSettings` is `@Observable`. A SwiftUI view that reads a value in its `body` updates when any value of the plugin changes.
 - Settings are not affected by resetting all settings in the General tab, and they survive disabling the plugin.
 
 For anything more than a few flags, or for state that isn't a preference, write a file to the [storage directory](#storage-directory) instead.
 
-## Settings pane
+## Settings page
 
-Return a view from `makeSettingsView()` to get a tab under "Plugin Settings" in the settings window's sidebar. The tab shows your `displayName` and `systemImage`, and it is only listed while the plugin is enabled.
+Every plugin gets a page in the settings window's sidebar, with its icon, `displayName` and `summary` at the top and a switch to turn it on or off. Return a view from `makeSettingsView()` to add your own settings below that switch. They are shown while the plugin is enabled.
 
-The host places your view below a header with the plugin's icon, name and a one-line description, and applies `.formStyle(.grouped)`, so a `Form` with `Section`s matches the rest of the window:
+Return the `Section`s themselves, not a `Form`: the host already places them in a grouped `Form`, so they match the rest of the window:
 
 ```swift
 public func makeSettingsView() -> AnyView? {
@@ -39,18 +39,26 @@ private struct CounterSettings: View {
     }
 
     var body: some View {
-        Form {
-            Stepper("Step: \(step.wrappedValue)", value: step, in: 1...10)
+        Section {
+            LabeledContent("Step") {
+                Stepper("\(step.wrappedValue)", value: step, in: 1...10)
+            }
+        } header: {
+            Text("Counting")
+        } footer: {
+            Text("How much each click adds.")
         }
     }
 }
 ```
 
+Give each section a header, keep footers to one or two sentences, and put the current value next to a stepper rather than into its label.
+
 Like the screen, the settings view is built once and cached, so it has to read live state rather than capture it.
 
 Two patterns from the built-in plugins:
 
-- Bind directly to `PluginSettings`, as above. `HelloPlugin` instead copies the value into `@State` in `onAppear` and writes it back in `onChange`.
+- Bind directly to `PluginSettings`, as above.
 - Keep the setting as a property of your `@Observable` model and persist it with `context.observe`. `MediaPlugin` reads `showsPill` from settings in `init`, passes it to `MediaController`, and saves changes with `context.observe({ controller.showsPill }) { settings.set($0, forKey: Self.showsPillKey) }`. Its settings view binds to the model with `@Bindable`, and the model reacts to changes immediately. `AgentsPlugin` keeps its alert and display settings in structs and lists each field's key once, in key path tables used for both loading and saving.
 
 ## Storage directory
