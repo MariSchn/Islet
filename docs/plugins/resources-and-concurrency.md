@@ -18,13 +18,13 @@ Load them through `Bundle.module`, which SwiftPM generates for targets with reso
 let url = Bundle.module.url(forResource: "defaults", withExtension: "json")
 ```
 
-`.process` places the files at the top level of the bundle, so look them up by name only (use `.copy` to keep a folder structure). `AgentsPlugin` bundles `Resources/claude.svg` this way and loads it in `ClaudeLogo` with `Bundle.module.url(forResource: "claude", withExtension: "svg")`. `Bundle.module` also works when running tests.
+`.process` places the files at the top level of the bundle, so look them up by name only (use `.copy` to keep a folder structure). `AgentsPlugin` bundles `Resources/claude.svg` and the other agent logos this way and loads them in `AgentLogo` with `Bundle.module.url(forResource: name, withExtension: "svg")`. `Bundle.module` also works when running tests.
 
 SF Symbols need no bundling. Use them by name in `PluginManifest.systemImage`, `PillStatus.systemImage` and your views.
 
 ## File drops
 
-Plugins list the content types they accept in `acceptedDropTypes` (`[UTType]`, empty by default). A drag expands the notch while at least one enabled plugin accepts it: a plugin matches when some dragged type conforms to one of its accepted types, so `.image` matches a dragged `.png` and `.fileURL` matches a dragged file. If the user has "Switch to a plugin that accepts files" turned on (Settings › General, on by default), the notch also switches to the first enabled plugin, in tab order, that matches.
+Plugins list the content types they accept in `acceptedDropTypes` (`[UTType]`, empty by default). A drag expands the notch while at least one enabled plugin accepts it: a plugin matches when some dragged type conforms to one of its accepted types, so `.image` matches a dragged `.png` and `.fileURL` matches a dragged file. If the user has "Switch to a plugin that accepts what you drag" turned on (Settings › General, on by default), the notch also switches to the first enabled plugin, in tab order, that matches. Drags that start in the notch itself, such as a recent download dragged out of it, never switch plugins.
 
 The notch window registers only for the pasteboard types `.fileURL`, `.URL`, `.string`, `.tiff` and `.png`. Drags that carry none of these never reach plugins.
 

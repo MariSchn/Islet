@@ -226,8 +226,8 @@ private struct AnimatedList: View {
 
 ```swift
 public actor LocalHTTPServer {
-    public init(port: UInt16, maxBodySize: Int = 16 << 20, requestTimeout: Duration = .seconds(10), replyTimeout: Duration = .seconds(60))
-    public func start(handler: @escaping @Sendable (HTTPRequest) async -> HTTPResponse) async throws
+    public init(port: UInt16, maxBodySize: Int = 1 << 20, requestTimeout: Duration = .seconds(10), replyTimeout: Duration = .seconds(60), maxConnections: Int = 64)
+    public func start(authorize: (@Sendable (HTTPRequest) async -> Bool)? = nil, handler: @escaping @Sendable (HTTPRequest) async -> HTTPResponse) async throws
     public func stop() async
     public var isListening: Bool { get }
     public nonisolated let port: UInt16
@@ -237,14 +237,17 @@ public actor LocalHTTPServer {
 A small HTTP/1.1 server bound to `127.0.0.1` only, for plugins that expose a local API. `start` throws when the port is in use. Each connection carries one request and is closed after the response (no keep-alive, no TLS).
 
 - A request that has not arrived completely within `requestTimeout` is closed, one that cannot be parsed gets `400`, and one whose body exceeds `maxBodySize` gets `413`.
+- `authorize` runs as soon as the request head has arrived, before the body is read. When it returns `false`, the request gets `401` and the handler is not called.
+- At most `maxConnections` connections are open at a time. Further connections are closed right away.
 - The handler's response is sent when it returns. If it takes longer than `replyTimeout`, or the client disconnects, the connection is closed and the handler's task is cancelled; no response is sent then.
-- `HTTPRequest` has `method`, `path`, lowercased `headers`, `body` and `bearerToken`. `HTTPResponse` has `json(_:_:)` and `text(_:)` helpers.
+- `HTTPRequest` has `method`, `path`, lowercased `headers`, `body`, `bearerToken` and `hasBearerToken(_:)`, which compares the token in constant time. `HTTPResponse` has `json(_:_:)` and `text(_:)` helpers.
 
 ```swift
 let server = LocalHTTPServer(port: 7400)
 try await server.start { request in
-    guard request.bearerToken == token else { return .json(401, #"{"error":"unauthorized"}"#) }
-    return .json()
+    request.hasBearerToken(token)
+} handler: { request in
+    .json()
 }
 ```
 
