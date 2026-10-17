@@ -209,6 +209,49 @@ struct MediaControllerTests {
         #expect(await attempts.count(of: second) == 2)
     }
 
+    @Test func artworkOfACancelledLoadIsNotKeptForATrackWithoutArtwork() async {
+        let source = StubSource()
+        let first = URL(string: "https://example.com/first.png")!
+        let skipped = URL(string: "https://example.com/skipped.png")!
+        let controller = MediaController(source: source, loadArtwork: { requested in
+            if requested == skipped { throw CancellationError() }
+            return solidImageData(red: 0.9, green: 0.1, blue: 0.1)
+        })
+
+        await source.set(NowPlaying(title: "First", artist: "Band", artworkURL: first, isPlaying: true))
+        await controller.refresh()
+        await waitUntil { controller.artwork != nil }
+        await source.set(NowPlaying(title: "Skipped", artist: "Band", artworkURL: skipped, isPlaying: true))
+        await controller.refresh()
+        try? await Task.sleep(for: .milliseconds(50))
+        await source.set(NowPlaying(title: "Local file", artist: "Band", isPlaying: true))
+        await controller.refresh()
+
+        #expect(controller.artwork == nil)
+        #expect(controller.tint == nil)
+        #expect(controller.pillStatus?.artwork == nil)
+    }
+
+    @Test func stoppingClearsArtworkLeftByACancelledLoad() async {
+        let source = StubSource()
+        let first = URL(string: "https://example.com/first.png")!
+        let skipped = URL(string: "https://example.com/skipped.png")!
+        let controller = MediaController(source: source, loadArtwork: { requested in
+            if requested == skipped { throw CancellationError() }
+            return solidImageData(red: 0.9, green: 0.1, blue: 0.1)
+        })
+
+        await source.set(NowPlaying(title: "First", artist: "Band", artworkURL: first, isPlaying: true))
+        await controller.refresh()
+        await waitUntil { controller.artwork != nil }
+        await source.set(NowPlaying(title: "Skipped", artist: "Band", artworkURL: skipped, isPlaying: true))
+        await controller.refresh()
+        try? await Task.sleep(for: .milliseconds(50))
+        controller.stop()
+
+        #expect(controller.artwork == nil)
+    }
+
     @Test func artworkIsLoadedFromTheSourceByDefault() async {
         let source = StubSource()
         let controller = MediaController(source: source)
@@ -235,6 +278,40 @@ struct MediaControllerTests {
         #expect(await source.commands == ["shuffle(true)", "repeat(all)", "repeat(one)", "repeat(off)"])
         #expect(controller.nowPlaying?.isShuffling == true)
         #expect(controller.nowPlaying?.repeatMode == .off)
+    }
+
+    @Test func quickTogglesSendAlternatingValues() async {
+        let source = StubSource(capabilities: MediaCapabilities(canShuffle: true, repeatModes: [.off, .all, .one], canFavorite: true))
+        let controller = MediaController(source: source)
+        await source.set(NowPlaying(title: "Song", artist: "Band", isPlaying: true))
+        await controller.refresh()
+        await source.setCommandDelay(.milliseconds(100))
+
+        async let firstShuffle: Void = controller.toggleShuffle()
+        async let secondShuffle: Void = controller.toggleShuffle()
+        async let firstFavorite: Void = controller.toggleFavorite()
+        async let secondFavorite: Void = controller.toggleFavorite()
+        async let firstRepeat: Void = controller.cycleRepeatMode()
+        async let secondRepeat: Void = controller.cycleRepeatMode()
+        _ = await (firstShuffle, secondShuffle, firstFavorite, secondFavorite, firstRepeat, secondRepeat)
+
+        #expect(await source.commands.sorted() == ["favorite(false)", "favorite(true)", "repeat(all)", "repeat(one)", "shuffle(false)", "shuffle(true)"])
+    }
+
+    @Test func togglesShowTheNewValueBeforeThePlayerAnswers() async {
+        let source = StubSource(capabilities: MediaCapabilities(canShuffle: true))
+        let controller = MediaController(source: source)
+        await source.set(NowPlaying(title: "Song", artist: "Band", isPlaying: true))
+        await controller.refresh()
+
+        await source.setCommandDelay(.milliseconds(500))
+
+        async let toggle: Void = controller.toggleShuffle()
+        await waitUntil { controller.nowPlaying?.isShuffling == true }
+        #expect(controller.nowPlaying?.isShuffling == true)
+        #expect(await source.commands.isEmpty)
+        await toggle
+        #expect(controller.nowPlaying?.isShuffling == true)
     }
 
     @Test func unsupportedControlsAreNotSent() async {
@@ -489,6 +566,69 @@ struct MediaControllerTests {
         await controller.playPause()
         #expect(await spotify.commands == ["playPause"])
         #expect(await music.commands.isEmpty)
+    }
+
+    @Test func aFailedReadKeepsTheActivePlayer() async {
+        let spotify = StubSource(name: "Spotify", bundleIdentifier: "com.spotify.client")
+        let music = StubSource(name: "Music", bundleIdentifier: "com.apple.Music")
+        let controller = MediaController(sources: [spotify, music])
+        await music.set(NowPlaying(title: "Album", artist: "Band", isPlaying: true))
+        await spotify.set(NowPlaying(title: "Single", artist: "DJ", isPlaying: false))
+        await controller.refresh()
+        await music.set(NowPlaying(title: "Album", artist: "Band", isPlaying: false))
+        await controller.refresh()
+
+        await music.fail(with: "AppleEvent timed out.")
+        await controller.refresh()
+        #expect(controller.source?.displayName == "Music")
+        #expect(controller.errorMessage == "AppleEvent timed out.")
+
+        await music.fail(with: nil)
+        await controller.refresh()
+        #expect(controller.source?.displayName == "Music")
+        #expect(controller.nowPlaying?.title == "Album")
+    }
+
+    @Test func aPlayerIsletMayNotControlDoesNotHideTheOtherOne() async {
+        let spotify = StubSource(name: "Spotify", bundleIdentifier: "com.spotify.client")
+        let music = StubSource(name: "Music", bundleIdentifier: "com.apple.Music")
+        let controller = MediaController(sources: [spotify, music])
+        await spotify.failReads(with: AppleScriptError([NSAppleScript.errorNumber: AppleScriptError.automationDenied, NSAppleScript.errorMessage: "Not authorized to send Apple events to Spotify."]))
+        await music.set(NowPlaying(title: "Album", artist: "Band", isPlaying: false))
+
+        await controller.refresh()
+        await controller.refresh()
+
+        #expect(controller.source?.displayName == "Music")
+        #expect(controller.nowPlaying?.title == "Album")
+    }
+
+    @Test func aRunningPlayerReplacesAnActivePlayerThatIsNotRunning() async {
+        let spotify = StubSource(name: "Spotify", bundleIdentifier: "com.spotify.client", isRunning: false)
+        let music = StubSource(name: "Music", bundleIdentifier: "com.apple.Music", capabilities: MediaCapabilities(canBrowsePlaylists: true))
+        let controller = MediaController(sources: [spotify, music])
+
+        await controller.refresh()
+
+        #expect(controller.source?.displayName == "Music")
+        #expect(controller.isSourceRunning)
+        #expect(controller.nowPlaying == nil)
+        #expect(controller.capabilities.canBrowsePlaylists)
+    }
+
+    @Test func anIdlePlayerTakesOverWhenTheActiveOneQuits() async {
+        let spotify = StubSource(name: "Spotify", bundleIdentifier: "com.spotify.client")
+        let music = StubSource(name: "Music", bundleIdentifier: "com.apple.Music")
+        let controller = MediaController(sources: [spotify, music])
+        await spotify.set(NowPlaying(title: "Single", artist: "DJ", isPlaying: true))
+        await controller.refresh()
+        #expect(controller.source?.displayName == "Spotify")
+
+        spotify.setRunning(false)
+        await controller.refresh()
+
+        #expect(controller.source?.displayName == "Music")
+        #expect(controller.isSourceRunning)
     }
 
     @Test func aSourceThatIsNotRunningIsNotRead() async {
@@ -943,12 +1083,18 @@ private actor StubState {
     var playlistDelay: Duration?
     var playError: String?
     var commandError: (any Error)?
+    var readError: (any Error)?
+    var commandDelay: Duration?
     var artwork = Data()
 
     func set(_ value: NowPlaying?) { nowPlaying = value }
-    func fail(with message: String) { error = message }
-    func record(_ command: String) { commands.append(command) }
+    func fail(with message: String?) { error = message }
+    func record(_ command: String) async {
+        if let commandDelay { try? await Task.sleep(for: commandDelay) }
+        commands.append(command)
+    }
     func setReadDelay(_ delay: Duration) { readDelay = delay }
+    func setCommandDelay(_ delay: Duration) { commandDelay = delay }
     func update(_ change: @Sendable (inout NowPlaying) -> Void) {
         guard var value = nowPlaying else { return }
         change(&value)
@@ -959,8 +1105,10 @@ private actor StubState {
     func setPlaylistDelay(_ delay: Duration) { playlistDelay = delay }
     func failPlay(with message: String) { playError = message }
     func failCommands(with error: any Error) { commandError = error }
+    func failReads(with error: any Error) { readError = error }
     func setArtwork(_ data: Data) { artwork = data }
-    func perform(_ command: String) throws {
+    func perform(_ command: String) async throws {
+        if let commandDelay { try? await Task.sleep(for: commandDelay) }
         if let commandError { throw commandError }
         commands.append(command)
     }
@@ -976,6 +1124,7 @@ private actor StubState {
     func read() async throws -> NowPlaying? {
         reads += 1
         if let readDelay { try? await Task.sleep(for: readDelay) }
+        if let readError { throw readError }
         if let error { throw StubError(message: error) }
         return nowPlaying
     }
@@ -1022,14 +1171,16 @@ private struct StubSource: MediaSource {
     func launch() {}
     func stateChanges() -> AsyncStream<Void> { stream }
     func set(_ value: NowPlaying?) async { await state.set(value) }
-    func fail(with message: String) async { await state.fail(with: message) }
+    func fail(with message: String?) async { await state.fail(with: message) }
     func setReadDelay(_ delay: Duration) async { await state.setReadDelay(delay) }
+    func setCommandDelay(_ delay: Duration) async { await state.setCommandDelay(delay) }
     func notifyChange() { changes.yield() }
     func setPlaylists(_ value: [MediaPlaylist]) async { await state.setPlaylists(value) }
     func failPlaylists(with message: String) async { await state.failPlaylists(with: message) }
     func setPlaylistDelay(_ delay: Duration) async { await state.setPlaylistDelay(delay) }
     func failPlay(with message: String) async { await state.failPlay(with: message) }
     func failCommands(with error: any Error) async { await state.failCommands(with: error) }
+    func failReads(with error: any Error) async { await state.failReads(with: error) }
     func setArtwork(_ data: Data) async { await state.setArtwork(data) }
 
     func nowPlaying() async throws -> NowPlaying? { try await state.read() }

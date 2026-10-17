@@ -203,7 +203,9 @@ final class MediaController {
 
     func toggleFavorite() async {
         guard capabilities.canFavorite, let nowPlaying else { return }
-        await perform { try await $0.setFavorite(!nowPlaying.isFavorite) }
+        let favorite = !nowPlaying.isFavorite
+        showOptimistically { $0.isFavorite = favorite }
+        await perform { try await $0.setFavorite(favorite) }
     }
 
     var capabilities: MediaCapabilities {
@@ -212,12 +214,22 @@ final class MediaController {
 
     func toggleShuffle() async {
         guard capabilities.canShuffle, let nowPlaying else { return }
-        await perform { try await $0.setShuffling(!nowPlaying.isShuffling) }
+        let shuffling = !nowPlaying.isShuffling
+        showOptimistically { $0.isShuffling = shuffling }
+        await perform { try await $0.setShuffling(shuffling) }
     }
 
     func cycleRepeatMode() async {
         guard let nowPlaying, let next = capabilities.repeatMode(after: nowPlaying.repeatMode) else { return }
+        showOptimistically { $0.repeatMode = next }
         await perform { try await $0.setRepeatMode(next) }
+    }
+
+    private func showOptimistically(_ change: (inout NowPlaying) -> Void) {
+        guard var nowPlaying else { return }
+        generation += 1
+        change(&nowPlaying)
+        self.nowPlaying = nowPlaying
     }
 
     func togglePlaylists() async {
@@ -326,7 +338,7 @@ final class MediaController {
     }
 
     private func updateArtwork(for url: URL?) {
-        guard url != artworkURL else { return }
+        guard url != artworkURL || (url == nil && artwork != nil) else { return }
         artworkURL = url
         artworkTask?.cancel()
         guard let url else {
@@ -361,11 +373,14 @@ final class MediaController {
         if let playing = polls.first(where: \.isPlaying) {
             return playing.index
         }
-        if polls.contains(where: { $0.index == current && $0.hasTrack }) {
+        if polls.contains(where: { $0.index == current && ($0.hasTrack || $0.failedWhileRunning) }) {
             return current
         }
         if let tracked = polls.first(where: \.hasTrack) {
             return tracked.index
+        }
+        if !polls.contains(where: { $0.index == current }), let running = polls.first {
+            return running.index
         }
         return current
     }
@@ -383,4 +398,10 @@ private struct SourcePoll {
 
     var isPlaying: Bool { track?.isPlaying == true }
     var hasTrack: Bool { track != nil }
+
+    var failedWhileRunning: Bool {
+        guard case .failure(let error) = outcome else { return false }
+        guard let error = error as? AppleScriptError else { return true }
+        return !error.isApplicationNotRunning && !error.isAutomationDenied
+    }
 }
