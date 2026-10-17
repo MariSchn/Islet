@@ -17,8 +17,8 @@ final class SparkleUpdater: AppUpdater {
         guard let key = bundle.object(forInfoDictionaryKey: "SUPublicEDKey") as? String, !key.isEmpty else { return nil }
         controller = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
         automaticallyChecksForUpdates = controller.updater.automaticallyChecksForUpdates
-        observation = controller.updater.observe(\.canCheckForUpdates, options: [.initial, .new]) { [weak self] updater, _ in
-            let canCheck = updater.canCheckForUpdates
+        observation = controller.updater.observe(\.canCheckForUpdates, options: [.initial, .new]) { [weak self] _, change in
+            guard let canCheck = change.newValue else { return }
             Task { @MainActor in self?.canCheckForUpdates = canCheck }
         }
     }
