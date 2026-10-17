@@ -51,7 +51,16 @@ struct MarkdownText: View {
     }
 
     private func inline(_ text: String) -> Text {
-        Text((try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text))
+        Text(Self.attributed(text))
+    }
+
+    static func attributed(_ text: String) -> AttributedString {
+        let parsed = (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
+        return parsed.transformingAttributes(\.link) { link in
+            if let url = link.value, !["http", "https"].contains(url.scheme?.lowercased()) {
+                link.value = nil
+            }
+        }
     }
 
     static func parse(_ markdown: String) -> [Block] {

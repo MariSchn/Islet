@@ -10,6 +10,12 @@ struct HookInstallerTests {
         return HookInstaller(agent: agent, directory: directory, port: 7365, token: "deadbeef")
     }
 
+    func installFakeLsof(in directory: URL, owner: uid_t = getuid()) throws {
+        let fakeLsof = directory.appending(path: "lsof")
+        try "#!/bin/sh\nprintf 'p1\\nu%s\\nf4\\n' \(owner)\n".write(to: fakeLsof, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeLsof.path)
+    }
+
     @Test func installsCodexHooksIntoHooksJSON() throws {
         let installer = try makeInstaller(agent: .codex)
         #expect(installer.settingsURL.lastPathComponent == "hooks.json")
@@ -162,6 +168,7 @@ struct HookInstallerTests {
         let fakeCurl = installer.directory.appending(path: "curl")
         try "#!/bin/sh\nprintf '%s\\n' \"$@\" > '\(capture.path)'\n".write(to: fakeCurl, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeCurl.path)
+        try installFakeLsof(in: installer.directory)
         for (event, expectedTitle) in [("PreToolUse", ""), ("PostToolUseFailure", ""), ("PermissionRequest", ""), ("Notification", ""), ("UserPromptSubmit", "named"), ("Stop", "named")] {
             let process = Process()
             process.executableURL = URL(filePath: "/bin/sh")
@@ -218,6 +225,7 @@ struct HookInstallerTests {
         let fakeCurl = installer.directory.appending(path: "curl")
         try "#!/bin/sh\nprintf '%s\\n' \"$@\" > '\(capture.path)'\n".write(to: fakeCurl, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeCurl.path)
+        try installFakeLsof(in: installer.directory)
         let agent = installer.directory.appending(path: "claude")
         try FileManager.default.createSymbolicLink(at: agent, withDestinationURL: URL(filePath: "/bin/bash"))
         for (event, reportsProcess) in [("PreToolUse", false), ("PostToolUse", false), ("PermissionRequest", true)] {
@@ -279,6 +287,7 @@ struct HookInstallerTests {
         let fakeCurl = installer.directory.appending(path: "curl")
         try "#!/bin/sh\nprintf '%s\\n' \"$$\" > '\(capture.path)'\nexec sleep 30\n".write(to: fakeCurl, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeCurl.path)
+        try installFakeLsof(in: installer.directory)
 
         let process = Process()
         process.executableURL = URL(filePath: "/bin/sh")
@@ -305,6 +314,53 @@ struct HookInstallerTests {
             Thread.sleep(forTimeInterval: 0.05)
         }
         #expect(kill(request, 0) != 0)
+    }
+
+    @Test func onlyAnswersToPermissionRequestsReachTheAgent() throws {
+        let installer = try makeInstaller()
+        try installer.install()
+        let fakeCurl = installer.directory.appending(path: "curl")
+        try "#!/bin/sh\ncat >/dev/null\nprintf '{\"reply\":true}'\n".write(to: fakeCurl, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeCurl.path)
+        try installFakeLsof(in: installer.directory)
+
+        for (event, expected) in [("PreToolUse", ""), ("UserPromptSubmit", ""), ("SessionStart", ""), ("PermissionRequest", #"{"reply":true}"#)] {
+            #expect(try runScript(installer, event: event) == expected, "\(event)")
+        }
+    }
+
+    @Test func permissionRequestsAreOnlySentToAListenerOfTheSameUser() throws {
+        let installer = try makeInstaller()
+        try installer.install()
+        let capture = installer.directory.appending(path: "curl-call")
+        let fakeCurl = installer.directory.appending(path: "curl")
+        try "#!/bin/sh\ncat >/dev/null\ntouch '\(capture.path)'\nprintf '{\"reply\":true}'\n".write(to: fakeCurl, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeCurl.path)
+
+        try installFakeLsof(in: installer.directory, owner: getuid() + 1)
+        #expect(try runScript(installer, event: "PermissionRequest") == "")
+        #expect(!FileManager.default.fileExists(atPath: capture.path))
+
+        try installFakeLsof(in: installer.directory)
+        #expect(try runScript(installer, event: "PermissionRequest") == #"{"reply":true}"#)
+        #expect(FileManager.default.fileExists(atPath: capture.path))
+    }
+
+    private func runScript(_ installer: HookInstaller, event: String) throws -> String {
+        let process = Process()
+        process.executableURL = URL(filePath: "/bin/sh")
+        process.arguments = [installer.scriptURL.path]
+        process.environment = ["PATH": installer.directory.path + ":/usr/bin:/bin"]
+        let input = Pipe()
+        let output = Pipe()
+        process.standardInput = input
+        process.standardOutput = output
+        try process.run()
+        input.fileHandleForWriting.write(Data(#"{"session_id":"a","hook_event_name":"\#(event)"}"#.utf8))
+        try input.fileHandleForWriting.close()
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return String(decoding: data, as: UTF8.self)
     }
 
     @Test func installsScriptAndMergesHooksWithoutTouchingOtherSettings() throws {
