@@ -54,11 +54,14 @@ public actor LocalHTTPServer {
         do {
             try await waitUntilReady(listener)
         } catch {
-            self.listener = nil
-            self.handler = nil
-            self.authorizer = nil
+            if self.listener === listener {
+                self.listener = nil
+                self.handler = nil
+                self.authorizer = nil
+            }
             throw error
         }
+        guard self.listener === listener else { throw CancellationError() }
     }
 
     public func stop() async {
