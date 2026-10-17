@@ -129,7 +129,7 @@ public final class AgentsPlugin: IsletPlugin {
             Self.contentSize(for: controller.store.orderedSessions, expanded: controller.expandedSessionIDs, showsUsage: controller.showsUsageBar, showsAntigravityQuota: controller.visibleAntigravityQuota != nil, historyLength: controller.display.historyLength)
         }
         context.observe({ controller.store.sessions }) { [unowned context] _ in
-            for announcement in controller.sessionsDidChange() {
+            if let announcement = controller.sessionsDidChange() {
                 context.announce(announcement)
             }
         }

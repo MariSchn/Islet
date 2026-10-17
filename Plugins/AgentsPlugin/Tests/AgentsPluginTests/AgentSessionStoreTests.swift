@@ -929,6 +929,113 @@ struct AgentSessionStoreTests {
         #expect(await bash.value == .empty)
     }
 
+    @Test func subagentWorkKeepsAPromptThatWaitsInTheTerminal() async throws {
+        var clock = Date(timeIntervalSince1970: 1_000_000)
+        let store = AgentSessionStore(now: { clock })
+        let make: JSONValue = .object(["command": .string("make")])
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "Review"))
+        let timedOut = Task { await store.handle(HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "Bash", toolInput: make, agentType: "Explore", agentID: "explore-1")) }
+        try await waitForPendingRequest(in: store)
+        clock += TimeInterval(HookServer.replyTimeout.components.seconds)
+        timedOut.cancel()
+        #expect(await timedOut.value == .empty)
+        let deadline = ContinuousClock.now + .seconds(2)
+        while store.sessions.first?.pendingRequest != nil {
+            try #require(ContinuousClock.now < deadline)
+            await Task.yield()
+        }
+
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "a", toolName: "Read", toolInput: .object(["file_path": .string("/x")]), agentType: "general-purpose", agentID: "general-1"))
+        #expect(store.sessions[0].state == .needsAttention("Waiting for your answer in the terminal"))
+        #expect(store.pillStatus(for: DisplaySettings())?.priority == .attention)
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "a", toolName: "Bash", toolInput: make, agentType: "Explore", agentID: "explore-1"))
+        #expect(store.sessions[0].state == .working)
+
+        store.apply(HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "ExitPlanMode", toolInput: .object(["plan": .string("# Plan")])))
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "a", toolName: "Read", toolInput: .object(["file_path": .string("/y")]), agentType: "general-purpose", agentID: "general-1"))
+        #expect(store.sessions[0].state == .needsAttention("Wants to ExitPlanMode"))
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "a", toolName: "ExitPlanMode", toolInput: .object(["plan": .string("# Plan")])))
+        #expect(store.sessions[0].state == .working)
+
+        let answered = Task { await store.handle(HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "Bash", toolInput: .object(["command": .string("ls")]), agentType: "Explore", agentID: "explore-1")) }
+        try await waitForPendingRequest(in: store)
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "a", toolName: "Bash", toolInput: .object(["command": .string("ls")]), agentType: "Explore", agentID: "explore-1"))
+        #expect(await answered.value == .empty)
+        #expect(store.sessions[0].state == .working)
+    }
+
+    @Test func anAutoModePromptOfASubagentWaitsUntilThatSubagentContinues() {
+        let store = AgentSessionStore()
+        let remove: JSONValue = .object(["command": .string("rm -rf build")])
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "Clean up", permissionMode: "auto"))
+        store.apply(HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "Bash", toolInput: remove, permissionMode: "auto", agentType: "Explore", agentID: "explore-1"))
+        #expect(store.sessions[0].state == .working)
+        store.apply(HookEvent(kind: .notification, sessionID: "a", message: "Claude needs your permission to use Bash", notificationType: "permission_prompt"))
+
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "a", toolName: "Read", toolInput: .object(["file_path": .string("/x")]), agentType: "general-purpose", agentID: "general-1"))
+        #expect(store.sessions[0].state == .needsAttention("Claude needs your permission to use Bash"))
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "a", toolName: "Bash", toolInput: remove, agentType: "Explore", agentID: "explore-1"))
+        #expect(store.sessions[0].state == .working)
+    }
+
+    @Test func mainThreadEventsOfAnAgentSessionEndAWaitInTheTerminal() {
+        let store = AgentSessionStore()
+        let plan: JSONValue = .object(["plan": .string("# Plan")])
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "Plan it", agentType: "planner"))
+        store.apply(HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "ExitPlanMode", toolInput: plan, agentType: "planner"))
+        #expect(store.sessions[0].state.requiresAttention)
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "a", toolName: "ExitPlanMode", toolInput: plan, agentType: "planner"))
+        #expect(store.sessions[0].state == .working)
+
+        store.apply(HookEvent(kind: .notification, sessionID: "a", message: "Claude needs your permission to use Edit", notificationType: "permission_prompt"))
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "a", toolName: "Edit", toolInput: .object(["file_path": .string("/p/a.swift")]), agentType: "planner"))
+        #expect(store.sessions[0].state == .working)
+    }
+
+    @Test func handedOverRequestsWaitInTheTerminal() async throws {
+        let store = AgentSessionStore()
+        let reply = Task { await store.handle(HookEvent(kind: .permissionRequest, sessionID: "a", toolName: "Bash", toolInput: .object(["command": .string("make")]))) }
+        try await waitForPendingRequest(in: store)
+
+        store.handOverPendingRequests()
+
+        #expect(await reply.value == .empty)
+        #expect(store.sessions[0].pendingRequests.isEmpty)
+        #expect(store.sessions[0].state == .needsAttention("Waiting for your answer in the terminal"))
+    }
+
+    @Test func dismissedRemoteSessionsAreForgottenOnceTheyGoQuiet() {
+        var clock = Date(timeIntervalSince1970: 1_000_000)
+        let store = AgentSessionStore(now: { clock }, localHost: { "mac" })
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "r", prompt: "x", host: "devbox"))
+        store.dismiss("r")
+
+        clock += AgentSessionStore.remoteExpiry - 60
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "r", toolName: "Read", host: "devbox"))
+        clock += 120
+        store.removeExitedSessions { _ in false }
+        #expect(store.snapshot().dismissed?.keys.contains("r") == true)
+        #expect(store.sessions.isEmpty)
+
+        clock += AgentSessionStore.remoteExpiry
+        store.removeExitedSessions { _ in false }
+        #expect(store.snapshot().dismissed?.isEmpty == true)
+    }
+
+    @Test func dismissalsSavedWithoutADateLastTheFullExpiry() throws {
+        var clock = Date(timeIntervalSince1970: 1_000_000)
+        let store = AgentSessionStore(now: { clock }, localHost: { "mac" })
+        let saved = Data(#"{"sessions":[],"hiddenSessions":[],"dismissed":{"r":{"isRemote":true}}}"#.utf8)
+        store.restore(try JSONDecoder().decode(SessionSnapshot.self, from: saved), isRunning: { _ in false })
+        store.removeExitedSessions { _ in false }
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "r", toolName: "Read", host: "devbox"))
+        #expect(store.sessions.isEmpty)
+
+        clock += AgentSessionStore.remoteExpiry + 60
+        store.removeExitedSessions { _ in false }
+        #expect(store.snapshot().dismissed?.isEmpty == true)
+    }
+
     func waitForPendingRequest(in store: AgentSessionStore, count: Int = 1) async throws {
         let deadline = ContinuousClock.now + .seconds(2)
         while (store.sessions.first?.pendingRequests.count ?? 0) < count {

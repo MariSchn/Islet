@@ -24,6 +24,7 @@ final class AgentSessionStore {
     struct Dismissal: Sendable, Equatable, Codable {
         var pid: Int32?
         var isRemote: Bool
+        var updatedAt: Date?
     }
 
     private(set) var sessions: [AgentSession] = []
@@ -95,7 +96,10 @@ final class AgentSessionStore {
             return
         }
         if dismissed[event.sessionID] != nil {
-            guard event.kind == .userPromptSubmit, !event.isTaskNotification else { return }
+            guard event.kind == .userPromptSubmit, !event.isTaskNotification else {
+                dismissed[event.sessionID]?.updatedAt = timestamp
+                return
+            }
             dismissed[event.sessionID] = nil
         }
 
@@ -142,6 +146,7 @@ final class AgentSessionStore {
         if event.toolName == "ExitPlanMode", let plan = event.toolInput?["plan"]?.stringValue {
             session.plan = plan
         }
+        let waitsForAnswerInTerminal = if case .needsAttention = session.state { session.pendingRequests.isEmpty } else { false }
         for request in Self.withdrawnRequests(session.pendingRequests, on: event) {
             resolve(request.id, with: nil)
             session.pendingRequests.removeAll { $0.id == request.id }
@@ -151,12 +156,14 @@ final class AgentSessionStore {
         case .sessionStart:
             session.state = .starting
             session.activity = nil
+            session.requestsInTerminal = []
             if session.task == nil, !session.isRemote, event.source == "fork" || event.source == "resume", let path = session.transcriptPath {
                 loadLastPrompt(from: path, for: session.id)
             }
         case .userPromptSubmit:
             if !event.isTaskNotification {
                 session.task = event.prompt.map(Self.summarize)
+                session.requestsInTerminal = []
             }
             guard session.pendingRequests.isEmpty else { break }
             session.activity = nil
@@ -164,7 +171,8 @@ final class AgentSessionStore {
             session.turnStartedAt = timestamp
         case .preToolUse, .postToolUse, .postToolUseFailure:
             session.activity = event.activityDescription
-            if event.kind == .preToolUse || session.state != .interrupted {
+            let answeredInTerminal = event.kind != .preToolUse && Self.removeRequestInTerminal(matching: event, from: &session)
+            if event.kind == .preToolUse || session.state != .interrupted, !waitsForAnswerInTerminal || event.agentID == nil || answeredInTerminal {
                 session.state = .working
             }
             Self.record(event, in: &session, at: timestamp)
@@ -175,17 +183,24 @@ final class AgentSessionStore {
             }
         case .permissionDenied:
             session.activity = event.activityDescription.map { "Denied: \($0)" } ?? "Denied a tool call"
+            _ = Self.removeRequestInTerminal(matching: event, from: &session)
             Self.record(event, in: &session, at: timestamp)
         case .permissionRequest:
             let request = event.toolName.flatMap { PendingRequest(toolName: $0, toolInput: event.toolInput, agentType: event.agentType, permissionSuggestions: event.permissionSuggestions) }
             if let request, event.isInAutoMode, case .permission = request.kind {
                 session.activity = event.activityDescription
-                session.state = .working
+                if !waitsForAnswerInTerminal || event.agentID == nil {
+                    session.state = .working
+                }
+                session.requestsInTerminal.append(TerminalRequest(toolName: request.toolName, toolInput: request.toolInput))
             } else if let request {
                 session.pendingRequests.insert(request, at: session.pendingRequests.firstIndex { !$0.isAnswerable } ?? session.pendingRequests.endIndex)
                 session.state = .needsAttention(Self.attentionReason(for: session.pendingRequests[0]))
             } else {
                 session.state = .needsAttention(event.activityDescription.map { "Wants to \($0)" } ?? "Needs permission")
+                if let toolName = event.toolName {
+                    session.requestsInTerminal.append(TerminalRequest(toolName: toolName, toolInput: event.toolInput))
+                }
             }
         case .notification:
             switch event.notificationType {
@@ -208,10 +223,12 @@ final class AgentSessionStore {
         case .stop:
             session.state = .done
             session.activity = nil
+            session.requestsInTerminal = []
             session.completeOpenActivities()
         case .stopFailure:
             session.state = .failed(event.failureDescription)
             session.activity = nil
+            session.requestsInTerminal = []
             session.completeOpenActivities()
         case .sessionEnd, .other:
             return
@@ -286,7 +303,7 @@ final class AgentSessionStore {
 
     func dismiss(_ id: String) {
         guard let session = sessions.first(where: { $0.id == id }) else { return }
-        dismissed[id] = Dismissal(pid: session.pid, isRemote: session.isRemote)
+        dismissed[id] = Dismissal(pid: session.pid, isRemote: session.isRemote, updatedAt: now())
         withdrawPendingRequest(for: id)
         sessions.removeAll { $0.id == id }
     }
@@ -336,6 +353,9 @@ final class AgentSessionStore {
     private func withdraw(_ requestID: UUID, timedOut: Bool) {
         resolve(requestID, with: nil)
         guard let index = sessions.firstIndex(where: { $0.pendingRequests.contains { $0.id == requestID } }) else { return }
+        if timedOut, let request = sessions[index].pendingRequests.first(where: { $0.id == requestID }) {
+            sessions[index].requestsInTerminal.append(TerminalRequest(toolName: request.toolName, toolInput: request.toolInput))
+        }
         sessions[index].pendingRequests.removeAll { $0.id == requestID }
         if let next = sessions[index].pendingRequests.first {
             sessions[index].state = .needsAttention(Self.attentionReason(for: next))
@@ -349,6 +369,15 @@ final class AgentSessionStore {
         scheduleUnreachableCheck()
     }
 
+    func handOverPendingRequests() {
+        for index in sessions.indices where !sessions[index].pendingRequests.isEmpty {
+            withdrawPendingRequest(for: sessions[index].id)
+            sessions[index].requestsInTerminal += sessions[index].pendingRequests.map { TerminalRequest(toolName: $0.toolName, toolInput: $0.toolInput) }
+            sessions[index].pendingRequests = []
+            sessions[index].state = .needsAttention("Waiting for your answer in the terminal")
+        }
+    }
+
     func markInterrupted(_ sessionID: String) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         switch sessions[index].state {
@@ -357,6 +386,7 @@ final class AgentSessionStore {
         }
         withdrawPendingRequest(for: sessionID)
         sessions[index].pendingRequests = []
+        sessions[index].requestsInTerminal = []
         sessions[index].state = .interrupted
         sessions[index].activity = nil
         sessions[index].completeOpenActivities()
@@ -409,7 +439,13 @@ final class AgentSessionStore {
         }
         sessions = snapshot.sessions.filter(isAlive).map(revived)
         hiddenSessions = Dictionary(snapshot.hiddenSessions.filter(isAlive).map { ($0.id, revived($0)) }, uniquingKeysWith: { first, _ in first })
-        dismissed = (snapshot.dismissed ?? [:]).filter { isAlive(pid: $0.value.pid, isRemote: $0.value.isRemote) }
+        dismissed = (snapshot.dismissed ?? [:])
+            .filter { isAlive(pid: $0.value.pid, isRemote: $0.value.isRemote) }
+            .mapValues { dismissal in
+                var dismissal = dismissal
+                dismissal.updatedAt = dismissal.updatedAt ?? now()
+                return dismissal
+            }
         scheduleFinishedExpiry()
         scheduleUnreachableCheck()
     }
@@ -421,7 +457,7 @@ final class AgentSessionStore {
             return isRunning(pid)
         }
         dismissed = dismissed.filter { _, dismissal in
-            guard !dismissal.isRemote, let pid = dismissal.pid else { return true }
+            guard !dismissal.isRemote, let pid = dismissal.pid else { return (dismissal.updatedAt ?? .distantPast) > cutoff }
             return isRunning(pid)
         }
         let exited = sessions.filter { session in
@@ -441,6 +477,12 @@ final class AgentSessionStore {
             return requested == actual
         }
         return requestedFields.allSatisfy { actualFields[$0.key] == $0.value }
+    }
+
+    private static func removeRequestInTerminal(matching event: HookEvent, from session: inout AgentSession) -> Bool {
+        guard let index = session.requestsInTerminal.firstIndex(where: { $0.toolName == event.toolName && input($0.toolInput, isContainedIn: event.toolInput) }) else { return false }
+        session.requestsInTerminal.remove(at: index)
+        return true
     }
 
     private func withdrawPendingRequest(for sessionID: String) {

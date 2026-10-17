@@ -194,7 +194,7 @@ struct SessionPersistenceTests {
         await controller.start()
         defer { Task { await controller.stop() } }
         #expect(controller.store.sessions.map(\.id) == ["s"])
-        #expect(controller.sessionsDidChange().isEmpty)
+        #expect(controller.sessionsDidChange() == nil)
         #expect(controller.dailyCost == 12)
         controller.usage.record(sessionID: "s", cost: 12.5)
         #expect(controller.dailyCost == 12.5)

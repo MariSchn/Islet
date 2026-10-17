@@ -79,6 +79,7 @@ struct AgentSession: Identifiable, Sendable, Equatable, Codable {
     var activity: String?
     var state: State
     var pendingRequests: [PendingRequest] = []
+    var requestsInTerminal: [TerminalRequest] = []
     var activities: [ActivityEntry] = []
     var plan: String?
     var details = SessionDetails()
@@ -111,6 +112,11 @@ struct AgentSession: Identifiable, Sendable, Equatable, Codable {
         guard let cwd, !cwd.isEmpty else { return agent.displayName }
         return (cwd as NSString).lastPathComponent
     }
+}
+
+struct TerminalRequest: Sendable, Equatable {
+    var toolName: String
+    var toolInput: JSONValue?
 }
 
 struct SessionDetails: Sendable, Equatable, Codable {
