@@ -33,6 +33,7 @@ struct HookEvent: Sendable, Equatable, Decodable {
     var source: String?
     var permissionMode: String?
     var agentType: String?
+    var agentID: String?
     var error: String?
     var lastAssistantMessage: String?
     var reason: String?
@@ -62,6 +63,7 @@ struct HookEvent: Sendable, Equatable, Decodable {
         case source
         case permissionMode = "permission_mode"
         case agentType = "agent_type"
+        case agentID = "agent_id"
         case error
         case lastAssistantMessage = "last_assistant_message"
         case reason
@@ -69,7 +71,7 @@ struct HookEvent: Sendable, Equatable, Decodable {
         case title = "session_title"
     }
 
-    init(kind: Kind, sessionID: String, cwd: String? = nil, transcriptPath: String? = nil, toolName: String? = nil, toolInput: JSONValue? = nil, prompt: String? = nil, message: String? = nil, notificationType: String? = nil, source: String? = nil, permissionMode: String? = nil, agentType: String? = nil, error: String? = nil, lastAssistantMessage: String? = nil, reason: String? = nil, permissionSuggestions: [JSONValue]? = nil, agent: AgentSession.Agent = .claudeCode, host: String? = nil, terminal: TerminalApp? = nil, tty: String? = nil, pid: Int32? = nil, tmux: TmuxLocation? = nil, title: String? = nil) {
+    init(kind: Kind, sessionID: String, cwd: String? = nil, transcriptPath: String? = nil, toolName: String? = nil, toolInput: JSONValue? = nil, prompt: String? = nil, message: String? = nil, notificationType: String? = nil, source: String? = nil, permissionMode: String? = nil, agentType: String? = nil, agentID: String? = nil, error: String? = nil, lastAssistantMessage: String? = nil, reason: String? = nil, permissionSuggestions: [JSONValue]? = nil, agent: AgentSession.Agent = .claudeCode, host: String? = nil, terminal: TerminalApp? = nil, tty: String? = nil, pid: Int32? = nil, tmux: TmuxLocation? = nil, title: String? = nil) {
         self.kind = kind
         self.sessionID = sessionID
         self.cwd = cwd
@@ -82,6 +84,7 @@ struct HookEvent: Sendable, Equatable, Decodable {
         self.source = source
         self.permissionMode = permissionMode
         self.agentType = agentType
+        self.agentID = agentID
         self.error = error
         self.lastAssistantMessage = lastAssistantMessage
         self.reason = reason
@@ -110,6 +113,7 @@ struct HookEvent: Sendable, Equatable, Decodable {
         source = try container.decodeIfPresent(String.self, forKey: .source)
         permissionMode = try container.decodeIfPresent(String.self, forKey: .permissionMode)
         agentType = try container.decodeIfPresent(String.self, forKey: .agentType)
+        agentID = try? container.decodeIfPresent(String.self, forKey: .agentID)
         error = try? container.decodeIfPresent(String.self, forKey: .error)
         lastAssistantMessage = try? container.decodeIfPresent(String.self, forKey: .lastAssistantMessage)
         reason = try? container.decodeIfPresent(String.self, forKey: .reason)
@@ -219,6 +223,7 @@ struct AntigravityPayload: Decodable {
                 toolName: toolCall?.name,
                 toolInput: toolCall?.args,
                 agentType: "Subagent",
+                agentID: conversationId,
                 agent: .antigravity
             )
         }

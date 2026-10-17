@@ -57,7 +57,7 @@ final class UsageMonitor {
     private var latest: ClaudeUsage?
     private var latestAntigravity: AntigravityQuota?
     private var expiries = 0
-    @ObservationIgnored private var costs = CostTracker()
+    @ObservationIgnored private(set) var costs = CostTracker()
     private var costTick = 0
     @ObservationIgnored private var expiryTask: Task<Void, Never>?
     @ObservationIgnored private var costResetTask: Task<Void, Never>?
@@ -92,10 +92,6 @@ final class UsageMonitor {
     var dailyCost: Double {
         _ = costTick
         return costs.total(at: now())
-    }
-
-    func costs(keeping sessionIDs: Set<String>) -> CostTracker {
-        costs.keeping(sessionIDs: sessionIDs)
     }
 
     func restore(_ costs: CostTracker) {

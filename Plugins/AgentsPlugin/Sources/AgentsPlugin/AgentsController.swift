@@ -193,6 +193,7 @@ final class AgentsController {
         }
         refreshInstallState()
         interruptions.start()
+        interruptions.track(store.sessions)
         processes.start()
     }
 
@@ -206,13 +207,13 @@ final class AgentsController {
     }
 
     @discardableResult
-    func sessionsDidChange() -> [PillAnnouncement] {
+    func sessionsDidChange() -> PillAnnouncement? {
         pruneMutedSessions()
         alerter.withdrawResolvedNotifications(for: store.sessions)
-        let announcements = announcements(for: store.sessions)
+        let announcement = announcements(for: store.sessions).max { $0.priority < $1.priority }
         interruptions.track(store.sessions)
         scheduleSave()
-        return announcements
+        return announcement
     }
 
     private func announcements(for sessions: [AgentSession]) -> [PillAnnouncement] {
@@ -239,13 +240,14 @@ final class AgentsController {
 
     private func snapshot() -> SessionSnapshot {
         var snapshot = store.snapshot()
-        snapshot.costs = usage.costs(keeping: snapshot.sessionIDs)
+        snapshot.costs = usage.costs
         return snapshot
     }
 
     func stop() async {
         saveTask?.cancel()
         saveTask = nil
+        store.handOverPendingRequests()
         persistence?.save(snapshot())
         await server.stop()
         interruptions.stop()
