@@ -176,7 +176,8 @@ private final class NotchHostingView<Content: View>: NSHostingView<Content> {
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
         let types = (sender.draggingPasteboard.types ?? []).compactMap { UTType($0.rawValue) }
         guard controller.acceptsDrag(of: types) else { return [] }
-        controller.draggedTypes = types
+        // A drag that starts in the notch, such as a download dragged out of it, doesn't switch plugins.
+        controller.draggedTypes = sender.draggingSource == nil ? types : []
         controller.isDragTargeted = true
         return super.draggingEntered(sender)
     }

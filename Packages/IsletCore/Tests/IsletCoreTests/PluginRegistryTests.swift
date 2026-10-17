@@ -331,6 +331,30 @@ struct PluginRegistryTests {
         #expect(stub.context.settings.value(forKey: "volume") as Int? == nil)
     }
 
+    @Test func disablingTheOpenPluginMovesTheSelectionBeforeItDeactivates() async throws {
+        let registry = harness.makeRegistry()
+        let stub = try await harness.registerStub(in: registry) { $0.deactivationDelay = .milliseconds(200) }
+        let second = try await harness.registerSecond(in: registry)
+        second.context.contentSize = CGSize(width: 600, height: 300)
+        registry.setNotchExpanded(true, by: harness)
+        #expect(registry.selectedID == "test.stub")
+
+        let disabling = Task { @MainActor in await registry.setEnabled(false, for: "test.stub") }
+        let deadline = ContinuousClock.now + .seconds(2)
+        while stub.deactivations == 0 {
+            try #require(ContinuousClock.now < deadline)
+            await Task.yield()
+        }
+
+        #expect(registry.selectedID == "test.second")
+        #expect(registry.selectedContentSize == CGSize(width: 600, height: 300))
+        #expect(second.context.isScreenVisible)
+        #expect(!stub.context.isScreenVisible)
+        await disabling.value
+        #expect(registry.selectedID == "test.second")
+        registry.setNotchExpanded(false, by: harness)
+    }
+
     @Test func reenableDuringSlowDeactivationKeepsPillFromReactivation() async throws {
         let registry = harness.makeRegistry()
         let stub = try await harness.registerStub(in: registry) {

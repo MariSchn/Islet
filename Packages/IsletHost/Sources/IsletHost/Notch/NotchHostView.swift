@@ -33,7 +33,7 @@ public struct NotchHostView: View {
     }
 }
 
-private struct PluginCarousel: View {
+struct PluginCarousel: View {
     let registry: PluginRegistry
     let geometry: NotchGeometry
     let animation: Animation
@@ -48,12 +48,13 @@ private struct PluginCarousel: View {
         let entries = registry.enabledEntries
         guard let selectedIndex = entries.firstIndex(where: { $0.id == registry.selectedID }) else { return [] }
         let sizes = entries.map { geometry.contentSize(for: $0.context.contentSize) }
-        return entries.indices.map { index in
-            let span = index < selectedIndex ? sizes[index..<selectedIndex] : sizes[selectedIndex..<index]
-            let distance = span.reduce(0) { $0 + $1.width } + (sizes[index].width - sizes[selectedIndex].width) / 2
-            let offset = index < selectedIndex ? -distance : distance
-            return Placement(id: entries[index].id, size: sizes[index], offset: offset)
-        }
+        let offsets = Self.offsets(for: sizes.map(\.width), selectedIndex: selectedIndex)
+        return entries.indices.map { Placement(id: entries[$0].id, size: sizes[$0], offset: offsets[$0]) }
+    }
+
+    nonisolated static func offsets(for widths: [CGFloat], selectedIndex: Int) -> [CGFloat] {
+        let centers = widths.indices.map { widths[..<$0].reduce(0, +) + widths[$0] / 2 }
+        return centers.map { $0 - centers[selectedIndex] }
     }
 
     var body: some View {

@@ -54,11 +54,14 @@ public actor LocalHTTPServer {
         do {
             try await waitUntilReady(listener)
         } catch {
-            self.listener = nil
-            self.handler = nil
-            self.authorizer = nil
+            if self.listener === listener {
+                self.listener = nil
+                self.handler = nil
+                self.authorizer = nil
+            }
             throw error
         }
+        guard self.listener === listener else { throw CancellationError() }
     }
 
     public func stop() async {
@@ -71,7 +74,9 @@ public actor LocalHTTPServer {
         authorizer = nil
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             let resumed = Resumed()
+            let previous = listener.stateUpdateHandler
             listener.stateUpdateHandler = { state in
+                previous?(state)
                 if case .cancelled = state, resumed.claim() { continuation.resume() }
             }
             listener.cancel()
@@ -92,6 +97,8 @@ public actor LocalHTTPServer {
                     } else if let self {
                         Task { await self.listenerDidFail() }
                     }
+                case .cancelled:
+                    if resumed.claim() { continuation.resume(throwing: CancellationError()) }
                 default:
                     break
                 }

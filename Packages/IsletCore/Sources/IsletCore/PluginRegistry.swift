@@ -212,6 +212,10 @@ public final class PluginRegistry {
             disabledIDs.insert(id)
         }
         userDefaults.set(Array(disabledIDs).sorted(), forKey: disabledKey)
+        if !enabled {
+            ensureSelection()
+            updateScreenVisibility()
+        }
 
         entry.context.clearAnnouncement()
         await transition(entry, toActive: enabled)
