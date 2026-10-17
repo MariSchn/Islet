@@ -103,6 +103,15 @@ struct HookInstaller: Sendable {
           owner=$(awk '($2 == "0100007F:\(hexPort)" || $2 == "00000000:\(hexPort)") && $4 == "0A" { print $8; exit }' /proc/net/tcp)
           [ "$owner" = "$(id -u)" ] || exit 0
         fi
+        case "$name" in
+          PermissionRequest)
+            if [ "$(uname)" = Darwin ]; then
+              owner=$(PATH="$PATH:/usr/sbin" lsof -nP -a -iTCP@127.0.0.1:\(port) -sTCP:LISTEN -Fu 2>/dev/null | sed -n 's/^u//p' | head -n 1)
+              [ "$owner" = "$(id -u)" ] || exit 0
+            fi
+            ;;
+          *) exec >/dev/null ;;
+        esac
         request=""
         trap '[ -n "$request" ] && kill "$request" 2>/dev/null; exit 0' HUP INT TERM
         printf '%s' "$payload" | curl -sf --connect-timeout 1 -m "$timeout" -K /dev/fd/3 -X POST "http://127.0.0.1:\(port)\(HookServer.hookPath)" \\
