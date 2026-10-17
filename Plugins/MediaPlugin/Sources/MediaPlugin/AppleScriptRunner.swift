@@ -17,6 +17,10 @@ struct AppleScriptError: LocalizedError {
         code == Self.applicationNotRunning
     }
 
+    var isAutomationDenied: Bool {
+        code == Self.automationDenied || code == Self.consentRequired
+    }
+
     var errorDescription: String? {
         switch code {
         case Self.automationDenied, Self.consentRequired:
