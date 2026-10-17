@@ -6,6 +6,7 @@ public final class ScriptsPlugin: IsletPlugin {
     public static let manifest = PluginManifest(id: "islet.scripts", displayName: "Scripts", systemImage: "bolt.fill", summary: "Show the progress of your own scripts and commands.", tint: .mint)
 
     static let width: CGFloat = 420
+    static let contentPadding: CGFloat = 12
     static let rowHeight: CGFloat = 36
     static let maxVisibleRows = 5
     static let emptyHeight: CGFloat = 80
@@ -15,7 +16,7 @@ public final class ScriptsPlugin: IsletPlugin {
 
     public static func contentSize(activityCount: Int) -> CGSize {
         let rows = min(activityCount, maxVisibleRows)
-        return CGSize(width: width, height: rows == 0 ? emptyHeight : CGFloat(rows) * rowHeight)
+        return CGSize(width: width, height: rows == 0 ? emptyHeight : 2 * contentPadding + CGFloat(rows) * rowHeight)
     }
 
     public init(context: PluginContext) {

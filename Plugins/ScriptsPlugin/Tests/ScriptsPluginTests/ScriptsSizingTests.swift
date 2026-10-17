@@ -9,13 +9,13 @@ struct ScriptsSizingTests {
         #expect(size.height == ScriptsPlugin.emptyHeight)
     }
 
-    @Test func eachRowAddsItsHeight() {
-        #expect(ScriptsPlugin.contentSize(activityCount: 1).height == 36)
-        #expect(ScriptsPlugin.contentSize(activityCount: 3).height == 108)
+    @Test func eachRowAddsItsHeightInsideTheHostPadding() {
+        #expect(ScriptsPlugin.contentSize(activityCount: 1).height == 60)
+        #expect(ScriptsPlugin.contentSize(activityCount: 3).height == 132)
     }
 
     @Test func heightStopsGrowingAfterFiveRows() {
-        #expect(ScriptsPlugin.contentSize(activityCount: 5).height == 180)
+        #expect(ScriptsPlugin.contentSize(activityCount: 5).height == 204)
         #expect(ScriptsPlugin.contentSize(activityCount: 6) == ScriptsPlugin.contentSize(activityCount: 5))
         #expect(ScriptsPlugin.contentSize(activityCount: 50) == ScriptsPlugin.contentSize(activityCount: 5))
     }
