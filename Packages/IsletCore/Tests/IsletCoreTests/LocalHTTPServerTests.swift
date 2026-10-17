@@ -34,6 +34,25 @@ struct LocalHTTPServerTests {
         #expect((again as? HTTPURLResponse)?.statusCode == 204)
     }
 
+    @Test func stoppingWhileStartingEndsTheStart() async throws {
+        let server = LocalHTTPServer(port: try freePort())
+        let finished = Flag()
+        let starting = Task {
+            _ = try? await server.start { _ in .json() }
+            await finished.set()
+        }
+        while await !server.isListening { await Task.yield() }
+        await server.stop()
+
+        let deadline = ContinuousClock.now + .seconds(2)
+        while await !finished.value {
+            try #require(ContinuousClock.now < deadline)
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        await starting.value
+        #expect(await !server.isListening)
+    }
+
     @Test func rejectsInvalidAndOversizedRequests() async throws {
         let port = try freePort()
         let server = LocalHTTPServer(port: port, maxBodySize: 1024)
@@ -199,6 +218,11 @@ struct LocalHTTPServerTests {
     actor Counter {
         var value = 0
         func increment() { value += 1 }
+    }
+
+    actor Flag {
+        var value = false
+        func set() { value = true }
     }
 
     actor Gate {
