@@ -17,4 +17,10 @@ struct MarkdownTextTests {
         ]
         #expect(blocks == expected)
     }
+
+    @Test func onlyWebLinksStayClickable() {
+        let text = MarkdownText.attributed("See [docs](https://example.com), [app](file:///Applications/Calculator.app) and [share](smb://host/share)")
+        #expect(text.runs.compactMap(\.link) == [URL(string: "https://example.com")!])
+        #expect(String(text.characters) == "See docs, app and share")
+    }
 }
