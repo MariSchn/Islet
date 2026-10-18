@@ -114,6 +114,24 @@ struct HookEventTests {
         #expect(TranscriptReader.antigravityParent(in: Data(#"{"type":"USER_INPUT","source":"USER_EXPLICIT","content":"sender=x"}"#.utf8)) == nil)
     }
 
+    @Test func cursorSubagentToolCallsShowOnTheParentAndNothingElse() throws {
+        let fields = #""conversation_id":"sub1","generation_id":"","model":"cursor-grok-4.5-high","parent_tool_call_id":"toolu_1","tool_name":"Read","tool_input":{"file_path":"/tmp/a.txt"}"#
+        func decode(_ name: String, parent: String? = "c1") throws -> HookEvent {
+            try HookEvent.decode(Data("{\(fields)}".utf8), agent: "cursor", eventName: name, title: "Subagent chat", cursorParent: { $0 == "toolu_1" ? parent : nil })
+        }
+        let tool = try decode("PreToolUse")
+        #expect(tool.kind == .preToolUse)
+        #expect(tool.sessionID == "c1")
+        #expect(tool.agentID == "sub1")
+        #expect(tool.model == nil)
+        #expect(tool.title == nil)
+        #expect(tool.activityDescription == "Subagent: Read a.txt")
+        #expect(try decode("PostToolUse").kind == .postToolUse)
+        #expect(try decode("UserPromptSubmit").kind == .other)
+        #expect(try decode("Stop").kind == .other)
+        #expect(try decode("PreToolUse", parent: nil).kind == .other)
+    }
+
     @Test func readsTheUserRequestFromAnAntigravityTranscript() throws {
         let url = FileManager.default.temporaryDirectory.appending(path: "AgentsPluginTests." + UUID().uuidString + ".jsonl")
         defer { try? FileManager.default.removeItem(at: url) }

@@ -22,6 +22,7 @@ actor HookServer {
     private let installCodeLifetime: Duration
     private var installCodes: [String: ContinuousClock.Instant] = [:]
     private var antigravityParents: [String: String?] = [:]
+    private var cursorParents: [String: String] = [:]
     private let handler: Handler
     private let statusLineHandler: StatusLineHandler?
     private let server: LocalHTTPServer
@@ -108,7 +109,11 @@ actor HookServer {
         guard request.method == "POST", request.path == Self.hookPath else {
             return .json(404, #"{"error":"not found"}"#)
         }
-        guard let event = try? HookEvent.decode(request.body, agent: request.headers["x-islet-agent"], eventName: request.headers["x-islet-event"], host: request.headers["x-islet-host"], isRemote: isRemote, terminal: request.headers["x-islet-terminal"], tty: request.headers["x-islet-tty"], pid: request.headers["x-islet-pid"], tmux: request.headers["x-islet-tmux"], tmuxPane: request.headers["x-islet-tmux-pane"], title: request.headers["x-islet-title"], branch: request.headers["x-islet-branch"], model: request.headers["x-islet-model"], effort: request.headers["x-islet-effort"], parent: antigravityParent(at:)) else {
+        if request.headers["x-islet-agent"] == "cursor", request.headers["x-islet-event"] == "SubagentStart",
+           let start = try? JSONDecoder().decode(CursorPayload.self, from: request.body), let subagentID = start.subagentID {
+            cursorParents[subagentID] = start.parentConversationID ?? start.conversationId
+        }
+        guard let event = try? HookEvent.decode(request.body, agent: request.headers["x-islet-agent"], eventName: request.headers["x-islet-event"], host: request.headers["x-islet-host"], isRemote: isRemote, terminal: request.headers["x-islet-terminal"], tty: request.headers["x-islet-tty"], pid: request.headers["x-islet-pid"], tmux: request.headers["x-islet-tmux"], tmuxPane: request.headers["x-islet-tmux-pane"], title: request.headers["x-islet-title"], branch: request.headers["x-islet-branch"], model: request.headers["x-islet-model"], effort: request.headers["x-islet-effort"], parent: antigravityParent(at:), cursorParent: { self.cursorParents[$0] }) else {
             return .json(400, #"{"error":"invalid hook payload"}"#)
         }
         let reply = await handler(event)

@@ -108,6 +108,36 @@ struct HookServerTests {
         #expect((expiredResponse as? HTTPURLResponse)?.statusCode == 401)
     }
 
+    @Test func cursorSubagentEventsGoToTheConversationThatStartedThem() async throws {
+        let received = Received()
+        let port = try freePort()
+        let server = HookServer(port: port, token: "secret") { event in
+            await received.add(event)
+            return .empty
+        }
+        try await server.start()
+        defer { Task { await server.stop() } }
+
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/hook")!)
+        request.httpMethod = "POST"
+        request.setValue("Bearer secret", forHTTPHeaderField: "Authorization")
+        request.setValue("cursor", forHTTPHeaderField: "X-Islet-Agent")
+        let tool = #"{"conversation_id":"sub1","parent_tool_call_id":"toolu_1","tool_name":"Shell","tool_input":{"command":"ls"}}"#
+        for (event, body) in [
+            ("PreToolUse", tool),
+            ("SubagentStart", #"{"conversation_id":"c1","subagent_id":"toolu_1","subagent_type":"explore","parent_conversation_id":"c1","tool_call_id":"toolu_1"}"#),
+            ("PreToolUse", tool),
+        ] {
+            request.setValue(event, forHTTPHeaderField: "X-Islet-Event")
+            request.httpBody = Data(body.utf8)
+            _ = try await URLSession.shared.data(for: request)
+        }
+        let events = await received.events
+        #expect(events.map(\.kind) == [.other, .other, .preToolUse])
+        #expect(events.last?.sessionID == "c1")
+        #expect(events.last?.agentID == "sub1")
+    }
+
     @Test func eventsSentWithTheRemoteTokenAreAlwaysRemote() async throws {
         let received = Received()
         let port = try freePort()
