@@ -248,6 +248,27 @@ struct PluginRegistryTests {
         #expect(registry.activePill(.mostImportant)?.text == "working again")
     }
 
+    @Test func thePluginOpenedLastWinsTiesUntilAnotherStartsSomethingNew() async throws {
+        let registry = harness.makeRegistry()
+        let stub = try await harness.registerStub(in: registry)
+        let second = try await harness.registerSecond(in: registry)
+        stub.context.pillStatus = PillStatus(text: "timer", priority: .info)
+        second.context.pillStatus = PillStatus(text: "working", priority: .info)
+        #expect(registry.activePill(.mostImportant)?.text == "working")
+
+        registry.select("test.stub")
+        registry.setNotchExpanded(true, by: harness)
+        registry.setNotchExpanded(false, by: harness)
+        #expect(registry.activePill(.mostImportant)?.text == "timer")
+
+        second.context.pillStatus = PillStatus(text: "still working", priority: .info)
+        #expect(registry.activePill(.mostImportant)?.text == "timer")
+
+        second.context.pillStatus = nil
+        second.context.pillStatus = PillStatus(text: "working again", priority: .info)
+        #expect(registry.activePill(.mostImportant)?.text == "working again")
+    }
+
     @Test func lastViewedShowsSelectedPluginAndFallsBackToMostImportant() async throws {
         let registry = harness.makeRegistry()
         let stub = try await harness.registerStub(in: registry)

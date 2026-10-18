@@ -18,8 +18,8 @@ public enum PillSelection: String, Sendable, Codable, CaseIterable, Identifiable
     public var summary: String {
         switch self {
         case .lastViewed: "Shows the plugin that was open when the notch collapsed. If it has nothing to show, the most important activity is shown instead and stays until it ends."
-        case .latestActivity: "Shows whatever started most recently, for example music that just started playing or an agent that just started working."
-        case .mostImportant: "Shows the plugin with the most important activity, so a working agent is shown before music. Of equally important ones, the newest is shown, and one that has finished gives way to those still running."
+        case .latestActivity: "Shows whatever started most recently or was open last, for example music that just started playing or an agent that just started working."
+        case .mostImportant: "Shows the plugin with the most important activity, so a working agent is shown before music. Of equally important ones, the one you opened last stays until another starts something new, and one that has finished gives way to those still running."
         }
     }
 }

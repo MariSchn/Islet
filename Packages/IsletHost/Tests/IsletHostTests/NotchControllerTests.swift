@@ -315,6 +315,27 @@ struct NotchControllerTests {
         #expect(registry.selectedID == "test.second")
     }
 
+    @Test func mostImportantKeepsThePluginOpenedLastAmongEquallyImportantPills() async throws {
+        let harness = Harness()
+        let registry = harness.makeRegistry()
+        let controller = makeController()
+        controller.settings.pillSelection = .mostImportant
+        controller.attach(registry)
+        let stub = try await harness.registerStub(in: registry)
+        let second = try await harness.registerSecond(in: registry)
+        stub.context.pillStatus = PillStatus(text: "timer", priority: .info)
+        second.context.pillStatus = PillStatus(text: "working", priority: .info)
+        await Task.yield()
+        #expect(controller.pill?.text == "working")
+
+        controller.expand()
+        #expect(registry.selectedID == "test.second")
+        #expect(controller.navigate(.backward))
+        controller.collapse()
+        await Task.yield()
+        #expect(controller.pill?.text == "timer")
+    }
+
     @Test func expandingWithoutAPillKeepsTheSelection() async throws {
         let harness = Harness()
         let registry = harness.makeRegistry()
