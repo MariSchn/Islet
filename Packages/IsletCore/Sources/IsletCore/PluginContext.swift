@@ -17,12 +17,15 @@ public final class PluginContext {
                 if oldValue.priority > pillStatus.priority { pillActivity = 0 }
                 return
             }
-            Self.lastActivity += 1
-            pillActivity = Self.lastActivity
+            recordActivity()
         }
     }
     public var contentSize: CGSize?
-    public internal(set) var isScreenVisible = false
+    public internal(set) var isScreenVisible = false {
+        didSet {
+            if oldValue, !isScreenVisible { recordActivity() }
+        }
+    }
     var isActive = false
     public private(set) var announcement: PillAnnouncement?
     private(set) var pillActivity = 0
@@ -42,6 +45,11 @@ public final class PluginContext {
 
     func clearAnnouncement() {
         announcement = nil
+    }
+
+    private func recordActivity() {
+        Self.lastActivity += 1
+        pillActivity = Self.lastActivity
     }
 
     public func derive<Value: Equatable>(_ property: ReferenceWritableKeyPath<PluginContext, Value>, from value: @escaping @MainActor () -> Value) {

@@ -71,12 +71,12 @@ The host considers every enabled plugin with a non-nil `pillStatus`:
 1. If any pill has priority `.attention` or higher, the most important one is shown.
 2. Otherwise the user's choice under Settings › Notch › Collapsed Pill (`PillSelection`) decides:
    - **Last viewed plugin** (`lastViewed`, the default): the plugin that was open when the notch collapsed. If it has no pill, the most important pill is shown instead, and the notch keeps showing that plugin until its pill becomes `nil` or the notch is opened again.
-   - **Latest activity** (`latestActivity`): the plugin whose activity started most recently.
+   - **Latest activity** (`latestActivity`): the plugin with the most recent activity.
    - **Most important** (`mostImportant`): the most important pill.
 
-The most important pill is the one with the highest priority. Among pills with the same priority, the one whose activity started most recently wins.
+The most important pill is the one with the highest priority. Among pills with the same priority, the one with the most recent activity wins.
 
-"Activity starts" when a plugin's pill goes from `nil` to a value, or when its priority goes up. Changing the text does not count as new activity. Lowering the priority moves the pill behind all others with its new priority, so an agent that finished gives way to music that is still playing. So:
+A plugin's activity is the last time its pill went from `nil` to a value, its priority went up, or the user closed the notch on its screen or switched away from it. So the plugin the user looked at last stays in front of others with the same priority until one of them starts something new. Changing the text does not count as activity. Lowering the priority moves the pill behind all others with its new priority, so an agent that finished gives way to music that is still playing. So:
 
 - To come back to the front, clear the pill when an activity ends and set it again when a new one starts.
 - When an activity ends with a result the user should look at, lower the priority instead of clearing the pill, and clear it once the user has seen it (`context.isScreenVisible` became `true`) rather than after a fixed time, as `AgentsPlugin` does for finished agents.
