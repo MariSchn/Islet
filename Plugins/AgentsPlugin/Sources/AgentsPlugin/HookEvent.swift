@@ -122,7 +122,7 @@ struct HookEvent: Sendable, Equatable, Decodable {
         title = (try? container.decodeIfPresent(String.self, forKey: .title)).flatMap { $0.isEmpty ? nil : $0 }
     }
 
-    static func decode(_ data: Data, agent: String? = nil, eventName: String? = nil, host: String? = nil, isRemote: Bool = false, terminal: String? = nil, tty: String? = nil, pid: String? = nil, tmux: String? = nil, tmuxPane: String? = nil, title: String? = nil, branch: String? = nil, lastPrompt: (String) -> String? = TranscriptReader.lastAntigravityPrompt(at:), parent: (String) -> String? = TranscriptReader.antigravityParent(at:)) throws -> HookEvent {
+    static func decode(_ data: Data, agent: String? = nil, eventName: String? = nil, host: String? = nil, isRemote: Bool = false, terminal: String? = nil, tty: String? = nil, pid: String? = nil, tmux: String? = nil, tmuxPane: String? = nil, title: String? = nil, branch: String? = nil, model: String? = nil, effort: String? = nil, lastPrompt: (String) -> String? = TranscriptReader.lastAntigravityPrompt(at:), parent: (String) -> String? = TranscriptReader.antigravityParent(at:)) throws -> HookEvent {
         let agent = agent.flatMap(AgentSession.Agent.init(rawValue:)) ?? .claudeCode
         var event = switch agent {
         case .antigravity: try JSONDecoder().decode(AntigravityPayload.self, from: data).event(named: eventName ?? "", lastPrompt: isRemote ? { _ in nil } : lastPrompt, parent: isRemote ? { _ in nil } : parent)
@@ -138,6 +138,10 @@ struct HookEvent: Sendable, Equatable, Decodable {
         if let tmux, let tmuxPane { event.tmux = TmuxLocation(environment: tmux, pane: tmuxPane) }
         event.title = title.flatMap { $0.isEmpty ? nil : $0 } ?? event.title
         event.branch = branch.flatMap { $0.isEmpty ? nil : $0 }
+        if agent == .claudeCode {
+            event.model = (event.model ?? model.flatMap { $0.isEmpty ? nil : $0 }).map(SessionDetails.claudeModelName(id:))
+            event.effort = effort.flatMap { SessionDetails.effortLevels.contains($0) ? $0 : nil }
+        }
         return event
     }
 

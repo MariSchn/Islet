@@ -75,16 +75,21 @@ struct AgentSessionStoreTests {
         #expect(store.sessions[0].details.badgeText == "Claude Sonnet 4.5 (Thinking) · high")
     }
 
-    @Test func showsTheHookModelOnlyForCodexSessions() {
+    @Test func showsTheHookModelForCodexAndClaudeCodeUntilAClaudeStatusLineReportsOne() throws {
         let store = AgentSessionStore()
         var codex = HookEvent(kind: .userPromptSubmit, sessionID: "c", prompt: "go", agent: .codex)
         codex.model = "gpt-5.5"
         store.apply(codex)
-        var claude = HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "go")
-        claude.model = "claude-opus-5-5"
+        var claude = HookEvent(kind: .stop, sessionID: "a")
+        claude.model = "Opus 5.5"
+        claude.effort = "high"
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "go"))
         store.apply(claude)
         #expect(store.sessions.first { $0.id == "c" }?.details.model == "gpt-5.5")
-        #expect(store.sessions.first { $0.id == "a" }?.details.model == nil)
+        #expect(store.sessions.first { $0.id == "a" }?.details.badgeText == "Opus 5.5 · high")
+        store.applyStatusLine(try StatusLineUpdate.decode(Data(#"{"session_id":"a","model":{"display_name":"Sonnet 5.5"},"effort":{"level":"low"}}"#.utf8)))
+        store.apply(claude)
+        #expect(store.sessions.first { $0.id == "a" }?.details.badgeText == "Sonnet 5.5 · low")
     }
 
     @Test func codexQuestionsNeedAttentionUntilTheNextPrompt() {

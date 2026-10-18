@@ -216,6 +216,15 @@ struct SessionDetails: Sendable, Equatable, Codable {
         return (model, effort)
     }
 
+    static func claudeModelName(id: String) -> String {
+        guard id.hasPrefix("claude-") else { return id }
+        var parts = id.prefix { $0 != "[" }.split(separator: "-").dropFirst().map(String.init)
+        if let date = parts.last, date.count == 8, Int(date) != nil { parts.removeLast() }
+        guard let family = parts.firstIndex(where: { Int($0) == nil }) else { return id }
+        let version = (parts[..<family] + parts[(family + 1)...]).joined(separator: ".")
+        return parts[family].capitalized + (version.isEmpty ? "" : " \(version)")
+    }
+
     static func percentText(_ value: Double) -> String {
         String(Int(value.rounded()))
     }
