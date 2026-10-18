@@ -222,7 +222,7 @@ final class AgentSessionStore {
                 return
             }
         case .stop:
-            session.state = .done
+            session.state = event.isInterruption ? .interrupted : .done
             session.activity = nil
             session.requestsInTerminal = []
             session.completeOpenActivities()
@@ -253,7 +253,7 @@ final class AgentSessionStore {
         }
         if let index = sessions.firstIndex(where: { $0.id == session.id }) {
             sessions[index] = session
-        } else if Self.isActivity(event) {
+        } else if Self.isActivity(event), event.agent != .cursor || event.kind == .userPromptSubmit {
             hiddenSessions[session.id] = nil
             sessions.insert(session, at: 0)
         } else {

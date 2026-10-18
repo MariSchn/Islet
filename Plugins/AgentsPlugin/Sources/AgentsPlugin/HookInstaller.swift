@@ -58,7 +58,7 @@ struct HookInstaller: Sendable {
         timeout="${1:-5}"
         event="$2"
         payload=$(cat)
-        \(agent == .antigravity || agent == .cursor ? "printf '{}\\n'\n" : "")title=""
+        \(agent == .claudeCode ? Self.skipsCursorLines : "")\(agent == .antigravity || agent == .cursor ? "printf '{}\\n'\n" : "")title=""
         transcript=""
         name="${event:-$(printf '%s' "$payload" | sed -n 's/.*"hook_event_name":"\\([A-Za-z]*\\)".*/\\1/p')}"
         case "$name" in
@@ -91,7 +91,7 @@ struct HookInstaller: Sendable {
               [ -n "$1" ] || break
               case "$2" in ""|"?"|"??") ;; *) tty="/dev/$2" ;; esac
               if [ -z "$agent_pid" ]; then
-                case "${3##*/}" in claude|claude-*|node|bun|codex|codex-*|agy|[0-9]*.[0-9]*.[0-9]*) agent_pid=$pid ;; esac
+                case "${3##*/}" in \(agent == .cursor ? "Cursor|" : "")claude|claude-*|node|bun|codex|codex-*|agy|[0-9]*.[0-9]*.[0-9]*) agent_pid=$pid ;; esac
               fi
               if [ -z "$terminal" ] && [ "$(uname)" = Darwin ]; then
                 vars=$(ps -E -o command= -p "$pid" 2>/dev/null | tr ' ' '\n')
@@ -151,14 +151,19 @@ struct HookInstaller: Sendable {
 
         """
 
+    private static let skipsCursorLines = """
+        case "$payload" in *'"cursor_version":"'*) exit 0 ;; esac
+
+        """
+
     private static let cursorTitleLines = """
         case "$name" in
           SessionStart|SessionEnd) ;;
           *)
-            conversation=$(printf '%s' "$payload" | sed -n 's/.*"conversation_id":"\\([0-9A-Za-z-]*\\)".*/\\1/p')
+            conversation=$(printf '%s' "$payload" | grep -oE '"conversation_id":"[0-9A-Za-z-]*"' | head -n 1 | sed 's/.*:"//; s/"$//')
             database="$HOME/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
             if [ -n "$conversation" ] && [ -f "$database" ]; then
-              title=$(sqlite3 -readonly -cmd '.timeout 500' "$database" "select json_extract(value, '$.name') from cursorDiskKV where key = 'composerData:$conversation'" 2>/dev/null | tr '\\n' ' ' | sed 's/ *$//')
+              title=$(sqlite3 -readonly -cmd '.timeout 500' "$database" "select json_extract(value, '$.name') from cursorDiskKV where key = 'composerData:$conversation'" 2>/dev/null | tr '\\r\\n' '  ' | sed 's/ *$//')
             fi ;;
         esac
 
@@ -316,7 +321,7 @@ struct HookInstaller: Sendable {
     private func hookEntry(for event: String) -> [String: Any] {
         guard agent == .cursor, let name = Self.cursorEvents[event] else { return Self.hookEntry(for: event, script: scriptURL.path) }
         let quoted = scriptURL.path.shellQuoted
-        return name == "SessionEnd" ? ["command": "\(quoted) 2 \(name)", "timeout": 3] : ["command": "\(quoted) 10 \(name)", "timeout": 10]
+        return name == "SessionEnd" ? ["command": "\(quoted) 2 \(name)", "timeout": 3] : ["command": "\(quoted) 2 \(name)", "timeout": 5]
     }
 
     static func hookEntry(for event: String, script: String) -> [String: Any] {

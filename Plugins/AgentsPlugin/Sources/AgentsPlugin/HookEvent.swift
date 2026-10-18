@@ -48,6 +48,7 @@ struct HookEvent: Sendable, Equatable, Decodable {
     var title: String?
     var effort: String?
     var branch: String?
+    var isInterruption = false
 
     private enum CodingKeys: String, CodingKey {
         case kind = "hook_event_name"
@@ -264,6 +265,7 @@ struct CursorPayload: Decodable {
     var toolName: String?
     var toolInput: JSONValue?
     var prompt: String?
+    var composerMode: String?
     var status: String?
     var errorMessage: String?
     var failureType: String?
@@ -279,6 +281,7 @@ struct CursorPayload: Decodable {
         case toolName = "tool_name"
         case toolInput = "tool_input"
         case prompt
+        case composerMode = "composer_mode"
         case status
         case errorMessage = "error_message"
         case failureType = "failure_type"
@@ -296,6 +299,7 @@ struct CursorPayload: Decodable {
         toolName = try? container.decodeIfPresent(String.self, forKey: .toolName)
         toolInput = try? container.decodeIfPresent(JSONValue.self, forKey: .toolInput)
         prompt = try? container.decodeIfPresent(String.self, forKey: .prompt)
+        composerMode = try? container.decodeIfPresent(String.self, forKey: .composerMode)
         status = try? container.decodeIfPresent(String.self, forKey: .status)
         errorMessage = try? container.decodeIfPresent(String.self, forKey: .errorMessage)
         failureType = try? container.decodeIfPresent(String.self, forKey: .failureType)
@@ -303,6 +307,7 @@ struct CursorPayload: Decodable {
 
     func event(named name: String) -> HookEvent {
         let kind: HookEvent.Kind = switch HookEvent.Kind(rawValue: name) ?? .other {
+        case .userPromptSubmit where composerMode == nil: .other
         case .stop where status == "error": .stopFailure
         case let kind: kind
         }
@@ -317,7 +322,8 @@ struct CursorPayload: Decodable {
             lastAssistantMessage: kind == .stopFailure ? errorMessage : nil,
             agent: .cursor
         )
-        event.model = (modelID ?? model).flatMap { $0.isEmpty || $0 == "default" ? nil : $0 }
+        event.isInterruption = kind == .stop && status == "aborted"
+        event.model = (modelID ?? model).flatMap { $0.isEmpty || $0 == "default" || $0 == "unknown" ? nil : $0 }
         event.effort = modelParams?.first { $0["id"]?.stringValue == "effort" }?["value"]?.stringValue
         return event
     }

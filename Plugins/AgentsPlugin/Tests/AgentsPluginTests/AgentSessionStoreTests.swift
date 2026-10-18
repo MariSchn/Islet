@@ -17,6 +17,24 @@ struct AgentSessionStoreTests {
         #expect(store.sessions[0].tmux == second)
     }
 
+    @Test func cursorRowsOnlyStartWithAChatPromptAndShowStoppedTurnsAsInterrupted() {
+        let store = AgentSessionStore()
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "inline", toolName: "Read", agent: .cursor))
+        store.apply(HookEvent(kind: .stop, sessionID: "inline", agent: .cursor))
+        #expect(store.sessions.isEmpty)
+
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "c1", prompt: "go", agent: .cursor))
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "c1", toolName: "Shell", toolInput: .object(["command": .string("ls")]), agent: .cursor))
+        #expect(store.sessions.map(\.state) == [.working])
+        var stop = HookEvent(kind: .stop, sessionID: "c1", agent: .cursor)
+        stop.isInterruption = true
+        store.apply(stop)
+        #expect(store.sessions.map(\.state) == [.interrupted])
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "c1", prompt: "again", agent: .cursor))
+        store.apply(HookEvent(kind: .stop, sessionID: "c1", agent: .cursor))
+        #expect(store.sessions.map(\.state) == [.done])
+    }
+
     @Test func antigravityHooksFillTheModelAndBranchUntilTheStatusLineRefinesThem() throws {
         let store = AgentSessionStore()
         var prompt = HookEvent(kind: .userPromptSubmit, sessionID: "c1", prompt: "go", agent: .antigravity)
