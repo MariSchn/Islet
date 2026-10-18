@@ -402,6 +402,23 @@ final class AgentSessionStore {
         scheduleUnreachableCheck()
     }
 
+    func setAskingQuestion(_ sessionID: String, _ isAsking: Bool) {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }), sessions[index].pendingRequests.isEmpty else { return }
+        let previous = sessions[index].state
+        switch previous {
+        case .working where isAsking:
+            sessions[index].state = .needsAttention(CursorQuestionMonitor.attentionReason)
+        case .needsAttention(CursorQuestionMonitor.attentionReason) where !isAsking:
+            sessions[index].state = .working
+        default:
+            return
+        }
+        sessions[index].updatedAt = now()
+        if let alert = Self.alert(from: previous, to: sessions[index].state, in: sessions[index]) {
+            onAlert?(alert)
+        }
+    }
+
     private func loadLastPrompt(from path: String, for sessionID: String) {
         let lastPrompt = lastPrompt
         Task {
