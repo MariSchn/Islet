@@ -127,6 +127,7 @@ struct HookEventTests {
         #expect(tool.title == nil)
         #expect(tool.activityDescription == "Subagent: Read a.txt")
         #expect(try decode("PostToolUse").kind == .postToolUse)
+        #expect(try decode("PostToolUseFailure").kind == .postToolUseFailure)
         #expect(try decode("UserPromptSubmit").kind == .other)
         #expect(try decode("Stop").kind == .other)
         #expect(try decode("PreToolUse", parent: nil).kind == .other)
