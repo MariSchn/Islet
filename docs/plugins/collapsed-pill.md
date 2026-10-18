@@ -58,7 +58,7 @@ Each segment's arc is proportional to its `value`. Segments with a value of 0 ar
 | Priority | Use for | Example |
 | --- | --- | --- |
 | `.ambient` | Background information that is nice to see. | Music playing, an agent that finished. |
-| `.info` | Something in progress the user started. This is the default. | An agent working. |
+| `.info` | Something in progress the user started, or a heads-up. This is the default. | An agent working, a running timer or download, an event that starts soon. |
 | `.attention` | Something that needs the user. Always shown, in orange. | An agent waiting for a permission decision. |
 | `.urgent` | Like `.attention`, but wins over it. | |
 
@@ -68,13 +68,18 @@ Use `.attention` and `.urgent` sparingly: they override the user's choice of whi
 
 The host considers every enabled plugin with a non-nil `pillStatus`:
 
-1. If any pill has priority `.attention` or higher, the one with the highest priority is shown. On a tie, the plugin that comes first in the user's plugin order wins.
+1. If any pill has priority `.attention` or higher, the most important one is shown.
 2. Otherwise the user's choice under Settings › Notch › Collapsed Pill (`PillSelection`) decides:
    - **Last viewed plugin** (`lastViewed`, the default): the plugin that was open when the notch collapsed. If it has no pill, the most important pill is shown instead, and the notch keeps showing that plugin until its pill becomes `nil` or the notch is opened again.
    - **Latest activity** (`latestActivity`): the plugin whose activity started most recently.
-   - **Most important** (`mostImportant`): the pill with the highest priority.
+   - **Most important** (`mostImportant`): the most important pill.
 
-"Activity starts" when a plugin's pill goes from `nil` to a value, or when its priority goes up. Changing the text or lowering the priority does not count as new activity. So if you want a plugin to come back to the front under "Latest activity", clear the pill when the activity ends and set it again when a new one starts.
+The most important pill is the one with the highest priority. Among pills with the same priority, the one whose activity started most recently wins.
+
+"Activity starts" when a plugin's pill goes from `nil` to a value, or when its priority goes up. Changing the text does not count as new activity. Lowering the priority moves the pill behind all others with its new priority, so an agent that finished gives way to music that is still playing. So:
+
+- To come back to the front, clear the pill when an activity ends and set it again when a new one starts.
+- When an activity ends with a result the user should look at, lower the priority instead of clearing the pill, and clear it once the user has seen it (`context.isScreenVisible` became `true`) rather than after a fixed time, as `AgentsPlugin` does for finished agents.
 
 When the user opens the notch, the host selects the plugin whose pill was shown, so the expanded notch continues where the pill left off.
 

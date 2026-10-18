@@ -83,7 +83,7 @@ final class TimerStore {
             .init(value: max(duration - remaining, 0), tint: elapsedTint),
             .init(value: remaining, tint: tint)
         ])
-        return PillStatus(text: TimerFormat.clock(remaining), systemImage: "timer", priority: .ambient, ring: ring)
+        return PillStatus(text: TimerFormat.clock(remaining), systemImage: "timer", priority: .info, ring: ring)
     }
 
     var soonestTimer: CountdownTimer? {

@@ -5,7 +5,6 @@ import Observation
 @MainActor
 @Observable
 final class AgentSessionStore {
-    static let finishedPillDuration: TimeInterval = 10 * 60
     static let unreachableTimeout: TimeInterval = 5 * 60
     static let remoteExpiry: TimeInterval = 12 * 60 * 60
     static let replyTimeout = TimeInterval(HookServer.replyTimeout.components.seconds) - 10
@@ -29,15 +28,18 @@ final class AgentSessionStore {
 
     private(set) var sessions: [AgentSession] = []
     var onAlert: ((Alert) -> Void)?
+    var isScreenVisible = false {
+        didSet {
+            if isScreenVisible { markFinishedSessionsSeen() }
+        }
+    }
 
     private let now: () -> Date
     private let localHost: () -> String
     private let lastPrompt: @Sendable (String) -> String?
     private let finishedTasks: @Sendable (String, [BackgroundTask]) -> [String]
     @ObservationIgnored private var dismissed: [String: Dismissal] = [:]
-    private var finishedExpiries = 0
     @ObservationIgnored private var hiddenSessions: [String: AgentSession] = [:]
-    @ObservationIgnored private var expiryTask: Task<Void, Never>?
     @ObservationIgnored private var unreachableTask: Task<Void, Never>?
     @ObservationIgnored private var decisions: [UUID: CheckedContinuation<PermissionDecision?, Never>] = [:]
 
@@ -68,7 +70,7 @@ final class AgentSessionStore {
     }
 
     var workingSessions: [AgentSession] {
-        sessions.filter { $0.state == .working && !$0.isUnreachable }
+        sessions.filter { ($0.state == .working && !$0.isUnreachable) || $0.state == .waiting }
     }
 
     func handle(_ event: HookEvent) async -> HookReply {
@@ -241,6 +243,9 @@ final class AgentSessionStore {
         if let request = session.pendingRequests.first, !session.state.isFailed {
             session.state = .needsAttention(Self.attentionReason(for: request))
         }
+        if session.state == .done, previous?.state != .done {
+            session.isSeen = isScreenVisible
+        }
 
         if session.agent == .claudeCode || session.agent == .antigravity, let pid = session.pid {
             let replacesAll = event.kind == .sessionStart || (session.agent == .antigravity && event.kind == .userPromptSubmit)
@@ -270,7 +275,6 @@ final class AgentSessionStore {
         if event.kind == .stop, session.state == .waiting, !session.isRemote, let path = session.transcriptPath {
             removeFinishedTasks(in: path, for: session.id)
         }
-        scheduleFinishedExpiry()
         scheduleUnreachableCheck()
     }
 
@@ -442,8 +446,8 @@ final class AgentSessionStore {
             sessions[index].backgroundTasks.removeAll { finished.contains($0.id) }
             guard sessions[index].backgroundTasks.isEmpty else { return }
             sessions[index].state = .done
+            sessions[index].isSeen = isScreenVisible
             onAlert?(.finished(sessions[index]))
-            scheduleFinishedExpiry()
         }
     }
 
@@ -488,7 +492,6 @@ final class AgentSessionStore {
         for session in sessions where session.state == .waiting && !session.isRemote {
             if let path = session.transcriptPath { removeFinishedTasks(in: path, for: session.id) }
         }
-        scheduleFinishedExpiry()
         scheduleUnreachableCheck()
     }
 
@@ -592,20 +595,19 @@ final class AgentSessionStore {
             let text = working.count == 1 ? (working[0].activity ?? working[0].displayName) : "\(working.count) agents working"
             return PillStatus(text: text, systemImage: "terminal", priority: .info, ring: ring)
         }
-        let finished = recentlyFinishedSessions
+        let finished = unseenFinishedSessions
         guard display.pillShowsFinished, let first = finished.first else { return nil }
         let text = finished.count == 1 ? "\(first.displayName) finished" : "\(finished.count) agents finished"
         return PillStatus(text: text, systemImage: "checkmark.circle.fill", priority: .ambient, ring: ring)
     }
 
     func statusRing(keepingFinishedSessions: Bool) -> PillStatus.Ring {
-        let cutoff = keepingFinishedSessions ? .distantPast : finishedCutoff
         var counts = (attention: 0, working: 0, finished: 0, idle: 0)
         for session in sessions {
             switch session.state {
             case .needsAttention, .failed: counts.attention += 1
             case .working where !session.isUnreachable, .waiting: counts.working += 1
-            case .done where session.updatedAt > cutoff: counts.finished += 1
+            case .done where keepingFinishedSessions || !session.isSeen: counts.finished += 1
             case .starting, .working, .done, .interrupted: counts.idle += 1
             }
         }
@@ -617,25 +619,13 @@ final class AgentSessionStore {
         ].filter { $0.value > 0 })
     }
 
-    private var finishedCutoff: Date {
-        _ = finishedExpiries
-        return now().addingTimeInterval(-Self.finishedPillDuration)
+    private var unseenFinishedSessions: [AgentSession] {
+        sessions.filter { $0.state == .done && !$0.isSeen }
     }
 
-    private var recentlyFinishedSessions: [AgentSession] {
-        let cutoff = finishedCutoff
-        return sessions.filter { $0.state == .done && $0.updatedAt > cutoff }
-    }
-
-    private func scheduleFinishedExpiry() {
-        expiryTask?.cancel()
-        guard let oldest = recentlyFinishedSessions.map(\.updatedAt).min() else { return }
-        let delay = oldest.addingTimeInterval(Self.finishedPillDuration).timeIntervalSince(now())
-        expiryTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(max(delay, 0) + 1))
-            guard !Task.isCancelled else { return }
-            self?.finishedExpiries += 1
-            self?.scheduleFinishedExpiry()
+    private func markFinishedSessionsSeen() {
+        for index in sessions.indices where sessions[index].state == .done && !sessions[index].isSeen {
+            sessions[index].isSeen = true
         }
     }
 

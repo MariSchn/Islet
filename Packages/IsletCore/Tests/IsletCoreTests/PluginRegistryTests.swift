@@ -211,15 +211,41 @@ struct PluginRegistryTests {
         #expect(registry.selectedContentSize == CGSize(width: 300, height: 100))
     }
 
-    @Test func activePillTieGoesToEarlierRegisteredPlugin() async throws {
+    @Test func activePillTieGoesToTheNewestActivity() async throws {
         let registry = harness.makeRegistry()
         let stub = try await harness.registerStub(in: registry)
         let second = try await harness.registerSecond(in: registry)
 
-        stub.context.pillStatus = PillStatus(text: "first", priority: .info)
-        second.context.pillStatus = PillStatus(text: "second", priority: .info)
+        second.context.pillStatus = PillStatus(text: "timer", priority: .info)
+        stub.context.pillStatus = PillStatus(text: "working", priority: .info)
+        #expect(registry.activePill(.mostImportant)?.text == "working")
 
-        #expect(registry.activePill(.mostImportant)?.text == "first")
+        second.context.pillStatus = nil
+        second.context.pillStatus = PillStatus(text: "new timer", priority: .info)
+        #expect(registry.activePill(.mostImportant)?.text == "new timer")
+        stub.context.pillStatus = PillStatus(text: "still working", priority: .info)
+        #expect(registry.activePill(.mostImportant)?.text == "new timer")
+    }
+
+    @Test func aPillThatLowersItsPriorityStepsBehindTheOthers() async throws {
+        let registry = harness.makeRegistry()
+        let stub = try await harness.registerStub(in: registry)
+        let second = try await harness.registerSecond(in: registry)
+
+        second.context.pillStatus = PillStatus(text: "song", priority: .ambient)
+        stub.context.pillStatus = PillStatus(text: "working", priority: .info)
+        #expect(registry.activePill(.mostImportant)?.text == "working")
+
+        stub.context.pillStatus = PillStatus(text: "finished", priority: .ambient)
+        #expect(registry.activePill(.mostImportant)?.text == "song")
+        #expect(registry.activePill(.latestActivity)?.text == "song")
+
+        second.context.pillStatus = nil
+        #expect(registry.activePill(.mostImportant)?.text == "finished")
+
+        second.context.pillStatus = PillStatus(text: "next song", priority: .ambient)
+        stub.context.pillStatus = PillStatus(text: "working again", priority: .info)
+        #expect(registry.activePill(.mostImportant)?.text == "working again")
     }
 
     @Test func lastViewedShowsSelectedPluginAndFallsBackToMostImportant() async throws {

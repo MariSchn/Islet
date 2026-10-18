@@ -13,7 +13,10 @@ public final class PluginContext {
     public var pillStatus: PillStatus? {
         didSet {
             guard let pillStatus else { return }
-            if let oldValue, oldValue.priority >= pillStatus.priority { return }
+            if let oldValue, oldValue.priority >= pillStatus.priority {
+                if oldValue.priority > pillStatus.priority { pillActivity = 0 }
+                return
+            }
             Self.lastActivity += 1
             pillActivity = Self.lastActivity
         }

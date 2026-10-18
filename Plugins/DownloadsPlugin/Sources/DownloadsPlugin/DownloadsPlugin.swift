@@ -45,7 +45,7 @@ public final class DownloadsPlugin: IsletPlugin {
         } else {
             text = first.name
         }
-        return PillStatus(text: text, systemImage: manifest.systemImage, priority: .ambient, ring: combined.map(ring))
+        return PillStatus(text: text, systemImage: manifest.systemImage, priority: .info, ring: combined.map(ring))
     }
 
     static func ring(_ fraction: Double) -> PillStatus.Ring {

@@ -178,6 +178,24 @@ struct SessionPersistenceTests {
         #expect(exited.snapshot().dismissed?.isEmpty == true)
     }
 
+    @Test func seenFinishedSessionsStaySeenAfterARestore() throws {
+        let directory = makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = AgentSessionStore(localHost: { "mac" })
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "seen", cwd: "/p/seen", prompt: "go", pid: 1))
+        store.apply(HookEvent(kind: .stop, sessionID: "seen", pid: 1))
+        store.isScreenVisible = true
+        store.isScreenVisible = false
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "new", cwd: "/p/new", prompt: "go", pid: 2))
+        store.apply(HookEvent(kind: .stop, sessionID: "new", pid: 2))
+        let persistence = SessionPersistence(directory: directory)
+        persistence.save(store.snapshot())
+
+        let restored = AgentSessionStore(localHost: { "mac" })
+        restored.restore(try #require(persistence.load()), isRunning: { _ in true })
+        #expect(restored.pillStatus(for: DisplaySettings())?.text == "new finished")
+    }
+
     @Test func statusLineModelSurvivesARestore() throws {
         let directory = makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

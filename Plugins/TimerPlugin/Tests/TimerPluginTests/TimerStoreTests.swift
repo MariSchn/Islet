@@ -103,7 +103,7 @@ final class TimerStoreTests {
         store.tick()
         let pill = try #require(store.pillStatus)
         #expect(pill.text == "4:00")
-        #expect(pill.priority == .ambient)
+        #expect(pill.priority == .info)
         #expect(pill.ring?.segments.map(\.value) == [60, 240])
         #expect(pill.ring?.segments.map(\.tint) == [TimerStore.elapsedTint, TimerStore.remainingTint])
 
