@@ -119,7 +119,7 @@ final class PomodoroTests {
         store.tick()
         let work = try #require(store.pillStatus)
         #expect(work.text == "20:00")
-        #expect(work.priority == .ambient)
+        #expect(work.priority == .info)
         #expect(work.ring?.segments.map(\.value) == [300, 1200])
         #expect(work.ring?.segments.map(\.tint) == [TimerStore.elapsedTint, TimerStore.workTint])
 

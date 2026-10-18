@@ -83,6 +83,7 @@ struct AgentSession: Identifiable, Sendable, Equatable, Codable {
     var task: String?
     var activity: String?
     var state: State
+    var isSeen = false
     var pendingRequests: [PendingRequest] = []
     var requestsInTerminal: [TerminalRequest] = []
     var backgroundTasks: [BackgroundTask] = []
@@ -95,7 +96,7 @@ struct AgentSession: Identifiable, Sendable, Equatable, Codable {
 
     enum CodingKeys: String, CodingKey {
         case id, agent, host, isRemote, isUnreachable, terminal, tty, pid, tmux, transcriptPath, model, cwd, title, hasStatusLineTitle, hasStatusLineModel
-        case task, activity, state, backgroundTasks, activities, plan, details, startedAt, turnStartedAt, updatedAt
+        case task, activity, state, isSeen, backgroundTasks, activities, plan, details, startedAt, turnStartedAt, updatedAt
     }
 
     var pendingRequest: PendingRequest? { pendingRequests.first }
@@ -252,6 +253,7 @@ extension AgentSession {
         task = try container.decodeIfPresent(String.self, forKey: .task)
         activity = try container.decodeIfPresent(String.self, forKey: .activity)
         state = try container.decode(State.self, forKey: .state)
+        isSeen = try container.decodeIfPresent(Bool.self, forKey: .isSeen) ?? false
         backgroundTasks = try container.decodeIfPresent([BackgroundTask].self, forKey: .backgroundTasks) ?? []
         activities = try container.decodeIfPresent([ActivityEntry].self, forKey: .activities) ?? []
         plan = try container.decodeIfPresent(String.self, forKey: .plan)

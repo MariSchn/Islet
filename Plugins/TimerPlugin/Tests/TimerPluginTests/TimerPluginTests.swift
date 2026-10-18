@@ -23,7 +23,7 @@ struct TimerPluginTests {
             try #require(ContinuousClock.now < deadline)
             await Task.yield()
         }
-        #expect(entry.context.pillStatus?.priority == .ambient)
+        #expect(entry.context.pillStatus?.priority == .info)
         #expect(entry.context.pillStatus?.systemImage == "timer")
 
         plugin.store.cancel(timer.id)

@@ -122,7 +122,7 @@ public final class PluginRegistry {
     }
 
     public func pillOwner(_ selection: PillSelection, keeping heldID: String? = nil) -> String? {
-        if let urgent = pillCandidates.max(by: { $0.pill.priority < $1.pill.priority }), urgent.pill.priority >= .attention {
+        if let urgent = Self.mostImportant(of: pillCandidates), urgent.pill.priority >= .attention {
             return urgent.id
         }
         return pillHolder(selection, keeping: heldID)
@@ -130,7 +130,7 @@ public final class PluginRegistry {
 
     public func pillHolder(_ selection: PillSelection, keeping heldID: String? = nil) -> String? {
         let candidates = pillCandidates
-        let mostImportant = candidates.max { $0.pill.priority < $1.pill.priority }
+        let mostImportant = Self.mostImportant(of: candidates)
         switch selection {
         case .mostImportant:
             return mostImportant?.id
@@ -142,10 +142,16 @@ public final class PluginRegistry {
         }
     }
 
-    private var pillCandidates: [(id: String, pill: PillStatus, activity: Int)] {
+    private typealias PillCandidate = (id: String, pill: PillStatus, activity: Int)
+
+    private var pillCandidates: [PillCandidate] {
         enabledEntries.compactMap { entry in
             entry.context.pillStatus.map { (id: entry.id, pill: $0, activity: entry.context.pillActivity) }
         }
+    }
+
+    private static func mostImportant(of candidates: [PillCandidate]) -> PillCandidate? {
+        candidates.max { ($0.pill.priority, $0.activity) < ($1.pill.priority, $1.activity) }
     }
 
     public var announcements: [PillAnnouncement] {

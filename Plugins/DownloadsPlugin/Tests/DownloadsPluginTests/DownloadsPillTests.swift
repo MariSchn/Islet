@@ -12,7 +12,7 @@ struct DownloadsPillTests {
         let pill = try #require(DownloadsPlugin.pillStatus(for: [ActiveDownload(name: "report.pdf", fraction: 0.25, bytes: 1000)]))
 
         #expect(pill.text == "report.pdf")
-        #expect(pill.priority == .ambient)
+        #expect(pill.priority == .info)
         #expect(pill.systemImage == "arrow.down.circle")
         #expect(pill.ring == PillStatus.Ring(segments: [
             .init(value: 0.25, tint: DownloadsPlugin.doneTint),
@@ -34,7 +34,7 @@ struct DownloadsPillTests {
         ]))
 
         #expect(pill.text == "2 downloads")
-        #expect(pill.priority == .ambient)
+        #expect(pill.priority == .info)
         let done = try #require(pill.ring?.segments.first)
         #expect(abs(done.value - 0.4) < 0.0001)
         #expect(done.tint == DownloadsPlugin.doneTint)

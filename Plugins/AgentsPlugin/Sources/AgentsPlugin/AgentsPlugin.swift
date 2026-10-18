@@ -133,6 +133,7 @@ public final class AgentsPlugin: IsletPlugin {
                 context.announce(announcement)
             }
         }
+        context.observe({ [unowned context] in context.isScreenVisible }) { controller.store.isScreenVisible = $0 }
     }
 
     public func activate() async throws {

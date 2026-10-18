@@ -97,7 +97,7 @@ struct AgentsSettings: View {
             if controller.display.pillContent == .ring {
                 Picker("Finished sessions", selection: $controller.display.ringKeepsFinishedSessions) {
                     Text("Stay green until the next prompt").tag(true)
-                    Text("Turn gray after \(Int(AgentSessionStore.finishedPillDuration / 60)) minutes").tag(false)
+                    Text("Turn gray once seen").tag(false)
                 }
             }
             Toggle("Show while agents are working", isOn: $controller.display.pillShowsWorking)
@@ -105,7 +105,7 @@ struct AgentsSettings: View {
         } header: {
             Text("Collapsed Notch")
         } footer: {
-            Text("The status ring counts sessions that need you, are working, have finished or are idle. The notch always shows an agent that needs you.")
+            Text("The status ring counts sessions that need you, are working, have finished or are idle. The notch always shows an agent that needs you. A finished agent counts as seen once you open the Agents screen in the notch.")
         }
 
         Section {

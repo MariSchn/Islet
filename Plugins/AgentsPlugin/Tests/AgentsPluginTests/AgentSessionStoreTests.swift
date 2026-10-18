@@ -381,9 +381,8 @@ struct AgentSessionStoreTests {
         #expect(store.sessions[0].task == "again")
     }
 
-    @Test func finishedSessionsLeaveThePillAfterAWhileAndYieldToWorkingOnes() {
-        var clock = Date(timeIntervalSince1970: 1_000_000)
-        let store = AgentSessionStore { clock }
+    @Test func finishedSessionsLeaveThePillOnceSeenAndYieldToWorkingOnes() {
+        let store = AgentSessionStore()
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", cwd: "/one", prompt: "x"))
         store.apply(HookEvent(kind: .stop, sessionID: "a"))
         #expect(store.pillStatus(for: DisplaySettings())?.text == "one finished")
@@ -393,9 +392,20 @@ struct AgentSessionStoreTests {
         store.apply(HookEvent(kind: .sessionEnd, sessionID: "b"))
         #expect(store.pillStatus(for: DisplaySettings())?.text == "one finished")
 
-        clock = clock.addingTimeInterval(AgentSessionStore.finishedPillDuration + 1)
+        store.isScreenVisible = true
+        store.isScreenVisible = false
         #expect(store.pillStatus(for: DisplaySettings()) == nil)
         #expect(store.sessions.count == 1)
+
+        store.isScreenVisible = true
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "again"))
+        store.apply(HookEvent(kind: .stop, sessionID: "a"))
+        store.isScreenVisible = false
+        #expect(store.pillStatus(for: DisplaySettings()) == nil)
+
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "once more"))
+        store.apply(HookEvent(kind: .stop, sessionID: "a"))
+        #expect(store.pillStatus(for: DisplaySettings())?.text == "one finished")
     }
 
     @Test func remoteSessionsShowTheirHostAndGoUnreachableWithoutUpdates() {
@@ -572,6 +582,7 @@ struct AgentSessionStoreTests {
         store.apply(HookEvent(kind: .postToolUse, sessionID: "a", toolName: "Agent", toolInput: .object(["description": .string("Review the diff")]), toolUseID: "toolu_2", toolResponse: ToolResponse(status: "async_launched", agentID: "a1")))
         store.apply(HookEvent(kind: .stop, sessionID: "a"))
         #expect(store.sessions[0].state == .waiting)
+        #expect(store.pillStatus(for: DisplaySettings())?.priority == .info)
         #expect(BackgroundTask.label(for: store.sessions[0].backgroundTasks) == "Waiting on 2 background tasks")
         #expect(alerts.isEmpty)
         store.apply(HookEvent(kind: .notification, sessionID: "a", notificationType: "idle_prompt"))
@@ -741,12 +752,12 @@ struct AgentSessionStoreTests {
         #expect(store.pillStatus(for: display)?.priority == .attention)
     }
 
-    @Test func oldFinishedSessionsStayFinishedInTheRingUnlessTheyShouldTurnIdle() {
-        var clock = Date(timeIntervalSince1970: 1_000_000)
-        let store = AgentSessionStore(now: { clock })
+    @Test func seenFinishedSessionsStayFinishedInTheRingUnlessTheyShouldTurnIdle() {
+        let store = AgentSessionStore()
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "old", prompt: "a"))
         store.apply(HookEvent(kind: .stop, sessionID: "old"))
-        clock = clock.addingTimeInterval(AgentSessionStore.finishedPillDuration + 1)
+        store.isScreenVisible = true
+        store.isScreenVisible = false
         store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "new", prompt: "b"))
         #expect(store.statusRing(keepingFinishedSessions: true).segments == [
             .init(value: 1, tint: SessionColors.workingTint),
