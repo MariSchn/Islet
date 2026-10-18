@@ -216,6 +216,14 @@ struct SessionDetails: Sendable, Equatable, Codable {
         return (model, effort)
     }
 
+    static func claudeModelName(id: String) -> String {
+        guard let start = id.range(of: "claude-") else { return id }
+        let parts = id[start.upperBound...].prefix { $0 != "[" && $0 != "@" }.split(separator: "-").map(String.init)
+        guard let family = parts.firstIndex(where: { Int($0) == nil }) else { return id }
+        let version = parts.filter { Int($0) != nil && $0.count < 8 }.joined(separator: ".")
+        return parts[family].capitalized + (version.isEmpty ? "" : " \(version)")
+    }
+
     static func percentText(_ value: Double) -> String {
         String(Int(value.rounded()))
     }

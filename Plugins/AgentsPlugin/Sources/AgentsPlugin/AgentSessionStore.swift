@@ -134,7 +134,7 @@ final class AgentSessionStore {
             session.model = model
             if event.agent == .codex || event.agent == .cursor { session.details.model = model }
             if event.agent == .cursor, let effort = event.effort { session.details.effort = effort }
-            if event.agent == .antigravity, !session.hasStatusLineModel {
+            if event.agent == .antigravity || event.agent == .claudeCode, !session.hasStatusLineModel {
                 session.details.model = model
                 session.details.effort = event.effort
             }

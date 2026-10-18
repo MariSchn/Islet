@@ -74,7 +74,7 @@ struct HookInstaller: Sendable {
           session=$(printf '%s' "$payload" | sed -n 's/.*"session_id":"\\([^"]*\\)".*/\\1/p')
           title=$(grep -F "\\"id\\":\\"$session\\"" "${0%/*}/session_index.jsonl" 2>/dev/null | tail -n 1 | sed -nE 's/.*"thread_name":"(([^"\\\\]|\\\\.)*)".*/\\1/p' | sed 's/\\\\"/"/g; s/\\\\\\\\/\\\\/g')
         fi
-        \(agent == .cursor ? Self.cursorTitleLines : "")branch=""
+        \(agent == .cursor ? Self.cursorTitleLines : "")\(agent == .claudeCode ? Self.claudeModelLines : "")branch=""
         if [ -n "$transcript" ] && [ -f "$transcript" ]; then
           branch=$(head -n 1 "$transcript" | sed -nE 's/.*"git":\\{[^}]*"branch":"([^"]*)".*/\\1/p')
         fi
@@ -131,6 +131,8 @@ struct HookInstaller: Sendable {
           -H "X-Islet-Tmux-Pane: $TMUX_PANE" \\
           -H "X-Islet-Title: $title" \\
           -H "X-Islet-Branch: $branch" \\
+          -H "X-Islet-Model: $model" \\
+          -H "X-Islet-Effort: $effort" \\
           --data-binary @- \(agent == .antigravity ? ">/dev/null " : "")2>/dev/null 3<<'ISLET_CONFIG' &
         header = "Authorization: Bearer \(token)"
         ISLET_CONFIG
@@ -140,6 +142,17 @@ struct HookInstaller: Sendable {
 
         """
     }
+
+    private static let claudeModelLines = """
+        model=""
+        effort=""
+        if [ -n "$transcript" ] && [ -f "$transcript" ]; then
+          reply=$(tail -c 2000000 "$transcript" 2>/dev/null | grep '"type":"assistant"'  | grep -v '"model":"<synthetic>"' | tail -n 1)
+          model=$(printf '%s' "$reply" | sed -nE 's/.*"message":\\{"model":"([^"]*)".*/\\1/p')
+          effort=$(printf '%s' "$reply" | sed -nE 's/.*"type":"assistant".*"effort":"([a-z]*)".*/\\1/p')
+        fi
+
+        """
 
     private static let antigravityBranchLines = """
         branch=""

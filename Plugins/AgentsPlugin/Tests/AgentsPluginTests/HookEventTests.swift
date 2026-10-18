@@ -174,6 +174,19 @@ struct HookEventTests {
         #expect(session.isGeminiModel)
     }
 
+    @Test func takesTheClaudeModelAndEffortFromTheHeadersUnlessThePayloadHasAModel() throws {
+        let stop = Data(#"{"session_id":"a","hook_event_name":"Stop"}"#.utf8)
+        let event = try HookEvent.decode(stop, model: "claude-opus-5-5", effort: "high")
+        #expect(event.model == "Opus 5.5")
+        #expect(event.effort == "high")
+        #expect(try HookEvent.decode(stop, model: "", effort: "bogus").model == nil)
+        #expect(try HookEvent.decode(stop, model: "", effort: "bogus").effort == nil)
+        let start = Data(#"{"session_id":"a","hook_event_name":"SessionStart","model":"claude-sonnet-5-5"}"#.utf8)
+        #expect(try HookEvent.decode(start, model: "claude-opus-5-5").model == "Sonnet 5.5")
+        #expect(try HookEvent.decode(start, model: "claude-opus-5-5", effort: "xhigh").effort == nil)
+        #expect(try HookEvent.decode(start, agent: "codex", model: "claude-opus-5-5").model == "claude-sonnet-5-5")
+    }
+
     @Test func takesTheBranchFromTheHeader() throws {
         let data = Data(#"{"session_id":"a","hook_event_name":"Stop"}"#.utf8)
         #expect(try HookEvent.decode(data, branch: "main").branch == "main")

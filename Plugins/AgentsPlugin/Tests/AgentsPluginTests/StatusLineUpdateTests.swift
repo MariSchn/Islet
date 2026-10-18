@@ -53,6 +53,17 @@ struct StatusLineUpdateTests {
         #expect(SessionDetails.modelName("Opus (1M context)", without: "high") == "Opus (1M context)")
     }
 
+    @Test func namesClaudeModelIDs() {
+        #expect(SessionDetails.claudeModelName(id: "claude-opus-5-5") == "Opus 5.5")
+        #expect(SessionDetails.claudeModelName(id: "claude-opus-4-6[1m]") == "Opus 4.6")
+        #expect(SessionDetails.claudeModelName(id: "claude-sonnet-4-5-20250929") == "Sonnet 4.5")
+        #expect(SessionDetails.claudeModelName(id: "claude-3-5-haiku-20241022") == "Haiku 3.5")
+        #expect(SessionDetails.claudeModelName(id: "claude-3-7-sonnet-latest") == "Sonnet 3.7")
+        #expect(SessionDetails.claudeModelName(id: "claude-sonnet-4-5@20250929") == "Sonnet 4.5")
+        #expect(SessionDetails.claudeModelName(id: "us.anthropic.claude-sonnet-4-5-20250929-v1:0") == "Sonnet 4.5")
+        #expect(SessionDetails.claudeModelName(id: "opus") == "opus")
+    }
+
     static let antigravityExample = """
     {"cwd":"/Users/me/projects/islet","session_id":"74d3aef1","conversation_id":"74d3aef1","conversation_title":"Fix the build","cost":0.42,
      "model":{"id":"Gemini 3.8 Flash (High)","display_name":"Gemini 3.8 Flash (High)","effort":"high"},
