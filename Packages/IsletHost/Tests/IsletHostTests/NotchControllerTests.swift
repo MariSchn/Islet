@@ -366,6 +366,53 @@ struct NotchControllerTests {
         #expect(registry.selectedID == "test.second")
     }
 
+    @Test func openingWhileAnAnnouncementShowsOpensThePluginThatMadeIt() async throws {
+        let harness = Harness()
+        let registry = harness.makeRegistry()
+        let controller = makeController()
+        controller.attach(registry)
+        let stub = try await harness.registerStub(in: registry)
+        let second = try await harness.registerSecond(in: registry)
+        stub.context.pillStatus = PillStatus(text: "song", priority: .ambient)
+        second.context.announce(PillAnnouncement(text: "Agent finished"))
+        await Task.yield()
+        #expect(controller.pill?.text == "song")
+        #expect(controller.announcement?.text == "Agent finished")
+
+        controller.expand()
+        #expect(registry.selectedID == "test.second")
+        #expect(controller.announcement == nil)
+
+        controller.collapse()
+        await Task.yield()
+        controller.expand()
+        #expect(registry.selectedID == "test.stub")
+    }
+
+    @Test func openingKeepsToThePillWhenTurnedOffOrWhenThePillIsMoreImportant() async throws {
+        let harness = Harness()
+        let registry = harness.makeRegistry()
+        let controller = makeController()
+        controller.settings.opensAnnouncingPlugin = false
+        controller.attach(registry)
+        let stub = try await harness.registerStub(in: registry)
+        let second = try await harness.registerSecond(in: registry)
+        stub.context.pillStatus = PillStatus(text: "song", priority: .ambient)
+        second.context.announce(PillAnnouncement(text: "Agent finished"))
+        await Task.yield()
+        controller.expand()
+        #expect(registry.selectedID == "test.stub")
+
+        controller.collapse()
+        controller.settings.opensAnnouncingPlugin = true
+        stub.context.pillStatus = PillStatus(text: "approve?", priority: .attention)
+        second.context.announce(PillAnnouncement(text: "Download finished"))
+        await Task.yield()
+        #expect(controller.announcement?.text == "Download finished")
+        controller.expand()
+        #expect(registry.selectedID == "test.stub")
+    }
+
     @Test func showsNewAnnouncementsBrieflyWhileCollapsed() async throws {
         let harness = Harness()
         let registry = harness.makeRegistry()
