@@ -36,6 +36,9 @@ struct AgentsSettings: View {
                 if controller.isAvailable(.antigravity) {
                     Text("Antigravity can't ask for permission through hooks, so answer its prompts in the terminal.")
                 }
+                if controller.isAvailable(.cursor) {
+                    Text("Cursor's approval prompts don't reach Islet, so answer them in Cursor.")
+                }
             }
         }
         .onAppear { controller.refreshInstallState() }

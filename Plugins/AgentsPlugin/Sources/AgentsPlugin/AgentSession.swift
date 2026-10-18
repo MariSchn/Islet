@@ -5,12 +5,14 @@ struct AgentSession: Identifiable, Sendable, Equatable, Codable {
         case claudeCode = "claude-code"
         case codex
         case antigravity
+        case cursor
 
         var displayName: String {
             switch self {
             case .claudeCode: "Claude Code"
             case .codex: "Codex"
             case .antigravity: "Antigravity"
+            case .cursor: "Cursor"
             }
         }
 
@@ -19,13 +21,14 @@ struct AgentSession: Identifiable, Sendable, Equatable, Codable {
             case .claudeCode: ".claude"
             case .codex: ".codex"
             case .antigravity: ".gemini/config"
+            case .cursor: ".cursor"
             }
         }
 
         var statusLinePath: String? {
             switch self {
             case .claudeCode: ".claude"
-            case .codex: nil
+            case .codex, .cursor: nil
             case .antigravity: ".gemini/antigravity-cli"
             }
         }
@@ -35,6 +38,7 @@ struct AgentSession: Identifiable, Sendable, Equatable, Codable {
             case .claudeCode: nil
             case .codex: ".codex"
             case .antigravity: ".gemini/antigravity-cli"
+            case .cursor: ".cursor"
             }
         }
     }

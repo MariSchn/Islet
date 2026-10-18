@@ -48,6 +48,7 @@ struct HookEvent: Sendable, Equatable, Decodable {
     var title: String?
     var effort: String?
     var branch: String?
+    var isInterruption = false
 
     private enum CodingKeys: String, CodingKey {
         case kind = "hook_event_name"
@@ -125,6 +126,7 @@ struct HookEvent: Sendable, Equatable, Decodable {
         let agent = agent.flatMap(AgentSession.Agent.init(rawValue:)) ?? .claudeCode
         var event = switch agent {
         case .antigravity: try JSONDecoder().decode(AntigravityPayload.self, from: data).event(named: eventName ?? "", lastPrompt: isRemote ? { _ in nil } : lastPrompt, parent: isRemote ? { _ in nil } : parent)
+        case .cursor: try JSONDecoder().decode(CursorPayload.self, from: data).event(named: eventName ?? "")
         case .claudeCode, .codex: try JSONDecoder().decode(HookEvent.self, from: data)
         }
         event.agent = agent
@@ -181,7 +183,7 @@ struct HookEvent: Sendable, Equatable, Decodable {
         case "Edit", "MultiEdit": return file("file_path").map { "Edit \($0)" } ?? "Edit"
         case "Write": return file("file_path").map { "Write \($0)" } ?? "Write"
         case "NotebookEdit": return file("notebook_path").map { "Edit \($0)" } ?? "Edit notebook"
-        case "Bash", "shell", "exec_command": return input?["description"]?.stringValue ?? command.map { "$ \($0)" } ?? "Run command"
+        case "Bash", "Shell", "shell", "exec_command": return input?["description"]?.stringValue ?? command.map { "$ \($0)" } ?? "Run command"
         case "apply_patch": return "Apply patch"
         case "Grep": return input?["pattern"]?.stringValue.map { "Search \($0)" } ?? "Search"
         case "Glob": return input?["pattern"]?.stringValue.map { "Find \($0)" } ?? "Find files"
@@ -248,6 +250,81 @@ struct AntigravityPayload: Decodable {
             event.model = model.model
             event.effort = model.effort
         }
+        return event
+    }
+}
+
+struct CursorPayload: Decodable {
+    var conversationId: String
+    var workspaceRoots: [String]?
+    var cwd: String?
+    var transcriptPath: String?
+    var model: String?
+    var modelID: String?
+    var modelParams: [JSONValue]?
+    var toolName: String?
+    var toolInput: JSONValue?
+    var prompt: String?
+    var composerMode: String?
+    var status: String?
+    var errorMessage: String?
+    var failureType: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case conversationId = "conversation_id"
+        case workspaceRoots = "workspace_roots"
+        case cwd
+        case transcriptPath = "transcript_path"
+        case model
+        case modelID = "model_id"
+        case modelParams = "model_params"
+        case toolName = "tool_name"
+        case toolInput = "tool_input"
+        case prompt
+        case composerMode = "composer_mode"
+        case status
+        case errorMessage = "error_message"
+        case failureType = "failure_type"
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        conversationId = try container.decode(String.self, forKey: .conversationId)
+        workspaceRoots = try? container.decodeIfPresent([String].self, forKey: .workspaceRoots)
+        cwd = try? container.decodeIfPresent(String.self, forKey: .cwd)
+        transcriptPath = try? container.decodeIfPresent(String.self, forKey: .transcriptPath)
+        model = try? container.decodeIfPresent(String.self, forKey: .model)
+        modelID = try? container.decodeIfPresent(String.self, forKey: .modelID)
+        modelParams = try? container.decodeIfPresent([JSONValue].self, forKey: .modelParams)
+        toolName = try? container.decodeIfPresent(String.self, forKey: .toolName)
+        toolInput = try? container.decodeIfPresent(JSONValue.self, forKey: .toolInput)
+        prompt = try? container.decodeIfPresent(String.self, forKey: .prompt)
+        composerMode = try? container.decodeIfPresent(String.self, forKey: .composerMode)
+        status = try? container.decodeIfPresent(String.self, forKey: .status)
+        errorMessage = try? container.decodeIfPresent(String.self, forKey: .errorMessage)
+        failureType = try? container.decodeIfPresent(String.self, forKey: .failureType)
+    }
+
+    func event(named name: String) -> HookEvent {
+        let kind: HookEvent.Kind = switch HookEvent.Kind(rawValue: name) ?? .other {
+        case .userPromptSubmit where composerMode == nil: .other
+        case .stop where status == "error": .stopFailure
+        case let kind: kind
+        }
+        var event = HookEvent(
+            kind: kind,
+            sessionID: conversationId,
+            cwd: workspaceRoots?.first ?? cwd,
+            transcriptPath: transcriptPath,
+            toolName: toolName,
+            toolInput: toolInput,
+            prompt: prompt,
+            lastAssistantMessage: kind == .stopFailure ? errorMessage : nil,
+            agent: .cursor
+        )
+        event.isInterruption = kind == .stop && status == "aborted"
+        event.model = (modelID ?? model).flatMap { $0.isEmpty || $0 == "default" || $0 == "unknown" ? nil : $0 }
+        event.effort = modelParams?.first { $0["id"]?.stringValue == "effort" }?["value"]?.stringValue
         return event
     }
 }

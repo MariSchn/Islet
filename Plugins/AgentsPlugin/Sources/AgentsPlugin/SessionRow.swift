@@ -296,11 +296,12 @@ private struct AgentBadge: View {
     }
 
     private var kind: AgentLogo.Kind {
-        if session.isGeminiModel { return .gemini }
+        if session.agent != .cursor, session.isGeminiModel { return .gemini }
         switch session.agent {
         case .claudeCode: return .claude
         case .codex: return .codex
         case .antigravity: return .gemini
+        case .cursor: return .cursor
         }
     }
 }

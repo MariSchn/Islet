@@ -51,6 +51,86 @@ struct HookInstallerTests {
         #expect(settings?["lint"] != nil)
     }
 
+    @Test func installsCursorHooksAsFlatEntriesNextToOtherHooks() throws {
+        let installer = try makeInstaller(agent: .cursor)
+        try #"{"version":1,"hooks":{"afterFileEdit":[{"command":"./format.sh"}],"stop":[{"command":"./notify.sh"}]}}"#.write(to: installer.settingsURL, atomically: true, encoding: .utf8)
+        #expect(!installer.needsUpgrade)
+        try installer.install()
+        #expect(installer.isInstalled)
+        var settings = try JSONSerialization.jsonObject(with: Data(contentsOf: installer.settingsURL)) as? [String: Any]
+        #expect(settings?["version"] as? Int == 1)
+        var hooks = settings?["hooks"] as? [String: Any]
+        #expect(Set(hooks?.keys.map { $0 } ?? []) == Set(installer.events + ["afterFileEdit"]))
+        let stop = hooks?["stop"] as? [[String: Any]]
+        #expect(stop?.map { $0["command"] as? String } == ["./notify.sh", "'\(installer.scriptURL.path)' 2 Stop"])
+        #expect((hooks?["sessionEnd"] as? [[String: Any]])?.first?["command"] as? String == "'\(installer.scriptURL.path)' 2 SessionEnd")
+
+        try installer.install()
+        hooks = (try JSONSerialization.jsonObject(with: Data(contentsOf: installer.settingsURL)) as? [String: Any])?["hooks"] as? [String: Any]
+        #expect((hooks?["stop"] as? [Any])?.count == 2)
+
+        try installer.uninstall()
+        #expect(!installer.isInstalled)
+        settings = try JSONSerialization.jsonObject(with: Data(contentsOf: installer.settingsURL)) as? [String: Any]
+        hooks = settings?["hooks"] as? [String: Any]
+        #expect(Set(hooks?.keys.map { $0 } ?? []) == ["afterFileEdit", "stop"])
+        #expect((hooks?["stop"] as? [[String: Any]])?.map { $0["command"] as? String } == ["./notify.sh"])
+    }
+
+    @Test func cursorScriptRepliesWithAnEmptyObjectAndForwardsTheEvent() throws {
+        let installer = try makeInstaller(agent: .cursor)
+        try installer.install()
+        let capture = installer.directory.appending(path: "curl-call")
+        let fakeCurl = installer.directory.appending(path: "curl")
+        try "#!/bin/sh\nprintf '%s\\n' \"$@\" > '\(capture.path)'\necho '{\"permission\":\"deny\"}'\n".write(to: fakeCurl, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeCurl.path)
+        let process = Process()
+        process.executableURL = URL(filePath: "/bin/sh")
+        process.arguments = [installer.scriptURL.path, "10", "PreToolUse"]
+        process.environment = ["PATH": installer.directory.path + ":/usr/bin:/bin"]
+        let input = Pipe()
+        let output = Pipe()
+        process.standardInput = input
+        process.standardOutput = output
+        try process.run()
+        input.fileHandleForWriting.write(Data(#"{"conversation_id":"a","hook_event_name":"preToolUse"}"#.utf8))
+        try input.fileHandleForWriting.close()
+        process.waitUntilExit()
+        #expect(String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self) == "{}\n")
+        let call = try String(contentsOf: capture, encoding: .utf8).components(separatedBy: "\n")
+        #expect(call.contains("X-Islet-Agent: cursor"))
+        #expect(call.contains("X-Islet-Event: PreToolUse"))
+    }
+
+    @Test func cursorScriptReportsTheChatNameFromCursorsDatabase() throws {
+        let installer = try makeInstaller(agent: .cursor)
+        try installer.install()
+        let database = installer.directory.appending(path: "Library/Application Support/Cursor/User/globalStorage/state.vscdb")
+        try FileManager.default.createDirectory(at: database.deletingLastPathComponent(), withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: database.path, contents: Data())
+        let capture = installer.directory.appending(path: "curl-call")
+        for (tool, script) in [("curl", "printf '%s\\n' \"$@\" > '\(capture.path)'"), ("sqlite3", "case \"$*\" in *\"key = 'composerData:c-1'\"*) printf 'Fix the\\nbuild\\n' ;; esac")] {
+            let url = installer.directory.appending(path: tool)
+            try "#!/bin/sh\n\(script)\n".write(to: url, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+        }
+        for (event, conversation, title) in [("Stop", "c-1", "Fix the build"), ("PreToolUse", "c-1", "Fix the build"), ("SessionEnd", "c-1", ""), ("Stop", "c-1' or '1", "")] {
+            let process = Process()
+            process.executableURL = URL(filePath: "/bin/sh")
+            process.arguments = [installer.scriptURL.path, "10", event]
+            process.environment = ["PATH": installer.directory.path + ":/usr/bin:/bin", "HOME": installer.directory.path]
+            let input = Pipe()
+            process.standardInput = input
+            process.standardOutput = Pipe()
+            try process.run()
+            input.fileHandleForWriting.write(Data(#"{"conversation_id":"\#(conversation)"}"#.utf8))
+            try input.fileHandleForWriting.close()
+            process.waitUntilExit()
+            let call = try String(contentsOf: capture, encoding: .utf8).components(separatedBy: "\n")
+            #expect(call.contains("X-Islet-Title: \(title)"))
+        }
+    }
+
     @Test func antigravityScriptAlwaysRepliesWithAnEmptyObjectAndForwardsTheEvent() throws {
         let installer = try makeInstaller(agent: .antigravity)
         try installer.install()
@@ -242,6 +322,58 @@ struct HookInstallerTests {
             let call = try String(contentsOf: capture, encoding: .utf8).components(separatedBy: "\n")
             #expect(call.contains("X-Islet-PID: \(reportsProcess ? String(process.processIdentifier) : "")"), "\(event)")
         }
+    }
+
+    @Test func claudeScriptIgnoresTheCursorEventsCursorAlsoSendsToClaudeHooks() throws {
+        let installer = try makeInstaller()
+        try installer.install()
+        let capture = installer.directory.appending(path: "curl-call")
+        let fakeCurl = installer.directory.appending(path: "curl")
+        try "#!/bin/sh\nprintf '%s\\n' \"$@\" > '\(capture.path)'\n".write(to: fakeCurl, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeCurl.path)
+        for (payload, isForwarded) in [(#"{"conversation_id":"c1","hook_event_name":"preToolUse","cursor_version":"3.23.23"}"#, false), (#"{"session_id":"a","hook_event_name":"Stop","prompt":"{\"cursor_version\":\"1\"}"}"#, true)] {
+            try? FileManager.default.removeItem(at: capture)
+            let process = Process()
+            process.executableURL = URL(filePath: "/bin/sh")
+            process.arguments = [installer.scriptURL.path]
+            process.environment = ["PATH": installer.directory.path + ":/usr/bin:/bin"]
+            let input = Pipe()
+            process.standardInput = input
+            try process.run()
+            input.fileHandleForWriting.write(Data(payload.utf8))
+            try input.fileHandleForWriting.close()
+            process.waitUntilExit()
+            #expect(FileManager.default.fileExists(atPath: capture.path) == isForwarded)
+        }
+    }
+
+    @Test func cursorScriptReportsTheCursorProcessAndOutdatedEntriesAreUpgraded() throws {
+        let installer = try makeInstaller(agent: .cursor)
+        try installer.install()
+        let capture = installer.directory.appending(path: "curl-call")
+        let fakeCurl = installer.directory.appending(path: "curl")
+        try "#!/bin/sh\nprintf '%s\\n' \"$@\" > '\(capture.path)'\n".write(to: fakeCurl, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeCurl.path)
+        let cursor = installer.directory.appending(path: "Cursor")
+        try FileManager.default.createSymbolicLink(at: cursor, withDestinationURL: URL(filePath: "/bin/bash"))
+        let process = Process()
+        process.executableURL = cursor
+        process.arguments = ["-c", "/usr/bin/time sh \"$0\" 2 UserPromptSubmit 2>/dev/null; true", installer.scriptURL.path]
+        process.environment = ["PATH": installer.directory.path + ":/usr/bin:/bin"]
+        let input = Pipe()
+        process.standardInput = input
+        process.standardOutput = Pipe()
+        try process.run()
+        input.fileHandleForWriting.write(Data(#"{"conversation_id":"c1"}"#.utf8))
+        try input.fileHandleForWriting.close()
+        process.waitUntilExit()
+        #expect(try String(contentsOf: capture, encoding: .utf8).components(separatedBy: "\n").contains("X-Islet-PID: \(process.processIdentifier)"))
+
+        let stale = try String(contentsOf: installer.settingsURL, encoding: .utf8).replacingOccurrences(of: "' 2 Stop\"", with: "' 10 Stop\"")
+        try stale.write(to: installer.settingsURL, atomically: true, encoding: .utf8)
+        #expect(installer.needsUpgrade)
+        try installer.install()
+        #expect(installer.isInstalled)
     }
 
     @Test func scriptReportsTheCodexThreadNameAndGitBranch() throws {

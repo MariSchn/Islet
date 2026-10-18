@@ -59,6 +59,44 @@ struct HookEventTests {
         #expect(throws: (any Error).self) { try HookEvent.decode(Data(#"{"session_id":"a","hook_event_name":"Stop"}"#.utf8), agent: "antigravity", eventName: "Stop") }
     }
 
+    @Test func mapsCursorHooksOntoSessionEvents() throws {
+        let common = #""conversation_id":"c1","generation_id":"g1","model":"claude-4.5-sonnet","cursor_version":"3.23.23","workspace_roots":["/Users/me/projects/islet"],"transcript_path":"/tmp/t.jsonl""#
+        func decode(_ name: String, _ fields: String = "") throws -> HookEvent {
+            try HookEvent.decode(Data("{\(common)\(fields)}".utf8), agent: "cursor", eventName: name)
+        }
+
+        let prompt = try decode("UserPromptSubmit", #","hook_event_name":"beforeSubmitPrompt","composer_mode":"agent","prompt":"Fix the build","attachments":[],"model":"claude-opus-5-5-medium","model_id":"claude-opus-5-5","model_params":[{"id":"context","value":"300k"},{"id":"effort","value":"medium"}]"#)
+        #expect(prompt.kind == .userPromptSubmit)
+        #expect(prompt.agent == .cursor)
+        #expect(prompt.sessionID == "c1")
+        #expect(prompt.cwd == "/Users/me/projects/islet")
+        #expect(prompt.prompt == "Fix the build")
+        #expect(prompt.model == "claude-opus-5-5")
+        #expect(prompt.effort == "medium")
+
+        #expect(try decode("UserPromptSubmit", #","prompt":"rename this var""#).kind == .other)
+
+        let tool = try decode("PreToolUse", #","hook_event_name":"preToolUse","tool_name":"Shell","tool_input":{"command":"swift test"},"tool_use_id":"t1""#)
+        #expect(tool.kind == .preToolUse)
+        #expect(tool.activityDescription == "$ swift test")
+        #expect(tool.model == "claude-4.5-sonnet")
+        #expect(tool.effort == nil)
+        #expect(try decode("PostToolUseFailure", #","tool_name":"Shell","error_message":"exit 1","failure_type":"error""#).kind == .postToolUseFailure)
+
+        #expect(try decode("Stop", #","status":"completed","loop_count":0"#).kind == .stop)
+        #expect(try !decode("Stop", #","status":"completed","loop_count":0"#).isInterruption)
+        let aborted = try decode("Stop", #","status":"aborted","loop_count":0"#)
+        #expect(aborted.kind == .stop)
+        #expect(aborted.isInterruption)
+        #expect(try HookEvent.decode(Data(#"{"conversation_id":"c1","model":"unknown"}"#.utf8), agent: "cursor", eventName: "Stop").model == nil)
+        let failure = try decode("Stop", #","status":"error","loop_count":0"#)
+        #expect(failure.kind == .stopFailure)
+        #expect(failure.failureDescription == "The request failed")
+        #expect(try decode("SessionEnd", #","session_id":"c1","reason":"user_close""#).kind == .sessionEnd)
+        #expect(try decode("afterAgentThought").kind == .other)
+        #expect(throws: (any Error).self) { try HookEvent.decode(Data(#"{"session_id":"a"}"#.utf8), agent: "cursor", eventName: "Stop") }
+    }
+
     @Test func antigravitySubagentToolCallsShowOnTheParentAndNothingElse() throws {
         let fields = #""conversationId":"sub1","transcriptPath":"/tmp/sub.jsonl","error":"","invocationNum":0,"toolCall":{"name":"view_file","args":{"toolSummary":"Read a.txt"}}"#
         func decode(_ name: String) throws -> HookEvent {
