@@ -911,8 +911,7 @@ struct MediaPlayerSettingTests {
 
     @Test func selectedPlayerIsPersistedAndRestored() async throws {
         let suite = "MediaPlayerSettingTests.\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(UserDefaults(suiteName: FileManager.default.temporaryDirectory.appending(path: "\(suite)/defaults").path))
         defaults.set([MediaPlugin.manifest.id], forKey: "islet.disabledPlugins")
         let storage = FileManager.default.temporaryDirectory.appending(path: suite, directoryHint: .isDirectory)
         defer { try? FileManager.default.removeItem(at: storage) }
@@ -928,8 +927,7 @@ struct MediaPlayerSettingTests {
 
     @Test func pillSettingIsPersisted() async throws {
         let suite = "MediaPlayerSettingTests.\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(UserDefaults(suiteName: FileManager.default.temporaryDirectory.appending(path: "\(suite)/defaults").path))
         defaults.set([MediaPlugin.manifest.id], forKey: "islet.disabledPlugins")
         let storage = FileManager.default.temporaryDirectory.appending(path: suite, directoryHint: .isDirectory)
         defer { try? FileManager.default.removeItem(at: storage) }

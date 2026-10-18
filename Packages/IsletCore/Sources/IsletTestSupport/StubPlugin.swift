@@ -52,13 +52,15 @@ public let secondManifest = PluginManifest(id: "test.second", displayName: "Seco
 
 @MainActor
 public final class Harness {
-    public let suiteName = "IsletTests." + UUID().uuidString
     public let defaults: UserDefaults
     public let root: URL
+    private let defaultsDirectory: URL
 
     public init() {
-        defaults = UserDefaults(suiteName: suiteName)!
-        root = FileManager.default.temporaryDirectory.appending(path: suiteName)
+        let name = "IsletTests." + UUID().uuidString
+        root = FileManager.default.temporaryDirectory.appending(path: name)
+        defaultsDirectory = FileManager.default.temporaryDirectory.appending(path: name + ".defaults")
+        defaults = UserDefaults(suiteName: defaultsDirectory.appending(path: "defaults").path)!
     }
 
     public func makeRegistry() -> PluginRegistry {
@@ -90,10 +92,7 @@ public final class Harness {
     }
 
     isolated deinit {
-        defaults.removePersistentDomain(forName: suiteName)
-        let preferencesFile = URL.libraryDirectory
-            .appending(path: "Preferences/\(suiteName).plist")
-        try? FileManager.default.removeItem(at: preferencesFile)
+        try? FileManager.default.removeItem(at: defaultsDirectory)
         try? FileManager.default.removeItem(at: root)
     }
 }

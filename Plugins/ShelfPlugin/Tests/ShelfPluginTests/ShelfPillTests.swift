@@ -65,7 +65,7 @@ private final class Harness {
 
     init() async throws {
         suite = "ShelfPillTests." + UUID().uuidString
-        defaults = try #require(UserDefaults(suiteName: suite))
+        defaults = try #require(UserDefaults(suiteName: FileManager.default.temporaryDirectory.appending(path: "\(suite)/defaults").path))
         root = FileManager.default.temporaryDirectory.appending(path: suite)
         registry = PluginRegistry(storageRoot: root, userDefaults: defaults)
         entry = try await registry.register(ShelfPlugin.self)
@@ -81,7 +81,6 @@ private final class Harness {
     }
 
     func cleanup() {
-        defaults.removePersistentDomain(forName: suite)
         try? FileManager.default.removeItem(at: root)
     }
 }

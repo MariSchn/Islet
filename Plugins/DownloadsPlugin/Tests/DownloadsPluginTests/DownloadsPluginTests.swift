@@ -7,8 +7,7 @@ import Testing
 struct DownloadsPluginTests {
     @Test func derivesThePillAndRecentListFromTheFolder() async throws {
         let suite = "DownloadsPluginTests." + UUID().uuidString
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(UserDefaults(suiteName: FileManager.default.temporaryDirectory.appending(path: "\(suite)/defaults").path))
         let root = FileManager.default.temporaryDirectory.appending(path: suite)
         defer { try? FileManager.default.removeItem(at: root) }
         let folder = root.appending(path: "Downloads")

@@ -7,8 +7,7 @@ import Testing
 struct TimerPluginTests {
     @Test func derivesTheRingPillFromRunningTimers() async throws {
         let suite = "TimerPluginTests." + UUID().uuidString
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(UserDefaults(suiteName: FileManager.default.temporaryDirectory.appending(path: "\(suite)/defaults").path))
         let root = FileManager.default.temporaryDirectory.appending(path: suite)
         defer { try? FileManager.default.removeItem(at: root) }
 
@@ -37,8 +36,7 @@ struct TimerPluginTests {
 
     @Test func loadsAndSavesPomodoroSettings() async throws {
         let suite = "TimerPluginTests." + UUID().uuidString
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(UserDefaults(suiteName: FileManager.default.temporaryDirectory.appending(path: "\(suite)/defaults").path))
         let root = FileManager.default.temporaryDirectory.appending(path: suite)
         defer { try? FileManager.default.removeItem(at: root) }
         let prefix = "plugin.\(TimerPlugin.manifest.id)."
@@ -69,8 +67,7 @@ struct TimerPluginTests {
 
     @Test func clampsStoredPomodoroDurations() async throws {
         let suite = "TimerPluginTests." + UUID().uuidString
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(UserDefaults(suiteName: FileManager.default.temporaryDirectory.appending(path: "\(suite)/defaults").path))
         let root = FileManager.default.temporaryDirectory.appending(path: suite)
         defer { try? FileManager.default.removeItem(at: root) }
         let prefix = "plugin.\(TimerPlugin.manifest.id)."
@@ -97,8 +94,7 @@ struct TimerPluginTests {
 
     @Test func restoresTimersOnActivation() async throws {
         let suite = "TimerPluginTests." + UUID().uuidString
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(UserDefaults(suiteName: FileManager.default.temporaryDirectory.appending(path: "\(suite)/defaults").path))
         let root = FileManager.default.temporaryDirectory.appending(path: suite)
         defer { try? FileManager.default.removeItem(at: root) }
         let directory = root.appending(path: TimerPlugin.manifest.id)

@@ -23,7 +23,7 @@ struct ControllerLifecycleTests {
         let directory = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let port = try freePort()
-        let controller = AgentsController(token: "t", home: directory, port: port, storageDirectory: directory)
+        let controller = AgentsController(token: "t", home: directory, port: port, alerts: .silent, storageDirectory: directory)
         await controller.start()
         var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)\(HookServer.hookPath)")!)
         request.httpMethod = "POST"
@@ -47,7 +47,7 @@ struct ControllerLifecycleTests {
         defer { try? FileManager.default.removeItem(at: directory) }
         let transcript = directory.appending(path: "transcript.jsonl")
         try Data("{}\n".utf8).write(to: transcript)
-        let controller = AgentsController(token: "t", home: directory, port: 0)
+        let controller = AgentsController(token: "t", home: directory, port: 0, alerts: .silent)
         await controller.start()
         controller.store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "s", transcriptPath: transcript.path, prompt: "build"))
         controller.sessionsDidChange()
@@ -68,11 +68,11 @@ struct ControllerLifecycleTests {
         let directory = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let noon = try #require(Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: .now))
-        let first = AgentsController(token: "t", home: directory, port: 0, usage: UsageMonitor(now: { noon }), storageDirectory: directory)
+        let first = AgentsController(token: "t", home: directory, port: 0, alerts: .silent, usage: UsageMonitor(now: { noon }), storageDirectory: directory)
         first.usage.record(sessionID: "status-line-only", cost: 5, sessionDuration: .seconds(60))
         await first.stop()
 
-        let second = AgentsController(token: "t", home: directory, port: 0, usage: UsageMonitor(now: { noon }), storageDirectory: directory)
+        let second = AgentsController(token: "t", home: directory, port: 0, alerts: .silent, usage: UsageMonitor(now: { noon }), storageDirectory: directory)
         await second.start()
         #expect(second.dailyCost == 5)
         second.usage.record(sessionID: "status-line-only", cost: 5.5, sessionDuration: .seconds(120))
@@ -83,7 +83,7 @@ struct ControllerLifecycleTests {
     @Test func aContextAlertDoesNotReplaceANeedsYouAnnouncement() throws {
         let directory = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let controller = AgentsController(token: "t", home: directory, port: 0)
+        let controller = AgentsController(token: "t", home: directory, port: 0, alerts: .silent)
         controller.store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "Deploy"))
         controller.sessionsDidChange()
 
