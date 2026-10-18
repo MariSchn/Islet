@@ -13,7 +13,7 @@ struct AgentLogo: View {
     private static let claude = image(named: "claude", isTemplate: true)
     private static let codex = image(named: "codex", isTemplate: false)
     private static let gemini = image(named: "gemini", isTemplate: false)
-    private static let cursor = image(named: "cursor", isTemplate: false)
+    private static let cursor = image(named: "cursor", withExtension: "png", isTemplate: false)
 
     let kind: Kind
 
@@ -52,8 +52,8 @@ struct AgentLogo: View {
         }
     }
 
-    private static func image(named name: String, isTemplate: Bool) -> NSImage? {
-        guard let url = Bundle.module.url(forResource: name, withExtension: "svg"), let image = NSImage(contentsOf: url) else { return nil }
+    private static func image(named name: String, withExtension fileExtension: String = "svg", isTemplate: Bool) -> NSImage? {
+        guard let url = Bundle.module.url(forResource: name, withExtension: fileExtension), let image = NSImage(contentsOf: url) else { return nil }
         image.isTemplate = isTemplate
         return image
     }

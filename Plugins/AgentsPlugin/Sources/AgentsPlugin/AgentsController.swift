@@ -58,6 +58,7 @@ final class AgentsController {
     }
 
     let interruptions: InterruptionMonitor
+    let questions: CursorQuestionMonitor
     private let processes: ProcessMonitor
     private let home: URL
     private let token: String
@@ -102,6 +103,7 @@ final class AgentsController {
         self.alerts = alerts
         self.display = display
         interruptions = InterruptionMonitor { store.markInterrupted($0) }
+        questions = CursorQuestionMonitor(database: CursorQuestionMonitor.database(in: home)) { store.setAskingQuestion($0, $1) }
         processes = ProcessMonitor { store.removeExitedSessions(isRunning: ProcessMonitor.isRunning) }
         alerter.onOpenSession = { [weak self] in self?.showTerminal(forSession: $0) }
         store.onAlert = { [weak self] alert in
@@ -194,6 +196,8 @@ final class AgentsController {
         refreshInstallState()
         interruptions.start()
         interruptions.track(store.sessions)
+        questions.start()
+        questions.track(store.sessions)
         processes.start()
     }
 
@@ -212,6 +216,7 @@ final class AgentsController {
         alerter.withdrawResolvedNotifications(for: store.sessions)
         let announcement = announcements(for: store.sessions).max { $0.priority < $1.priority }
         interruptions.track(store.sessions)
+        questions.track(store.sessions)
         scheduleSave()
         return announcement
     }
@@ -251,6 +256,7 @@ final class AgentsController {
         persistence?.save(snapshot())
         await server.stop()
         interruptions.stop()
+        questions.stop()
         processes.stop()
     }
 
