@@ -15,19 +15,23 @@ struct AppSettingsTests {
         #expect(settings.showsMenuBarIcon)
         #expect(settings.pillSelection == .lastViewed)
         #expect(settings.openTrigger == .hover)
+        #expect(settings.opensAnnouncingPlugin)
     }
 
-    @Test func persistsOpenTriggerAndResetsIt() {
+    @Test func persistsOpeningBehaviorAndResetsIt() {
         let suite = "AppSettingsTests." + UUID().uuidString
         let defaults = UserDefaults(suiteName: FileManager.default.temporaryDirectory.appending(path: "\(suite)/defaults").path)!
         defer { try? FileManager.default.removeItem(at: FileManager.default.temporaryDirectory.appending(path: suite)) }
 
         let first = AppSettings(defaults: defaults)
         first.openTrigger = .click
+        first.opensAnnouncingPlugin = false
         #expect(AppSettings(defaults: defaults).openTrigger == .click)
+        #expect(!AppSettings(defaults: defaults).opensAnnouncingPlugin)
 
         first.resetAll()
         #expect(AppSettings(defaults: defaults).openTrigger == .hover)
+        #expect(AppSettings(defaults: defaults).opensAnnouncingPlugin)
     }
 
     @Test func persistsOpenShortcutAndResetsIt() {

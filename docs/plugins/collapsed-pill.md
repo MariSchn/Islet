@@ -81,7 +81,7 @@ A plugin's activity is the last time its pill went from `nil` to a value, its pr
 - To come back to the front, clear the pill when an activity ends and set it again when a new one starts.
 - When an activity ends with a result the user should look at, lower the priority instead of clearing the pill, and clear it once the user has seen it (`context.isScreenVisible` became `true`) rather than after a fixed time, as `AgentsPlugin` does for finished agents.
 
-When the user opens the notch, the host selects the plugin whose pill was shown, so the expanded notch continues where the pill left off.
+When the user opens the notch, the host selects the plugin whose pill was shown, so the expanded notch continues where the pill left off. While an announcement is showing, it selects the plugin that made the announcement instead, unless the pill has a higher priority than the announcement or the user turned this off in the settings.
 
 ## Announcements
 

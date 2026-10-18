@@ -20,10 +20,10 @@ public final class NotchController {
                 hoverHoldSize = nil
                 isPinned = false
             } else {
-                dismissAnnouncement()
-                if !oldValue, let pillOwnerID {
-                    registry?.select(pillOwnerID)
+                if !oldValue, let id = announcerID ?? pillOwnerID {
+                    registry?.select(id)
                 }
+                dismissAnnouncement()
             }
         }
     }
@@ -189,6 +189,11 @@ public final class NotchController {
     public func dismissAnnouncement() {
         announcementTask?.cancel()
         announcement = nil
+    }
+
+    private var announcerID: String? {
+        guard settings.opensAnnouncingPlugin, let announcement, announcement.priority >= pill?.priority ?? .ambient else { return nil }
+        return registry?.announcer(of: announcement)
     }
 
     private func holdHoverRegionIfShapeLeftPointer(previousSize: CGSize) {

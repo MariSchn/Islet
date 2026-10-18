@@ -513,10 +513,11 @@ struct NotchSettings: View {
                 Label("Another app already uses this shortcut. Choose a different one.", systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
             }
+            Toggle("Open the plugin whose announcement is showing", isOn: $settings.opensAnnouncingPlugin)
         } header: {
             Text("Opening")
         } footer: {
-            Text("The shortcut opens the notch on the display with the pointer. Use ← and → to switch plugins and Esc to close it.")
+            Text("The shortcut opens the notch on the display with the pointer. Use ← and → to switch plugins and Esc to close it. While an announcement like \"Agent finished\" shows below the notch, opening it shows the plugin that made it, unless something more important needs you.")
         }
         Section {
             Picker("Show", selection: $settings.pillSelection) {

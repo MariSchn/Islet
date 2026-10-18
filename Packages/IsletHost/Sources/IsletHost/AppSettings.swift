@@ -32,6 +32,9 @@ public final class AppSettings {
     public var openShortcut: NotchShortcut {
         didSet { save(openShortcut, forKey: Keys.openShortcut) }
     }
+    public var opensAnnouncingPlugin: Bool {
+        didSet { save(opensAnnouncingPlugin, forKey: Keys.opensAnnouncingPlugin) }
+    }
     public var isShortcutUnavailable = false
 
     private let defaults: UserDefaults?
@@ -40,6 +43,7 @@ public final class AppSettings {
         static let switchesToDropTargetOnDrag = true
         static let drawsIdleNotchShape = false
         static let showsMenuBarIcon = true
+        static let opensAnnouncingPlugin = true
     }
 
     private enum Keys {
@@ -52,6 +56,7 @@ public final class AppSettings {
         static let pillSelection = "islet.settings.pillSelection"
         static let openTrigger = "islet.settings.openTrigger"
         static let openShortcut = "islet.settings.openShortcut"
+        static let opensAnnouncingPlugin = "islet.settings.opensAnnouncingPlugin"
     }
 
     public init(defaults: UserDefaults? = nil) {
@@ -65,6 +70,7 @@ public final class AppSettings {
         pillSelection = Self.load(PillSelection.self, forKey: Keys.pillSelection, from: defaults) ?? .default
         openTrigger = Self.load(NotchOpenTrigger.self, forKey: Keys.openTrigger, from: defaults) ?? .default
         openShortcut = Self.load(NotchShortcut.self, forKey: Keys.openShortcut, from: defaults) ?? .default
+        opensAnnouncingPlugin = Self.load(Bool.self, forKey: Keys.opensAnnouncingPlugin, from: defaults) ?? Defaults.opensAnnouncingPlugin
     }
 
     public func resetAnimation() {
@@ -81,6 +87,7 @@ public final class AppSettings {
         pillSelection = .default
         openTrigger = .default
         openShortcut = .default
+        opensAnnouncingPlugin = Defaults.opensAnnouncingPlugin
     }
 
     private static func load<T: Decodable>(_ type: T.Type, forKey key: String, from defaults: UserDefaults?) -> T? {

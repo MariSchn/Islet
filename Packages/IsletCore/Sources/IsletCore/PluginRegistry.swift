@@ -158,6 +158,10 @@ public final class PluginRegistry {
         enabledEntries.compactMap(\.context.announcement)
     }
 
+    public func announcer(of announcement: PillAnnouncement) -> String? {
+        enabledEntries.first { $0.context.announcement?.id == announcement.id }?.id
+    }
+
     public var selectedContentSize: CGSize? {
         enabledEntries.first { $0.id == selectedID }?.context.contentSize
     }
