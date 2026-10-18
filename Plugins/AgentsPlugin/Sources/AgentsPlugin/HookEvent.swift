@@ -130,11 +130,11 @@ struct HookEvent: Sendable, Equatable, Decodable {
         title = (try? container.decodeIfPresent(String.self, forKey: .title)).flatMap { $0.isEmpty ? nil : $0 }
     }
 
-    static func decode(_ data: Data, agent: String? = nil, eventName: String? = nil, host: String? = nil, isRemote: Bool = false, terminal: String? = nil, tty: String? = nil, pid: String? = nil, tmux: String? = nil, tmuxPane: String? = nil, title: String? = nil, branch: String? = nil, model: String? = nil, effort: String? = nil, lastPrompt: (String) -> String? = TranscriptReader.lastAntigravityPrompt(at:), parent: (String) -> String? = TranscriptReader.antigravityParent(at:)) throws -> HookEvent {
+    static func decode(_ data: Data, agent: String? = nil, eventName: String? = nil, host: String? = nil, isRemote: Bool = false, terminal: String? = nil, tty: String? = nil, pid: String? = nil, tmux: String? = nil, tmuxPane: String? = nil, title: String? = nil, branch: String? = nil, model: String? = nil, effort: String? = nil, lastPrompt: (String) -> String? = TranscriptReader.lastAntigravityPrompt(at:), parent: (String) -> String? = TranscriptReader.antigravityParent(at:), cursorParent: (String) -> String? = { _ in nil }) throws -> HookEvent {
         let agent = agent.flatMap(AgentSession.Agent.init(rawValue:)) ?? .claudeCode
         var event = switch agent {
         case .antigravity: try JSONDecoder().decode(AntigravityPayload.self, from: data).event(named: eventName ?? "", lastPrompt: isRemote ? { _ in nil } : lastPrompt, parent: isRemote ? { _ in nil } : parent)
-        case .cursor: try JSONDecoder().decode(CursorPayload.self, from: data).event(named: eventName ?? "")
+        case .cursor: try JSONDecoder().decode(CursorPayload.self, from: data).event(named: eventName ?? "", parent: cursorParent)
         case .claudeCode, .codex: try JSONDecoder().decode(HookEvent.self, from: data)
         }
         event.agent = agent
@@ -144,7 +144,7 @@ struct HookEvent: Sendable, Equatable, Decodable {
         event.tty = tty.flatMap { $0.hasPrefix("/dev/") && Self.isSafeIdentifier($0) ? $0 : nil }
         event.pid = pid.flatMap { Int32($0) }.flatMap { $0 > 1 ? $0 : nil }
         if let tmux, let tmuxPane { event.tmux = TmuxLocation(environment: tmux, pane: tmuxPane) }
-        event.title = title.flatMap { $0.isEmpty ? nil : $0 } ?? event.title
+        if event.agentID == nil { event.title = title.flatMap { $0.isEmpty ? nil : $0 } ?? event.title }
         event.branch = branch.flatMap { $0.isEmpty ? nil : $0 }
         if agent == .claudeCode {
             let payloadModel = event.model
@@ -282,6 +282,9 @@ struct CursorPayload: Decodable {
     var status: String?
     var errorMessage: String?
     var failureType: String?
+    var parentToolCallID: String?
+    var subagentID: String?
+    var parentConversationID: String?
 
     private enum CodingKeys: String, CodingKey {
         case conversationId = "conversation_id"
@@ -298,6 +301,9 @@ struct CursorPayload: Decodable {
         case status
         case errorMessage = "error_message"
         case failureType = "failure_type"
+        case parentToolCallID = "parent_tool_call_id"
+        case subagentID = "subagent_id"
+        case parentConversationID = "parent_conversation_id"
     }
 
     init(from decoder: any Decoder) throws {
@@ -316,9 +322,19 @@ struct CursorPayload: Decodable {
         status = try? container.decodeIfPresent(String.self, forKey: .status)
         errorMessage = try? container.decodeIfPresent(String.self, forKey: .errorMessage)
         failureType = try? container.decodeIfPresent(String.self, forKey: .failureType)
+        parentToolCallID = try? container.decodeIfPresent(String.self, forKey: .parentToolCallID)
+        subagentID = try? container.decodeIfPresent(String.self, forKey: .subagentID)
+        parentConversationID = try? container.decodeIfPresent(String.self, forKey: .parentConversationID)
     }
 
-    func event(named name: String) -> HookEvent {
+    func event(named name: String, parent: (String) -> String?) -> HookEvent {
+        if let parentToolCallID {
+            let kind = HookEvent.Kind(rawValue: name) ?? .other
+            guard let parent = parent(parentToolCallID), [.preToolUse, .postToolUse, .postToolUseFailure].contains(kind) else {
+                return HookEvent(kind: .other, sessionID: conversationId, agent: .cursor)
+            }
+            return HookEvent(kind: kind, sessionID: parent, toolName: toolName, toolInput: toolInput, agentType: "Subagent", agentID: conversationId, agent: .cursor)
+        }
         let kind: HookEvent.Kind = switch HookEvent.Kind(rawValue: name) ?? .other {
         case .userPromptSubmit where composerMode == nil: .other
         case .stop where status == "error": .stopFailure

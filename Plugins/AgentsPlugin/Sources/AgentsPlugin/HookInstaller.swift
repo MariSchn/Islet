@@ -30,7 +30,7 @@ struct HookInstaller: Sendable {
         }
     }
 
-    static let cursorEvents = ["sessionStart": "SessionStart", "sessionEnd": "SessionEnd", "beforeSubmitPrompt": "UserPromptSubmit", "preToolUse": "PreToolUse", "postToolUse": "PostToolUse", "postToolUseFailure": "PostToolUseFailure", "stop": "Stop"]
+    static let cursorEvents = ["sessionStart": "SessionStart", "sessionEnd": "SessionEnd", "beforeSubmitPrompt": "UserPromptSubmit", "preToolUse": "PreToolUse", "postToolUse": "PostToolUse", "postToolUseFailure": "PostToolUseFailure", "subagentStart": "SubagentStart", "stop": "Stop"]
 
     var settingsFileName: String {
         switch agent {
