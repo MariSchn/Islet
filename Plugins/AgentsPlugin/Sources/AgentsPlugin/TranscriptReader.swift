@@ -15,6 +15,13 @@ enum TranscriptReader {
         firstLine(at: path).flatMap(antigravityParent(in:))
     }
 
+    static func finishedTasks(at path: String, among tasks: [BackgroundTask]) -> [String] {
+        guard let handle = openRegularFile(at: path) else { return [] }
+        try? handle.close()
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path), options: .alwaysMapped) else { return [] }
+        return Array(BackgroundTask.finishedIDs(of: tasks, in: data))
+    }
+
     static func firstLine(at path: String) -> Data? {
         guard let handle = openRegularFile(at: path) else { return nil }
         defer { try? handle.close() }

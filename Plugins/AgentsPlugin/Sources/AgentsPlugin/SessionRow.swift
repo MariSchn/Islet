@@ -145,7 +145,7 @@ struct SessionRow: View {
         if session.isUnreachable { return AnyShapeStyle(.secondary) }
         switch session.state {
         case .starting: return AnyShapeStyle(.tertiary)
-        case .working: return AnyShapeStyle(SessionColors.working)
+        case .working, .waiting: return AnyShapeStyle(SessionColors.working)
         case .needsAttention: return AnyShapeStyle(.orange)
         case .done: return AnyShapeStyle(.green)
         case .interrupted: return AnyShapeStyle(.secondary)
@@ -159,6 +159,7 @@ struct SessionRow: View {
         case .starting: return "Ready"
         case .working: return session.activity ?? "Working…"
         case .needsAttention(let reason): return reason
+        case .waiting: return BackgroundTask.label(for: session.backgroundTasks)
         case .done: return "Finished"
         case .interrupted: return "Interrupted"
         case .failed(let reason): return reason
@@ -211,6 +212,10 @@ private struct StateIndicator: View {
             Image(systemName: "exclamationmark.circle.fill")
                 .font(.system(size: 16))
                 .foregroundStyle(.orange)
+        case .waiting:
+            Image(systemName: "hourglass.circle.fill")
+                .font(.system(size: 16))
+                .foregroundStyle(SessionColors.working)
         case .done:
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 16))
@@ -246,7 +251,7 @@ private struct StateLabel: View {
             Text("Failed")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.red)
-        case .working, .done, .interrupted:
+        case .working, .waiting, .done, .interrupted:
             Text(Self.duration(session.updatedAt.timeIntervalSince(session.turnStartedAt)))
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(.tertiary)
