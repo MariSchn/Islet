@@ -6,7 +6,7 @@ import Testing
 struct MuteTests {
     private func makeController() -> AgentsController {
         let directory = FileManager.default.temporaryDirectory.appending(path: "MuteTests." + UUID().uuidString)
-        return AgentsController(token: "t", home: directory, port: 0)
+        return AgentsController(token: "t", home: directory, port: 0, alerts: .silent)
     }
 
     private func session(_ id: String, state: AgentSession.State = .done) -> AgentSession {

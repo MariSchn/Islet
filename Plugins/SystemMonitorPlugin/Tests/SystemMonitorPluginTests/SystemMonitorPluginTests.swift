@@ -7,8 +7,7 @@ import Testing
 struct SystemMonitorPluginTests {
     @Test func registersDerivesItsSizeAndSavesRowSettings() async throws {
         let suite = "SystemMonitorPluginTests." + UUID().uuidString
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(UserDefaults(suiteName: FileManager.default.temporaryDirectory.appending(path: "\(suite)/defaults").path))
         let root = FileManager.default.temporaryDirectory.appending(path: suite)
         defer { try? FileManager.default.removeItem(at: root) }
 
@@ -43,8 +42,7 @@ struct SystemMonitorPluginTests {
 
     @Test func derivesThePillAndAnnouncesConditions() async throws {
         let suite = "SystemMonitorPluginTests." + UUID().uuidString
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(UserDefaults(suiteName: FileManager.default.temporaryDirectory.appending(path: "\(suite)/defaults").path))
         let root = FileManager.default.temporaryDirectory.appending(path: suite)
         defer { try? FileManager.default.removeItem(at: root) }
 

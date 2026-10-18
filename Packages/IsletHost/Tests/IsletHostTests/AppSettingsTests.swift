@@ -19,11 +19,8 @@ struct AppSettingsTests {
 
     @Test func persistsOpenTriggerAndResetsIt() {
         let suite = "AppSettingsTests." + UUID().uuidString
-        let defaults = UserDefaults(suiteName: suite)!
-        defer {
-            defaults.removePersistentDomain(forName: suite)
-            try? FileManager.default.removeItem(at: URL.libraryDirectory.appending(path: "Preferences/\(suite).plist"))
-        }
+        let defaults = UserDefaults(suiteName: FileManager.default.temporaryDirectory.appending(path: "\(suite)/defaults").path)!
+        defer { try? FileManager.default.removeItem(at: FileManager.default.temporaryDirectory.appending(path: suite)) }
 
         let first = AppSettings(defaults: defaults)
         first.openTrigger = .click
@@ -35,11 +32,8 @@ struct AppSettingsTests {
 
     @Test func persistsOpenShortcutAndResetsIt() {
         let suite = "AppSettingsTests." + UUID().uuidString
-        let defaults = UserDefaults(suiteName: suite)!
-        defer {
-            defaults.removePersistentDomain(forName: suite)
-            try? FileManager.default.removeItem(at: URL.libraryDirectory.appending(path: "Preferences/\(suite).plist"))
-        }
+        let defaults = UserDefaults(suiteName: FileManager.default.temporaryDirectory.appending(path: "\(suite)/defaults").path)!
+        defer { try? FileManager.default.removeItem(at: FileManager.default.temporaryDirectory.appending(path: suite)) }
         #expect(AppSettings(defaults: defaults).openShortcut == .off)
 
         let first = AppSettings(defaults: defaults)
@@ -52,11 +46,8 @@ struct AppSettingsTests {
 
     @Test func persistsNotchSizeDisplayMenuBarIconAndPillSelection() {
         let suite = "AppSettingsTests." + UUID().uuidString
-        let defaults = UserDefaults(suiteName: suite)!
-        defer {
-            defaults.removePersistentDomain(forName: suite)
-            try? FileManager.default.removeItem(at: URL.libraryDirectory.appending(path: "Preferences/\(suite).plist"))
-        }
+        let defaults = UserDefaults(suiteName: FileManager.default.temporaryDirectory.appending(path: "\(suite)/defaults").path)!
+        defer { try? FileManager.default.removeItem(at: FileManager.default.temporaryDirectory.appending(path: suite)) }
 
         let first = AppSettings(defaults: defaults)
         first.notchSize = .large
@@ -92,11 +83,8 @@ struct AppSettingsTests {
 
     @Test func persistsAnimationAndDragBehavior() {
         let suite = "AppSettingsTests." + UUID().uuidString
-        let defaults = UserDefaults(suiteName: suite)!
-        defer {
-            defaults.removePersistentDomain(forName: suite)
-            try? FileManager.default.removeItem(at: URL.libraryDirectory.appending(path: "Preferences/\(suite).plist"))
-        }
+        let defaults = UserDefaults(suiteName: FileManager.default.temporaryDirectory.appending(path: "\(suite)/defaults").path)!
+        defer { try? FileManager.default.removeItem(at: FileManager.default.temporaryDirectory.appending(path: suite)) }
 
         let first = AppSettings(defaults: defaults)
         first.animation.curve = .spring(dampingFraction: 0.55)
@@ -127,11 +115,8 @@ struct AppSettingsTests {
 
     @Test func incompatibleStoredDataFallsBackToDefaults() {
         let suite = "AppSettingsTests." + UUID().uuidString
-        let defaults = UserDefaults(suiteName: suite)!
-        defer {
-            defaults.removePersistentDomain(forName: suite)
-            try? FileManager.default.removeItem(at: URL.libraryDirectory.appending(path: "Preferences/\(suite).plist"))
-        }
+        let defaults = UserDefaults(suiteName: FileManager.default.temporaryDirectory.appending(path: "\(suite)/defaults").path)!
+        defer { try? FileManager.default.removeItem(at: FileManager.default.temporaryDirectory.appending(path: suite)) }
         defaults.set("garbage", forKey: "islet.settings.animation")
         defaults.set(Data("{\"expandDuration\": 0.9, \"curve\": {\"wobble\": {}}}".utf8), forKey: "islet.settings.switchesToDropTargetOnDrag")
         defaults.set(Data(#"{"named":{"_0":"Studio Display"}}"#.utf8), forKey: "islet.settings.displayPlacement")

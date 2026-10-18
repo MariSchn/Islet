@@ -9,7 +9,7 @@ struct DisplaySettingsControllerTests {
         let directory = FileManager.default.temporaryDirectory.appending(path: "DisplaySettingsControllerTests." + UUID().uuidString)
         let usage = UsageMonitor(isEnabled: true)
         usage.receive(ClaudeUsage(fiveHour: UsageWindow(utilization: 40, resetsAt: nil), sevenDay: UsageWindow(utilization: 10, resetsAt: nil)))
-        return AgentsController(token: "t", home: directory, port: 0, showsUsage: true, usage: usage)
+        return AgentsController(token: "t", home: directory, port: 0, alerts: .silent, showsUsage: true, usage: usage)
     }
 
     private func waitUntil(_ condition: @MainActor () -> Bool) async throws {
@@ -21,8 +21,7 @@ struct DisplaySettingsControllerTests {
 
     @Test func settingsArePersistedAndRestored() async throws {
         let suite = "AgentsSettingsTests." + UUID().uuidString
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(UserDefaults(suiteName: FileManager.default.temporaryDirectory.appending(path: "\(suite)/defaults").path))
         defaults.set([AgentsPlugin.manifest.id], forKey: "islet.disabledPlugins")
         let storage = FileManager.default.temporaryDirectory.appending(path: suite, directoryHint: .isDirectory)
         defer { try? FileManager.default.removeItem(at: storage) }
