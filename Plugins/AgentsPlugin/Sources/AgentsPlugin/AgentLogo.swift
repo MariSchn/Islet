@@ -6,12 +6,14 @@ struct AgentLogo: View {
         case claude
         case codex
         case gemini
+        case cursor
     }
 
     private static let claudeColor = Color(red: 0.85, green: 0.47, blue: 0.34)
     private static let claude = image(named: "claude", isTemplate: true)
     private static let codex = image(named: "codex", isTemplate: false)
     private static let gemini = image(named: "gemini", isTemplate: false)
+    private static let cursor = image(named: "cursor", isTemplate: false)
 
     let kind: Kind
 
@@ -27,6 +29,8 @@ struct AgentLogo: View {
             original(Self.codex)
         case .gemini:
             original(Self.gemini)
+        case .cursor:
+            original(Self.cursor)
         }
     }
 

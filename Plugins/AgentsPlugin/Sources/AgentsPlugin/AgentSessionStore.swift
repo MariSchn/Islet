@@ -132,7 +132,8 @@ final class AgentSessionStore {
         if let transcriptPath = event.transcriptPath { session.transcriptPath = transcriptPath }
         if let model = event.model {
             session.model = model
-            if event.agent == .codex { session.details.model = model }
+            if event.agent == .codex || event.agent == .cursor { session.details.model = model }
+            if event.agent == .cursor, let effort = event.effort { session.details.effort = effort }
             if event.agent == .antigravity, !session.hasStatusLineModel {
                 session.details.model = model
                 session.details.effort = event.effort

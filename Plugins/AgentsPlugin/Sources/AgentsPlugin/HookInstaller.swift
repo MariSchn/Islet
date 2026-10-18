@@ -26,13 +26,16 @@ struct HookInstaller: Sendable {
         case .claudeCode: ["SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest", "PermissionDenied", "Notification", "Stop", "StopFailure"]
         case .codex: ["SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PermissionRequest", "Stop"]
         case .antigravity: ["PreInvocation", "PostToolUse", "Stop"]
+        case .cursor: Array(Self.cursorEvents.keys).sorted()
         }
     }
+
+    static let cursorEvents = ["sessionStart": "SessionStart", "sessionEnd": "SessionEnd", "beforeSubmitPrompt": "UserPromptSubmit", "preToolUse": "PreToolUse", "postToolUse": "PostToolUse", "postToolUseFailure": "PostToolUseFailure", "stop": "Stop"]
 
     var settingsFileName: String {
         switch agent {
         case .claudeCode: "settings.json"
-        case .codex, .antigravity: "hooks.json"
+        case .codex, .antigravity, .cursor: "hooks.json"
         }
     }
 
@@ -41,6 +44,7 @@ struct HookInstaller: Sendable {
         case .claudeCode: "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
         case .codex: "${CODEX_HOME:-$HOME/.codex}"
         case .antigravity: "$HOME/.gemini/config"
+        case .cursor: "$HOME/.cursor"
         }
     }
 
@@ -54,7 +58,7 @@ struct HookInstaller: Sendable {
         timeout="${1:-5}"
         event="$2"
         payload=$(cat)
-        \(agent == .antigravity ? "printf '{}\\n'\n" : "")title=""
+        \(agent == .antigravity || agent == .cursor ? "printf '{}\\n'\n" : "")title=""
         transcript=""
         name="${event:-$(printf '%s' "$payload" | sed -n 's/.*"hook_event_name":"\\([A-Za-z]*\\)".*/\\1/p')}"
         case "$name" in
@@ -70,7 +74,7 @@ struct HookInstaller: Sendable {
           session=$(printf '%s' "$payload" | sed -n 's/.*"session_id":"\\([^"]*\\)".*/\\1/p')
           title=$(grep -F "\\"id\\":\\"$session\\"" "${0%/*}/session_index.jsonl" 2>/dev/null | tail -n 1 | sed -nE 's/.*"thread_name":"(([^"\\\\]|\\\\.)*)".*/\\1/p' | sed 's/\\\\"/"/g; s/\\\\\\\\/\\\\/g')
         fi
-        branch=""
+        \(agent == .cursor ? Self.cursorTitleLines : "")branch=""
         if [ -n "$transcript" ] && [ -f "$transcript" ]; then
           branch=$(head -n 1 "$transcript" | sed -nE 's/.*"git":\\{[^}]*"branch":"([^"]*)".*/\\1/p')
         fi
@@ -143,6 +147,19 @@ struct HookInstaller: Sendable {
           PreInvocation|Stop)
             workspace=$(printf '%s' "$payload" | sed -n 's/.*"workspacePaths":\\["\\([^"]*\\)".*/\\1/p')
             [ -n "$workspace" ] && branch=$(git -C "$workspace" branch --show-current 2>/dev/null) ;;
+        esac
+
+        """
+
+    private static let cursorTitleLines = """
+        case "$name" in
+          SessionStart|SessionEnd) ;;
+          *)
+            conversation=$(printf '%s' "$payload" | sed -n 's/.*"conversation_id":"\\([0-9A-Za-z-]*\\)".*/\\1/p')
+            database="$HOME/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
+            if [ -n "$conversation" ] && [ -f "$database" ]; then
+              title=$(sqlite3 -readonly -cmd '.timeout 500' "$database" "select json_extract(value, '$.name') from cursorDiskKV where key = 'composerData:$conversation'" 2>/dev/null | tr '\\n' ' ' | sed 's/ *$//')
+            fi ;;
         esac
 
         """
@@ -246,7 +263,7 @@ struct HookInstaller: Sendable {
         }
         guard let settings = try? settingsFile.read(), let hooks = settings["hooks"] as? [String: Any] else { return false }
         return events.allSatisfy { event in
-            Self.isletHooks(in: hooks[event]).contains { NSDictionary(dictionary: $0).isEqual(to: Self.hookEntry(for: event, script: scriptURL.path)) }
+            Self.isletHooks(in: hooks[event]).contains { NSDictionary(dictionary: $0).isEqual(to: hookEntry(for: event)) }
         }
     }
 
@@ -269,10 +286,12 @@ struct HookInstaller: Sendable {
         var hooks = settings["hooks"] as? [String: Any] ?? [:]
         for event in events {
             var groups = Self.withoutIsletHooks(hooks[event])
-            groups.append(["hooks": [Self.hookEntry(for: event, script: scriptURL.path)]])
+            let entry: [String: Any] = agent == .cursor ? hookEntry(for: event) : ["hooks": [hookEntry(for: event)]]
+            groups.append(entry)
             hooks[event] = groups
         }
         settings["hooks"] = hooks
+        if agent == .cursor, settings["version"] == nil { settings["version"] = 1 }
         try settingsFile.write(settings)
     }
 
@@ -288,10 +307,16 @@ struct HookInstaller: Sendable {
                 let kept = Self.withoutIsletHooks(groups)
                 hooks[event] = kept.isEmpty ? nil : kept
             }
-            settings["hooks"] = hooks.isEmpty ? nil : hooks
+            settings["hooks"] = hooks.isEmpty && agent != .cursor ? nil : hooks
             try settingsFile.write(settings)
         }
         try? FileManager.default.removeItem(at: scriptURL)
+    }
+
+    private func hookEntry(for event: String) -> [String: Any] {
+        guard agent == .cursor, let name = Self.cursorEvents[event] else { return Self.hookEntry(for: event, script: scriptURL.path) }
+        let quoted = scriptURL.path.shellQuoted
+        return name == "SessionEnd" ? ["command": "\(quoted) 2 \(name)", "timeout": 3] : ["command": "\(quoted) 10 \(name)", "timeout": 10]
     }
 
     static func hookEntry(for event: String, script: String) -> [String: Any] {
@@ -321,12 +346,13 @@ struct HookInstaller: Sendable {
 
     private static func isletHooks(in groups: Any?) -> [[String: Any]] {
         (groups as? [Any] ?? []).flatMap { group in
-            ((group as? [String: Any])?["hooks"] as? [Any] ?? []).filter(isIsletHook).compactMap { $0 as? [String: Any] }
-        }
+            isIsletHook(group) ? [group] : ((group as? [String: Any])?["hooks"] as? [Any] ?? []).filter(isIsletHook)
+        }.compactMap { $0 as? [String: Any] }
     }
 
     private static func withoutIsletHooks(_ groups: Any?) -> [Any] {
         (groups as? [Any] ?? []).compactMap { element in
+            guard !isIsletHook(element) else { return nil }
             guard var group = element as? [String: Any], let hooks = group["hooks"] as? [Any], hooks.contains(where: isIsletHook) else { return element }
             let kept = hooks.filter { !isIsletHook($0) }
             guard !kept.isEmpty else { return nil }
