@@ -62,7 +62,7 @@ final class SessionAlerter {
     private static func reason(for session: AgentSession) -> String {
         switch session.state {
         case .needsAttention(let reason), .failed(let reason): reason
-        case .starting, .working, .done, .interrupted: session.task ?? session.agent.displayName
+        case .starting, .working, .waiting, .done, .interrupted: session.task ?? session.agent.displayName
         }
     }
 

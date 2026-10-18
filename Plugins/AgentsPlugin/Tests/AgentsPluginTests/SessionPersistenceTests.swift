@@ -35,6 +35,24 @@ struct SessionPersistenceTests {
         #expect(restored.sessions.count == 2)
     }
 
+    @Test func restoredWaitingSessionsCheckTheirTranscriptForFinishedTasks() async throws {
+        let store = AgentSessionStore(localHost: { "mac" })
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "local", transcriptPath: "/t/a.jsonl", prompt: "go", pid: 100))
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "local", toolName: "Bash", toolResponse: ToolResponse(backgroundTaskID: "b1")))
+        store.apply(HookEvent(kind: .stop, sessionID: "local"))
+        let data = try JSONEncoder().encode(store.snapshot())
+
+        let restored = AgentSessionStore(localHost: { "mac" }, lastPrompt: { _ in nil }, finishedTasks: { path, tasks in path == "/t/a.jsonl" ? tasks.map(\.id) : [] })
+        restored.restore(try JSONDecoder().decode(SessionSnapshot.self, from: data), isRunning: { _ in true })
+        #expect(restored.sessions[0].state == .waiting)
+        #expect(restored.sessions[0].backgroundTasks.map(\.id) == ["b1"])
+        let deadline = ContinuousClock.now + .seconds(2)
+        while restored.sessions[0].state != .done {
+            try #require(ContinuousClock.now < deadline)
+            await Task.yield()
+        }
+    }
+
     @Test func restoreDropsExitedLocalSessionsAndKeepsRemoteOnes() {
         let store = populatedStore()
         let restored = AgentSessionStore(localHost: { "mac" })

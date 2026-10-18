@@ -22,7 +22,7 @@ struct StatusAnnouncer {
             PillAnnouncement(text: "\(session.displayName) · \(reason)", systemImage: "xmark.octagon.fill", tint: SessionColors.failedTint, priority: .attention)
         case .done:
             PillAnnouncement(text: "\(session.displayName) finished", systemImage: "checkmark.circle.fill", tint: SessionColors.finishedTint)
-        case .starting, .working, .interrupted:
+        case .starting, .working, .waiting, .interrupted:
             nil
         }
     }
@@ -31,7 +31,7 @@ struct StatusAnnouncer {
         switch state {
         case .needsAttention, .failed: .attention
         case .done: .finished
-        case .starting, .working, .interrupted: .other
+        case .starting, .working, .waiting, .interrupted: .other
         }
     }
 }

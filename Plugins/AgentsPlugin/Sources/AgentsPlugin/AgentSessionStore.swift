@@ -33,6 +33,7 @@ final class AgentSessionStore {
     private let now: () -> Date
     private let localHost: () -> String
     private let lastPrompt: @Sendable (String) -> String?
+    private let finishedTasks: @Sendable (String, [BackgroundTask]) -> [String]
     @ObservationIgnored private var dismissed: [String: Dismissal] = [:]
     private var finishedExpiries = 0
     @ObservationIgnored private var hiddenSessions: [String: AgentSession] = [:]
@@ -44,10 +45,11 @@ final class AgentSessionStore {
         self.init(now: now, localHost: localHost, lastPrompt: TranscriptReader.lastPrompt(at:))
     }
 
-    init(now: @escaping () -> Date = Date.init, localHost: @escaping () -> String = { AgentSessionStore.localHostName }, lastPrompt: @escaping @Sendable (String) -> String?) {
+    init(now: @escaping () -> Date = Date.init, localHost: @escaping () -> String = { AgentSessionStore.localHostName }, lastPrompt: @escaping @Sendable (String) -> String?, finishedTasks: @escaping @Sendable (String, [BackgroundTask]) -> [String] = TranscriptReader.finishedTasks(at:among:)) {
         self.now = now
         self.localHost = localHost
         self.lastPrompt = lastPrompt
+        self.finishedTasks = finishedTasks
     }
 
     static var localHostName: String {
@@ -153,6 +155,7 @@ final class AgentSessionStore {
             session.pendingRequests.removeAll { $0.id == request.id }
         }
 
+        BackgroundTask.update(&session.backgroundTasks, for: event, at: timestamp)
         switch event.kind {
         case .sessionStart:
             session.state = .starting
@@ -173,7 +176,8 @@ final class AgentSessionStore {
         case .preToolUse, .postToolUse, .postToolUseFailure:
             session.activity = event.activityDescription
             let answeredInTerminal = event.kind != .preToolUse && Self.removeRequestInTerminal(matching: event, from: &session)
-            if event.kind == .preToolUse || session.state != .interrupted, !waitsForAnswerInTerminal || event.agentID == nil || answeredInTerminal {
+            let isBackgroundAgent = session.state == .waiting && event.agentID != nil
+            if event.kind == .preToolUse || session.state != .interrupted, !isBackgroundAgent, !waitsForAnswerInTerminal || event.agentID == nil || answeredInTerminal {
                 session.state = .working
             }
             Self.record(event, in: &session, at: timestamp)
@@ -213,7 +217,7 @@ final class AgentSessionStore {
                 session.state = .needsAttention(event.message ?? "Waiting for your answer")
             case "idle_prompt":
                 switch session.state {
-                case .done, .interrupted, .failed: return
+                case .waiting, .done, .interrupted, .failed: return
                 case .starting, .working, .needsAttention: break
                 }
                 guard session.pendingRequests.isEmpty else { return }
@@ -222,7 +226,7 @@ final class AgentSessionStore {
                 return
             }
         case .stop:
-            session.state = event.isInterruption ? .interrupted : .done
+            session.state = event.isInterruption ? .interrupted : session.backgroundTasks.isEmpty ? .done : .waiting
             session.activity = nil
             session.requestsInTerminal = []
             session.completeOpenActivities()
@@ -262,6 +266,9 @@ final class AgentSessionStore {
         }
         if let alert = Self.alert(from: previous?.state, to: session.state, in: session) {
             onAlert?(alert)
+        }
+        if event.kind == .stop, session.state == .waiting, !session.isRemote, let path = session.transcriptPath {
+            removeFinishedTasks(in: path, for: session.id)
         }
         scheduleFinishedExpiry()
         scheduleUnreachableCheck()
@@ -383,7 +390,7 @@ final class AgentSessionStore {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         switch sessions[index].state {
         case .working, .needsAttention: break
-        case .starting, .done, .interrupted, .failed: return
+        case .starting, .waiting, .done, .interrupted, .failed: return
         }
         withdrawPendingRequest(for: sessionID)
         sessions[index].pendingRequests = []
@@ -406,6 +413,20 @@ final class AgentSessionStore {
             } else if hiddenSessions[sessionID]?.task == nil {
                 hiddenSessions[sessionID]?.task = Self.summarize(prompt)
             }
+        }
+    }
+
+    private func removeFinishedTasks(in path: String, for sessionID: String) {
+        let finishedTasks = finishedTasks
+        let tasks = sessions.first { $0.id == sessionID }?.backgroundTasks ?? []
+        Task {
+            let finished = await Task.detached(priority: .utility) { finishedTasks(path, tasks) }.value
+            guard !finished.isEmpty, let index = sessions.firstIndex(where: { $0.id == sessionID }), sessions[index].state == .waiting else { return }
+            sessions[index].backgroundTasks.removeAll { finished.contains($0.id) }
+            guard sessions[index].backgroundTasks.isEmpty else { return }
+            sessions[index].state = .done
+            onAlert?(.finished(sessions[index]))
+            scheduleFinishedExpiry()
         }
     }
 
@@ -433,7 +454,7 @@ final class AgentSessionStore {
             case .working:
                 session.state = .interrupted
                 session.activity = nil
-            case .starting, .done, .interrupted, .failed:
+            case .starting, .waiting, .done, .interrupted, .failed:
                 break
             }
             return session
@@ -447,6 +468,9 @@ final class AgentSessionStore {
                 dismissal.updatedAt = dismissal.updatedAt ?? now()
                 return dismissal
             }
+        for session in sessions where session.state == .waiting && !session.isRemote {
+            if let path = session.transcriptPath { removeFinishedTasks(in: path, for: session.id) }
+        }
         scheduleFinishedExpiry()
         scheduleUnreachableCheck()
     }
@@ -563,7 +587,7 @@ final class AgentSessionStore {
         for session in sessions {
             switch session.state {
             case .needsAttention, .failed: counts.attention += 1
-            case .working where !session.isUnreachable: counts.working += 1
+            case .working where !session.isUnreachable, .waiting: counts.working += 1
             case .done where session.updatedAt > cutoff: counts.finished += 1
             case .starting, .working, .done, .interrupted: counts.idle += 1
             }

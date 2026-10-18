@@ -47,6 +47,7 @@ struct AgentSession: Identifiable, Sendable, Equatable, Codable {
         case starting
         case working
         case needsAttention(String)
+        case waiting
         case done
         case interrupted
         case failed(String)
@@ -59,7 +60,7 @@ struct AgentSession: Identifiable, Sendable, Equatable, Codable {
         var requiresAttention: Bool {
             switch self {
             case .needsAttention, .failed: true
-            case .starting, .working, .done, .interrupted: false
+            case .starting, .working, .waiting, .done, .interrupted: false
             }
         }
     }
@@ -84,6 +85,7 @@ struct AgentSession: Identifiable, Sendable, Equatable, Codable {
     var state: State
     var pendingRequests: [PendingRequest] = []
     var requestsInTerminal: [TerminalRequest] = []
+    var backgroundTasks: [BackgroundTask] = []
     var activities: [ActivityEntry] = []
     var plan: String?
     var details = SessionDetails()
@@ -93,7 +95,7 @@ struct AgentSession: Identifiable, Sendable, Equatable, Codable {
 
     enum CodingKeys: String, CodingKey {
         case id, agent, host, isRemote, isUnreachable, terminal, tty, pid, tmux, transcriptPath, model, cwd, title, hasStatusLineTitle, hasStatusLineModel
-        case task, activity, state, activities, plan, details, startedAt, turnStartedAt, updatedAt
+        case task, activity, state, backgroundTasks, activities, plan, details, startedAt, turnStartedAt, updatedAt
     }
 
     var pendingRequest: PendingRequest? { pendingRequests.first }
@@ -250,6 +252,7 @@ extension AgentSession {
         task = try container.decodeIfPresent(String.self, forKey: .task)
         activity = try container.decodeIfPresent(String.self, forKey: .activity)
         state = try container.decode(State.self, forKey: .state)
+        backgroundTasks = try container.decodeIfPresent([BackgroundTask].self, forKey: .backgroundTasks) ?? []
         activities = try container.decodeIfPresent([ActivityEntry].self, forKey: .activities) ?? []
         plan = try container.decodeIfPresent(String.self, forKey: .plan)
         details = try container.decodeIfPresent(SessionDetails.self, forKey: .details) ?? SessionDetails()

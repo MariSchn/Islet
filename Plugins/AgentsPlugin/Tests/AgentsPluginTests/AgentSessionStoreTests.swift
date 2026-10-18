@@ -563,6 +563,102 @@ struct AgentSessionStoreTests {
         #expect(store.sessions[0].pendingRequests.isEmpty)
     }
 
+    @Test func backgroundWorkKeepsTheSessionWaitingUntilItsNotificationArrives() {
+        let store = AgentSessionStore()
+        var alerts: [AgentSessionStore.Alert] = []
+        store.onAlert = { alerts.append($0) }
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "Fix CI"))
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "a", toolName: "Bash", toolInput: .object(["command": .string("gh run watch"), "description": .string("Watch the CI run")]), toolUseID: "toolu_1", toolResponse: ToolResponse(backgroundTaskID: "b1")))
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "a", toolName: "Agent", toolInput: .object(["description": .string("Review the diff")]), toolUseID: "toolu_2", toolResponse: ToolResponse(status: "async_launched", agentID: "a1")))
+        store.apply(HookEvent(kind: .stop, sessionID: "a"))
+        #expect(store.sessions[0].state == .waiting)
+        #expect(BackgroundTask.label(for: store.sessions[0].backgroundTasks) == "Waiting on 2 background tasks")
+        #expect(alerts.isEmpty)
+        store.apply(HookEvent(kind: .notification, sessionID: "a", notificationType: "idle_prompt"))
+        #expect(store.sessions[0].state == .waiting)
+
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>\n</task-notification>"))
+        #expect(store.sessions[0].state == .working)
+        #expect(store.sessions[0].task == "Fix CI")
+        store.apply(HookEvent(kind: .stop, sessionID: "a"))
+        #expect(BackgroundTask.label(for: store.sessions[0].backgroundTasks) == "Waiting for agent: Review the diff")
+
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "<task-notification>\n<task-id>other</task-id>\n<tool-use-id>toolu_2</tool-use-id>\n<status>failed</status>\n</task-notification>"))
+        store.apply(HookEvent(kind: .stop, sessionID: "a"))
+        #expect(store.sessions[0].state == .done)
+        #expect(alerts == [.finished(store.sessions[0])])
+    }
+
+    @Test func backgroundTasksEndWhenStoppedAndIgnoreSubagentsAndForegroundTools() {
+        let store = AgentSessionStore()
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "go"))
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "a", toolName: "Bash", toolInput: .object(["command": .string("swift test")]), toolResponse: ToolResponse()))
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "a", toolName: "Bash", toolInput: .object(["command": .string("sleep 9")]), toolResponse: ToolResponse(backgroundTaskID: "b0"), agentID: "sub"))
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "a", toolName: "Monitor", toolInput: .object(["description": .string("wait for review")]), toolResponse: ToolResponse(taskID: "m1")))
+        store.apply(HookEvent(kind: .stop, sessionID: "a"))
+        #expect(store.sessions[0].backgroundTasks.map(\.label) == ["Monitoring: wait for review"])
+
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "stop it"))
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "a", toolName: "TaskStop", toolInput: .object(["task_id": .string("m1")])))
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "a", toolName: "ScheduleWakeup", toolInput: .object(["delaySeconds": .number(600)]), toolResponse: ToolResponse(scheduledFor: 1_791_036_960_000)))
+        store.apply(HookEvent(kind: .stop, sessionID: "a"))
+        #expect(store.sessions[0].state == .waiting)
+        #expect(store.sessions[0].backgroundTasks.map(\.id) == [BackgroundTask.wakeUpID])
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "check CI"))
+        store.apply(HookEvent(kind: .stop, sessionID: "a"))
+        #expect(store.sessions[0].state == .done)
+    }
+
+    @Test func backgroundAgentsKeepTheSessionWaitingUntilTheirFinalNotification() {
+        var now = Date(timeIntervalSince1970: 1_000)
+        let store = AgentSessionStore(now: { now }, lastPrompt: { _ in nil })
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "go"))
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "a", toolName: "Agent", toolResponse: ToolResponse(status: "async_launched", agentID: "a1")))
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "a", toolName: "ScheduleWakeup", toolResponse: ToolResponse(scheduledFor: 1_600_000)))
+        store.apply(HookEvent(kind: .stop, sessionID: "a"))
+        store.apply(HookEvent(kind: .preToolUse, sessionID: "a", toolName: "Read", agentType: "general-purpose", agentID: "a1"))
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "a", toolName: "Read", agentType: "general-purpose", agentID: "a1"))
+        #expect(store.sessions[0].state == .waiting)
+
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "<task-notification>\n<task-id>a1</task-id>\n<summary>Agent was resumed by the user</summary>\n</task-notification>"))
+        store.apply(HookEvent(kind: .stop, sessionID: "a"))
+        #expect(store.sessions[0].backgroundTasks.map(\.id) == ["a1", BackgroundTask.wakeUpID])
+
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "<task-notification>\n<task-id>a1</task-id>\n<status>completed</status>\n</task-notification>"))
+        store.apply(HookEvent(kind: .stop, sessionID: "a"))
+        #expect(store.sessions[0].backgroundTasks.map(\.id) == [BackgroundTask.wakeUpID])
+        now = Date(timeIntervalSince1970: 1_700)
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", prompt: "check CI"))
+        store.apply(HookEvent(kind: .stop, sessionID: "a"))
+        #expect(store.sessions[0].state == .done)
+    }
+
+    @Test func findsFinishedTasksInATranscript() throws {
+        let url = FileManager.default.temporaryDirectory.appending(path: "transcript-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try #"""
+        {"type":"queue-operation","operation":"enqueue","content":"<task-notification>\n<task-id>b1</task-id>\n<tool-use-id>toolu_1</tool-use-id>\n<status>completed</status>\n</task-notification>"}
+        {"type":"queue-operation","operation":"enqueue","content":"<task-notification>\n<task-id>a1</task-id>\n<summary>Agent was resumed</summary>\n</task-notification>"}
+        {"type":"user","message":{"role":"user","content":"<task-notification>\n<task-id>other</task-id>\n<tool-use-id>toolu_3</tool-use-id>\n<status>killed</status>\n</task-notification>"}}
+        """#.write(to: url, atomically: true, encoding: .utf8)
+        let tasks = [BackgroundTask(id: "b1", label: ""), BackgroundTask(id: "a1", label: ""), BackgroundTask(id: "m1", toolUseID: "toolu_3", label: ""), BackgroundTask(id: "x", label: "")]
+        #expect(Set(TranscriptReader.finishedTasks(at: url.path, among: tasks)) == ["b1", "m1"])
+        #expect(TranscriptReader.finishedTasks(at: "/nonexistent/transcript.jsonl", among: tasks).isEmpty)
+    }
+
+    @Test func notificationsAlreadyInTheTranscriptFinishTheWaitAfterStop() async throws {
+        let store = AgentSessionStore(lastPrompt: { _ in nil }, finishedTasks: { path, tasks in path == "/t/a.jsonl" ? tasks.map(\.id) : [] })
+        var alerts: [AgentSessionStore.Alert] = []
+        store.onAlert = { alerts.append($0) }
+        store.apply(HookEvent(kind: .userPromptSubmit, sessionID: "a", transcriptPath: "/t/a.jsonl", prompt: "go"))
+        store.apply(HookEvent(kind: .postToolUse, sessionID: "a", toolName: "Bash", toolResponse: ToolResponse(backgroundTaskID: "b1")))
+        store.apply(HookEvent(kind: .stop, sessionID: "a"))
+        #expect(store.sessions[0].state == .waiting)
+        try await waitUntil { store.sessions[0].state == .done }
+        #expect(store.sessions[0].backgroundTasks.isEmpty)
+        #expect(alerts.count == 1)
+    }
+
     func waitUntil(_ condition: () -> Bool) async throws {
         let deadline = ContinuousClock.now + .seconds(2)
         while !condition() {

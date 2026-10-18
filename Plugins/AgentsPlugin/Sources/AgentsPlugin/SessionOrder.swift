@@ -18,7 +18,7 @@ enum SessionOrder {
     private static func group(_ session: AgentSession) -> Int {
         switch session.state {
         case .needsAttention, .failed: 0
-        case .working where !session.isUnreachable: 1
+        case .working where !session.isUnreachable, .waiting: 1
         case .starting: 2
         case .done: 3
         case .working, .interrupted: 4

@@ -31,6 +31,17 @@ struct HookEventTests {
         #expect(!event.isInAutoMode)
     }
 
+    @Test func decodesTheBackgroundTaskFromTheToolResponse() throws {
+        let bash = try HookEvent.decode(Data(#"{"session_id":"a","hook_event_name":"PostToolUse","tool_name":"Bash","tool_use_id":"toolu_1","tool_input":{"command":"gh run watch"},"tool_response":{"stdout":"","interrupted":false,"backgroundTaskId":"bt7358twk"}}"#.utf8))
+        #expect(bash.toolUseID == "toolu_1")
+        #expect(BackgroundTask(launchedBy: bash) == BackgroundTask(id: "bt7358twk", toolUseID: "toolu_1", label: "Waiting: $ gh run watch"))
+        let agent = try HookEvent.decode(Data(#"{"session_id":"a","hook_event_name":"PostToolUse","tool_name":"Agent","tool_input":{"description":"Review"},"tool_response":{"isAsync":true,"status":"async_launched","agentId":"acf27962a7dd3baa7"}}"#.utf8))
+        #expect(BackgroundTask(launchedBy: agent)?.id == "acf27962a7dd3baa7")
+        let read = try HookEvent.decode(Data(#"{"session_id":"a","hook_event_name":"PostToolUse","tool_name":"Read","tool_response":"file contents"}"#.utf8))
+        #expect(read.toolResponse == nil)
+        #expect(BackgroundTask(launchedBy: read) == nil)
+    }
+
     @Test func mapsAntigravityHooksOntoSessionEvents() throws {
         let common = #""conversationId":"c1","workspacePaths":["/Users/me/projects/islet"],"transcriptPath":"/tmp/t.jsonl","modelName":"gemini-3.8-flash-high""#
         func decode(_ name: String, _ fields: String = "") throws -> HookEvent {

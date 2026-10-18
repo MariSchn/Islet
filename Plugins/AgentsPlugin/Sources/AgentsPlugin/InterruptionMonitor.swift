@@ -36,7 +36,7 @@ final class InterruptionMonitor {
     private static func canBeInterrupted(_ state: AgentSession.State) -> Bool {
         switch state {
         case .working, .needsAttention: true
-        case .starting, .done, .interrupted, .failed: false
+        case .starting, .waiting, .done, .interrupted, .failed: false
         }
     }
 

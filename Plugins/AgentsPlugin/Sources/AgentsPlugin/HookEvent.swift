@@ -27,6 +27,8 @@ struct HookEvent: Sendable, Equatable, Decodable {
     var model: String?
     var toolName: String?
     var toolInput: JSONValue?
+    var toolUseID: String?
+    var toolResponse: ToolResponse?
     var prompt: String?
     var message: String?
     var notificationType: String?
@@ -58,6 +60,8 @@ struct HookEvent: Sendable, Equatable, Decodable {
         case model
         case toolName = "tool_name"
         case toolInput = "tool_input"
+        case toolUseID = "tool_use_id"
+        case toolResponse = "tool_response"
         case prompt
         case message
         case notificationType = "notification_type"
@@ -72,13 +76,15 @@ struct HookEvent: Sendable, Equatable, Decodable {
         case title = "session_title"
     }
 
-    init(kind: Kind, sessionID: String, cwd: String? = nil, transcriptPath: String? = nil, toolName: String? = nil, toolInput: JSONValue? = nil, prompt: String? = nil, message: String? = nil, notificationType: String? = nil, source: String? = nil, permissionMode: String? = nil, agentType: String? = nil, agentID: String? = nil, error: String? = nil, lastAssistantMessage: String? = nil, reason: String? = nil, permissionSuggestions: [JSONValue]? = nil, agent: AgentSession.Agent = .claudeCode, host: String? = nil, terminal: TerminalApp? = nil, tty: String? = nil, pid: Int32? = nil, tmux: TmuxLocation? = nil, title: String? = nil) {
+    init(kind: Kind, sessionID: String, cwd: String? = nil, transcriptPath: String? = nil, toolName: String? = nil, toolInput: JSONValue? = nil, toolUseID: String? = nil, toolResponse: ToolResponse? = nil, prompt: String? = nil, message: String? = nil, notificationType: String? = nil, source: String? = nil, permissionMode: String? = nil, agentType: String? = nil, agentID: String? = nil, error: String? = nil, lastAssistantMessage: String? = nil, reason: String? = nil, permissionSuggestions: [JSONValue]? = nil, agent: AgentSession.Agent = .claudeCode, host: String? = nil, terminal: TerminalApp? = nil, tty: String? = nil, pid: Int32? = nil, tmux: TmuxLocation? = nil, title: String? = nil) {
         self.kind = kind
         self.sessionID = sessionID
         self.cwd = cwd
         self.transcriptPath = transcriptPath
         self.toolName = toolName
         self.toolInput = toolInput
+        self.toolUseID = toolUseID
+        self.toolResponse = toolResponse
         self.prompt = prompt
         self.message = message
         self.notificationType = notificationType
@@ -108,6 +114,8 @@ struct HookEvent: Sendable, Equatable, Decodable {
         model = try? container.decodeIfPresent(String.self, forKey: .model)
         toolName = try container.decodeIfPresent(String.self, forKey: .toolName)
         toolInput = try container.decodeIfPresent(JSONValue.self, forKey: .toolInput)
+        toolUseID = try? container.decodeIfPresent(String.self, forKey: .toolUseID)
+        toolResponse = try? container.decodeIfPresent(ToolResponse.self, forKey: .toolResponse)
         prompt = try container.decodeIfPresent(String.self, forKey: .prompt)
         message = try container.decodeIfPresent(String.self, forKey: .message)
         notificationType = try container.decodeIfPresent(String.self, forKey: .notificationType)
