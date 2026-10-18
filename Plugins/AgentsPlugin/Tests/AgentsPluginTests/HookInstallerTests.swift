@@ -243,30 +243,34 @@ struct HookInstallerTests {
         let installer = try makeInstaller()
         try installer.install()
         let transcript = installer.directory.appending(path: "transcript.jsonl")
-        try """
-        {"type":"assistant","message":{"model":"claude-sonnet-5-5","content":[]},"effort":"low"}
-        {"type":"assistant","message":{"model":"claude-opus-5-5","content":[{"type":"tool_use","input":{"effort":"max"}}]},"effort":"high","perTurnEffort":"high"}
-        {"type":"assistant","message":{"model":"<synthetic>","content":[]}}
-        {"type":"user","message":{"role":"user","content":"{\\"type\\":\\"assistant\\",\\"message\\":{\\"model\\":\\"fake\\"}}"}}
-
-        """.write(to: transcript, atomically: true, encoding: .utf8)
         let capture = installer.directory.appending(path: "curl-call")
         let fakeCurl = installer.directory.appending(path: "curl")
         try "#!/bin/sh\nprintf '%s\\n' \"$@\" > '\(capture.path)'\n".write(to: fakeCurl, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeCurl.path)
-        let process = Process()
-        process.executableURL = URL(filePath: "/bin/sh")
-        process.arguments = [installer.scriptURL.path]
-        process.environment = ["PATH": installer.directory.path + ":/usr/bin:/bin"]
-        let input = Pipe()
-        process.standardInput = input
-        try process.run()
-        input.fileHandleForWriting.write(Data(#"{"session_id":"a","hook_event_name":"Stop","transcript_path":"\#(transcript.path)"}"#.utf8))
-        try input.fileHandleForWriting.close()
-        process.waitUntilExit()
-        let call = try String(contentsOf: capture, encoding: .utf8).components(separatedBy: "\n")
-        #expect(call.contains("X-Islet-Model: claude-opus-5-5"))
-        #expect(call.contains("X-Islet-Effort: high"))
+        let replies = """
+        {"type":"assistant","message":{"model":"claude-sonnet-5-5","content":[]},"effort":"low"}
+        {"parentUuid":"p","message":{"model":"claude-opus-5-5","content":[{"type":"tool_use","input":{"effort":"max"}}]},"type":"assistant","advisorModel":"claude-opus-5-5","effort":"high","perTurnEffort":"high"}
+        {"type":"assistant","message":{"model":"<synthetic>","content":[]}}
+        {"type":"user","message":{"role":"user","content":"{\\"type\\":\\"assistant\\",\\"message\\":{\\"model\\":\\"fake\\"}}"}}
+
+        """
+        let withoutEffort = #"{"message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"tool_use","input":{"effort":"max"}}]},"type":"assistant"}"# + "\n"
+        for (contents, model, effort) in [(replies, "claude-opus-5-5", "high"), (replies + withoutEffort, "claude-haiku-4-5-20251001", "")] {
+            try contents.write(to: transcript, atomically: true, encoding: .utf8)
+            let process = Process()
+            process.executableURL = URL(filePath: "/bin/sh")
+            process.arguments = [installer.scriptURL.path]
+            process.environment = ["PATH": installer.directory.path + ":/usr/bin:/bin"]
+            let input = Pipe()
+            process.standardInput = input
+            try process.run()
+            input.fileHandleForWriting.write(Data(#"{"session_id":"a","hook_event_name":"Stop","transcript_path":"\#(transcript.path)"}"#.utf8))
+            try input.fileHandleForWriting.close()
+            process.waitUntilExit()
+            let call = try String(contentsOf: capture, encoding: .utf8).components(separatedBy: "\n")
+            #expect(call.contains("X-Islet-Model: \(model)"))
+            #expect(call.contains("X-Islet-Effort: \(effort)"))
+        }
     }
 
     @Test func scriptOnlyReadsTheTranscriptWhenTheTitleCanChange() throws {

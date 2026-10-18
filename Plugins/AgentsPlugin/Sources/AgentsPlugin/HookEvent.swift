@@ -139,8 +139,9 @@ struct HookEvent: Sendable, Equatable, Decodable {
         event.title = title.flatMap { $0.isEmpty ? nil : $0 } ?? event.title
         event.branch = branch.flatMap { $0.isEmpty ? nil : $0 }
         if agent == .claudeCode {
-            event.model = (event.model ?? model.flatMap { $0.isEmpty ? nil : $0 }).map(SessionDetails.claudeModelName(id:))
-            event.effort = effort.flatMap { SessionDetails.effortLevels.contains($0) ? $0 : nil }
+            let payloadModel = event.model
+            event.model = (payloadModel ?? model.flatMap { $0.isEmpty ? nil : $0 }).map(SessionDetails.claudeModelName(id:))
+            event.effort = payloadModel == nil ? effort.flatMap { SessionDetails.effortLevels.contains($0) ? $0 : nil } : nil
         }
         return event
     }

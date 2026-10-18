@@ -87,6 +87,10 @@ struct AgentSessionStoreTests {
         store.apply(claude)
         #expect(store.sessions.first { $0.id == "c" }?.details.model == "gpt-5.5")
         #expect(store.sessions.first { $0.id == "a" }?.details.badgeText == "Opus 5.5 · high")
+        var start = HookEvent(kind: .sessionStart, sessionID: "a")
+        start.model = "Sonnet 5.5"
+        store.apply(start)
+        #expect(store.sessions.first { $0.id == "a" }?.details.badgeText == "Sonnet 5.5")
         store.applyStatusLine(try StatusLineUpdate.decode(Data(#"{"session_id":"a","model":{"display_name":"Sonnet 5.5"},"effort":{"level":"low"}}"#.utf8)))
         store.apply(claude)
         #expect(store.sessions.first { $0.id == "a" }?.details.badgeText == "Sonnet 5.5 · low")

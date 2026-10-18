@@ -58,7 +58,10 @@ struct StatusLineUpdateTests {
         #expect(SessionDetails.claudeModelName(id: "claude-opus-4-6[1m]") == "Opus 4.6")
         #expect(SessionDetails.claudeModelName(id: "claude-sonnet-4-5-20250929") == "Sonnet 4.5")
         #expect(SessionDetails.claudeModelName(id: "claude-3-5-haiku-20241022") == "Haiku 3.5")
-        #expect(SessionDetails.claudeModelName(id: "us.anthropic.claude-opus-5-5") == "us.anthropic.claude-opus-5-5")
+        #expect(SessionDetails.claudeModelName(id: "claude-3-7-sonnet-latest") == "Sonnet 3.7")
+        #expect(SessionDetails.claudeModelName(id: "claude-sonnet-4-5@20250929") == "Sonnet 4.5")
+        #expect(SessionDetails.claudeModelName(id: "us.anthropic.claude-sonnet-4-5-20250929-v1:0") == "Sonnet 4.5")
+        #expect(SessionDetails.claudeModelName(id: "opus") == "opus")
     }
 
     static let antigravityExample = """

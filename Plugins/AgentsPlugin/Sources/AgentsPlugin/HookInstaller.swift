@@ -147,9 +147,9 @@ struct HookInstaller: Sendable {
         model=""
         effort=""
         if [ -n "$transcript" ] && [ -f "$transcript" ]; then
-          reply=$(grep '"type":"assistant"' "$transcript" 2>/dev/null | grep -v '"model":"<synthetic>"' | tail -n 1)
+          reply=$(tail -c 2000000 "$transcript" 2>/dev/null | grep '"type":"assistant"'  | grep -v '"model":"<synthetic>"' | tail -n 1)
           model=$(printf '%s' "$reply" | sed -nE 's/.*"message":\\{"model":"([^"]*)".*/\\1/p')
-          effort=$(printf '%s' "$reply" | sed -nE 's/.*"effort":"([a-z]*)".*/\\1/p')
+          effort=$(printf '%s' "$reply" | sed -nE 's/.*"type":"assistant".*"effort":"([a-z]*)".*/\\1/p')
         fi
 
         """
