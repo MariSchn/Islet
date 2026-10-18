@@ -93,7 +93,7 @@ public final class NotchController {
     }
 
     public var hidesIdleShape: Bool {
-        !isExpanded && pill == nil && announcement == nil && !settings.drawsIdleNotchShape
+        geometry.hasHardwareNotch && !isExpanded && pill == nil && announcement == nil && !settings.drawsIdleNotchShape
     }
 
     public var highlightsHoveredShape: Bool {

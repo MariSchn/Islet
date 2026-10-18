@@ -405,6 +405,7 @@ struct NotchControllerTests {
         let harness = Harness()
         let registry = harness.makeRegistry()
         let controller = makeController()
+        controller.update(geometry: NotchGeometry(screenFrame: CGRect(x: 0, y: 0, width: 1512, height: 982), notchSize: CGSize(width: 200, height: 32), hasHardwareNotch: true))
         controller.attach(registry)
         let stub = try await harness.registerStub(in: registry)
         #expect(controller.hidesIdleShape)
@@ -422,6 +423,16 @@ struct NotchControllerTests {
         await Task.yield()
         #expect(controller.hidesIdleShape)
         controller.expand()
+        #expect(!controller.hidesIdleShape)
+    }
+
+    @Test func drawsTheIdleShapeOnScreensWithoutANotch() async throws {
+        let harness = Harness()
+        let registry = harness.makeRegistry()
+        let controller = makeController()
+        controller.update(geometry: NotchGeometry(screenFrame: CGRect(x: 0, y: 0, width: 2560, height: 1440), notchSize: CGSize(width: 200, height: 24), hasHardwareNotch: false))
+        controller.attach(registry)
+        _ = try await harness.registerStub(in: registry)
         #expect(!controller.hidesIdleShape)
     }
 
